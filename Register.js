@@ -1,35 +1,51 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
 
-export default function Login({ navigate }) {
+export default function Register({ navigate }) {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  const handleRegister = () => {
+    // In this case, we'll navigate to the ErrorPage when the register button is clicked
+    console.log(`Registering user: ${username}, Email: ${email}`);
+    // Navigate to ErrorPage as per the request
+    navigate('ErrorPage');
+  };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.largeText}>Login</Text>
+      <Text style={styles.largeText}>Register</Text>
 
-      <Text style={styles.mediumText}>Username</Text>
+      <Text style={styles.text}>Username</Text>
       <TextInput
         style={styles.input}
-        fontSize={18}
-        placeholder="Enter Username"
+        placeholder="Enter your username"
         value={username}
         onChangeText={(text) => setUsername(text)}
       />
 
-      <Text style={styles.mediumText}>Password</Text>
+      <Text style={styles.text}>Email</Text>
       <TextInput
         style={styles.input}
-        fontSize={18}
-        placeholder="Enter Password"
+        placeholder="Enter your email"
+        value={email}
+        onChangeText={(text) => setEmail(text)}
+        keyboardType="email-address"
+      />
+
+      <Text style={styles.text}>Password</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Enter your password"
         secureTextEntry
         value={password}
         onChangeText={(text) => setPassword(text)}
       />
-      <Button title="Login" onPress={() => navigate('Error')} />  
-      <Button title="Forgot Password" onPress={() => navigate('ForgotPassword')} />
-      <Button title="Back to Home" onPress={() => navigate('Home')} />
+
+      <Button title="Register" onPress={() => navigate('Error')} />
+
+      <Button title="Back to Login" onPress={() => navigate('Login')} />
     </View>
   );
 }
@@ -49,12 +65,7 @@ const styles = StyleSheet.create({
     marginVertical: 5,
   },
   largeText: {
-    fontSize: 100,
-    color: '#000',
-    marginBottom: 20,
-  },
-  mediumText: {
-    fontSize: 30,
+    fontSize: 80,
     color: '#000',
     marginBottom: 20,
   },

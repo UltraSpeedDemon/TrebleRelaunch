@@ -10,6 +10,10 @@ import { StatusBar } from 'expo-status-bar';
 
 import Home from './Home';
 import Login from './Login';
+import Hub from './Hub';
+import ForgotPassword from './ForgotPassword';
+import Register from './Register';
+import Error from './Error';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('Welcome'); // Manage screen state
@@ -61,6 +65,14 @@ export default function App() {
         return <Home navigate={setCurrentScreen} />;
       case 'Login':
         return <Login navigate={setCurrentScreen} />;
+      case 'Hub':
+        return <Hub navigate={setCurrentScreen} />;
+      case 'ForgotPassword':
+        return <ForgotPassword navigate={setCurrentScreen} />;
+      case 'Register':
+        return <Register navigate={setCurrentScreen} />;
+      case 'Error':
+        return <Error navigate={setCurrentScreen} />;
       default:
         return <Home navigate={setCurrentScreen} />;
     }

@@ -4,14 +4,10 @@ import { View, Text, Button, StyleSheet } from 'react-native';
 export default function Home({ navigate }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.largeText}>Bass</Text>
-
-      <Button
-        title="Login"onPress={() => navigate('Login')}/>
-      <Button
-        title="Register" onPress={() => navigate('Register')}/>
-       <Button 
-        title="Restart App" onPress={() => navigate('Welcome')} />
+      <Text style={styles.text}>This is the Home Screen</Text>
+      <Button title="Go to Login" onPress={() => navigate('Login')} />
+        <Text style={styles.text}>Don't have an account?</Text>
+        <Button title="Register" onPress={() => navigate('Register')} />
     </View>
   );
 }
@@ -31,9 +27,5 @@ const styles = StyleSheet.create({
     largeText: {
       fontSize: 100,
       color: '#000',
-    },
-    button: {
-      marginVertical: 10,
-      fontSize: 30,
     },
   });
