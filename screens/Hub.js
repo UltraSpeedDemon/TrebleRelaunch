@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Button, StyleSheet, ActivityIndicator } from 'react-native';
 import { signOut } from 'firebase/auth';
-import { auth, db } from './firebase';
+import { auth, db } from '../utils/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { deleteSession } from '../utils/session';
 
 export default function Hub({ navigation }) {
   const [username, setUsername] = useState(null);
@@ -41,6 +42,7 @@ export default function Hub({ navigation }) {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      await deleteSession('userUid');
       navigation.navigate('Home'); // Navigate to Login on logout
     } catch (error) {
       console.error('Error during logout:', error);

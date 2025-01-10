@@ -2,7 +2,7 @@
   "name": "musicadvancedproject",
   "license": "0BSD",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "screens/index.js",
   "scripts": {
     "start": "expo start --port 19001",
     "android": "expo start --android",

@@ -1,15 +1,16 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, Animated, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebase';
-import Home from './Home';
-import Login from './Login';
-import Hub from './Hub';
-import ForgotPassword from './ForgotPassword';
-import Register from './Register';
-import Error from './Error';
+import { auth } from './utils/firebase';
+import { getSession } from './utils/session'; // Session utility
+import Home from './screens/Home';
+import Login from './screens/Login';
+import Hub from './screens/Hub';
+import ForgotPassword from './screens/ForgotPassword';
+import Register from './screens/Register';
+import Error from './screens/Error';
 
 // Stack Navigator
 const Stack = createStackNavigator();
@@ -19,27 +20,42 @@ function WelcomeScreen({ navigation }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.sequence([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 2500, // Fade in
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 2500, // Fade out
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // After animation, check user session
-      onAuthStateChanged(auth, (currentUser) => {
-        if (currentUser) {
-          navigation.replace('Hub'); // Navigate to Hub if logged in
-        } else {
-          navigation.replace('Home'); // Navigate to Login if not logged in
+    const initializeSession = async () => {
+      Animated.sequence([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 2500, // Fade in
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 2500, // Fade out
+          useNativeDriver: true,
+        }),
+      ]).start(async () => {
+        try {
+          // Check for a saved session in SecureStore
+          const userUid = await getSession('userUid');
+          if (userUid) {
+            navigation.replace('Hub'); // Navigate to Hub if session exists
+          } else {
+            // Check Firebase Authentication state
+            onAuthStateChanged(auth, (currentUser) => {
+              if (currentUser) {
+                navigation.replace('Hub'); // Navigate to Hub if logged in
+              } else {
+                navigation.replace('Home'); // Navigate to Home if not logged in
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error checking session:', error);
+          navigation.replace('Error'); // Navigate to Error screen on failure
         }
       });
-    });
+    };
+
+    initializeSession();
   }, [fadeAnim, navigation]);
 
   return (

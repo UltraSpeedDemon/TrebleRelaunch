@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, TextInput, Button, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from './firebase';
+import { auth } from '../utils/firebase';
+import { saveSession } from '../utils/session';
 
 export default function Login({ navigation }) {
   const [email, setEmail] = useState('');
@@ -12,6 +13,11 @@ export default function Login({ navigation }) {
     try {
       // Authenticate user
       await signInWithEmailAndPassword(auth, email, password);
+
+      const user = userCredential.user;
+      // Save UID to SecureStore for session
+      await saveSession('userUid', user.uid);
+
       Alert.alert('Success', 'Logged in successfully!');
       navigation.navigate('Hub'); // Navigate to Hub on successful login
     } catch (err) {
