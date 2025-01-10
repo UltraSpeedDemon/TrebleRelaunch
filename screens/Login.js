@@ -1,20 +1,38 @@
 import React, { useState } from 'react';
 import { View, TextInput, Button, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../utils/firebase';
+import { auth, db } from '../utils/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { saveSession } from '../utils/session';
 
 export default function Login({ navigation }) {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState(''); // Can be email or username
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
   const handleLogin = async () => {
     try {
-      // Authenticate user
-      await signInWithEmailAndPassword(auth, email, password);
+      setError(null); // Reset error state
+      let email = identifier;
 
+      // Check if identifier is not an email (assume it's a username)
+      if (!identifier.includes('@')) {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('username', '==', identifier));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+          throw new Error('Username not found');
+        }
+
+        // Extract the email associated with the username
+        email = querySnapshot.docs[0].data().email;
+      }
+
+      // Authenticate user with Firebase
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+
       // Save UID to SecureStore for session
       await saveSession('userUid', user.uid);
 
@@ -28,15 +46,14 @@ export default function Login({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Login</Text>
-      
+
       {error && <Text style={styles.error}>{error}</Text>}
 
       <TextInput
         style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
+        placeholder="Username or Email"
+        value={identifier}
+        onChangeText={setIdentifier}
         autoCapitalize="none"
       />
       <TextInput
