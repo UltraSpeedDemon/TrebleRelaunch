@@ -1,13 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Animated,
-  Button,
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Animated } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
 import Home from './Home';
 import Login from './Login';
 import Hub from './Hub';
@@ -15,70 +11,64 @@ import ForgotPassword from './ForgotPassword';
 import Register from './Register';
 import Error from './Error';
 
-export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('Welcome'); // Manage screen state
-  const fadeAnim = useRef(new Animated.Value(0)).current; // Animation value
+// Stack Navigator
+const Stack = createStackNavigator();
 
-  // Animation logic for Welcome Screen
+// Welcome Screen with Animation
+function WelcomeScreen({ navigation }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    if (currentScreen === 'Welcome') {
-      const fadeInOut = () => {
-        Animated.sequence([
-          // Fade in
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 2500, // 2.5 seconds
-            useNativeDriver: true,
-          }),
-          // Fade out
-          Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 2500, // 2.5 seconds
-            useNativeDriver: true,
-          }),
-        ]).start(() => {
-          // Navigate to Home after animation
-          setCurrentScreen('Home');
-        });
-      };
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 2500, // Fade in
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 2500, // Fade out
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // After animation, check user session
+      onAuthStateChanged(auth, (currentUser) => {
+        if (currentUser) {
+          navigation.replace('Hub'); // Navigate to Hub if logged in
+        } else {
+          navigation.replace('Home'); // Navigate to Login if not logged in
+        }
+      });
+    });
+  }, [fadeAnim, navigation]);
 
-      fadeInOut();
-    }
-  }, [currentScreen, fadeAnim]);
+  return (
+    <View style={styles.container}>
+      <Animated.Text style={[styles.text, { opacity: fadeAnim }]}>
+        Welcome to
+      </Animated.Text>
+      <Animated.Text style={[styles.largeText, { opacity: fadeAnim }]}>
+        Bass
+      </Animated.Text>
+    </View>
+  );
+}
 
-  // Render the appropriate screen
-  const renderScreen = () => {
-    switch (currentScreen) {
-      case 'Welcome':
-        return (
-          <View style={styles.container}>
-            <Animated.Text style={[styles.text, { opacity: fadeAnim }]}>
-              Welcome to
-            </Animated.Text>
-            <Animated.Text style={[styles.largeText, { opacity: fadeAnim }]}>
-              Bass
-            </Animated.Text>
-            <StatusBar style="auto" />
-          </View>
-        );
-      case 'Home':
-        return <Home navigate={setCurrentScreen} />;
-      case 'Login':
-        return <Login navigate={setCurrentScreen} />;
-      case 'Hub':
-        return <Hub navigate={setCurrentScreen} />;
-      case 'ForgotPassword':
-        return <ForgotPassword navigate={setCurrentScreen} />;
-      case 'Register':
-        return <Register navigate={setCurrentScreen} />;
-      case 'Error':
-        return <Error navigate={setCurrentScreen} />;
-      default:
-        return <Home navigate={setCurrentScreen} />;
-    }
-  };
-
-  return <View style={styles.container}>{renderScreen()}</View>;
+// Main App Component
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Welcome" screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Welcome" component={WelcomeScreen} />
+        <Stack.Screen name="Home" component={Home} />
+        <Stack.Screen name="Login" component={Login} />
+        <Stack.Screen name="Hub" component={Hub} />
+        <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
+        <Stack.Screen name="Register" component={Register} />
+        <Stack.Screen name="Error" component={Error} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
 }
 
 const styles = StyleSheet.create({

@@ -4,16 +4,28 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --port 19001",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"
   },
   "dependencies": {
-    "expo": "~52.0.23",
+    "@react-native-async-storage/async-storage": "^1.24.0",
+    "@react-navigation/native": "^7.0.14",
+    "@react-navigation/stack": "^7.1.1",
+    "expo": "^52.0.0",
+    "expo-secure-store": "^14.0.1",
     "expo-status-bar": "~2.0.0",
+    "firebase": "^11.1.0",
+    "musicadvancedproject": "file:",
     "react": "^18.3.1",
     "react-native": "0.76.5",
+    "react-native-gesture-handler": "^2.22.0",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-reanimated": "^3.16.6",
+    "react-native-safe-area-context": "^5.1.0",
+    "react-native-screens": "^4.5.0",
+    "react-native-vector-icons": "^10.2.0",
     "react-navigation": "^5.0.0"
   },
   "devDependencies": {

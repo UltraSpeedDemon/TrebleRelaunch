@@ -1,35 +1,56 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
+import { View, TextInput, Button, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from './firebase';
 
-export default function Login({ navigate }) {
-  const [username, setUsername] = useState('');
+export default function Login({ navigation }) {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState(null);
+
+  const handleLogin = async () => {
+    try {
+      // Authenticate user
+      await signInWithEmailAndPassword(auth, email, password);
+      Alert.alert('Success', 'Logged in successfully!');
+      navigation.navigate('Hub'); // Navigate to Hub on successful login
+    } catch (err) {
+      setError(err.message); // Show error message
+    }
+  };
 
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Login</Text>
+      
+      {error && <Text style={styles.error}>{error}</Text>}
 
-      <Text style={styles.mediumText}>Username</Text>
       <TextInput
         style={styles.input}
-        fontSize={18}
-        placeholder="Enter Username"
-        value={username}
-        onChangeText={(text) => setUsername(text)}
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
       />
-
-      <Text style={styles.mediumText}>Password</Text>
       <TextInput
         style={styles.input}
-        fontSize={18}
-        placeholder="Enter Password"
-        secureTextEntry
+        placeholder="Password"
         value={password}
-        onChangeText={(text) => setPassword(text)}
+        secureTextEntry
+        onChangeText={setPassword}
       />
-      <Button title="Login" onPress={() => navigate('Error')} />  
-      <Button title="Forgot Password" onPress={() => navigate('ForgotPassword')} />
-      <Button title="Back to Home" onPress={() => navigate('Home')} />
+
+      <TouchableOpacity style={styles.button} onPress={handleLogin}>
+        <Text style={styles.buttonText}>Login</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: '#8080E0', opacity: 0.7 }]}
+        onPress={() => navigation.navigate('Register')}
+      >
+        <Text style={styles.buttonText}>Register</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -42,29 +63,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     padding: 20,
   },
-  text: {
-    fontFamily: 'sans-serif',
-    fontSize: 20,
-    color: '#000',
-    marginVertical: 5,
-  },
   largeText: {
-    fontSize: 100,
-    color: '#000',
-    marginBottom: 20,
-  },
-  mediumText: {
     fontSize: 30,
+    fontWeight: 'bold',
     color: '#000',
     marginBottom: 20,
   },
   input: {
-    height: 40,
+    height: 50,
     borderColor: '#ccc',
     borderWidth: 1,
-    width: '100%',
+    borderRadius: 10,
+    width: '90%',
     marginBottom: 20,
     paddingHorizontal: 10,
-    fontSize: 18,
+    fontSize: 16,
+  },
+  button: {
+    backgroundColor: '#007BFF',
+    borderRadius: 25,
+    width: 200,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  error: {
+    color: 'red',
+    marginBottom: 20,
+    textAlign: 'center',
   },
 });

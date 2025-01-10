@@ -1,17 +1,18 @@
 import React from 'react';
 import { View, Text, Button, StyleSheet } from 'react-native';
 
-export default function Home({ navigate }) {
+export default function Home({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Bass</Text>
+      <Text style={styles.text}>Welcome to Bass</Text>
 
       <Button
-        title="Login"onPress={() => navigate('Login')}/>
+        title="Login"onPress={() => navigation.navigate('Login')}/>
       <Button
-        title="Register" onPress={() => navigate('Register')}/>
+        title="Register" onPress={() => navigation.navigate('Register')}/>
        <Button 
-        title="Restart App" onPress={() => navigate('Welcome')} />
+        title="Restart App" onPress={() => navigation.navigate('Welcome')} />
     </View>
   );
 }
