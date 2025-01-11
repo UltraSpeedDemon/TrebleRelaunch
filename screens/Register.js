@@ -3,6 +3,7 @@ import { View, Text, TextInput, Button, StyleSheet, TouchableOpacity, Alert  } f
 import { db, auth } from '../utils/firebase';
 import { createUserWithEmailAndPassword, updateProfile  } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
+import { saveSession } from '../utils/session';
 
 
 export default function Register({ navigation  }) {
@@ -15,6 +16,8 @@ export default function Register({ navigation  }) {
       // Create a new user with email and password
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+      
+      await saveSession('userUid', user.uid);
   
       // Update the user's display name with the username
       await updateProfile(auth.currentUser, { displayName: username });
