@@ -8,13 +8,13 @@ import { saveSession } from '../utils/session';
 export default function Main({ navigation }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.largeText}>Bass</Text>
+      <Text style={styles.largeText}>Treble</Text>
       <Text style={styles.mediumText}>Connect with Friends!</Text>
         <Text style={styles.mediumText}></Text>
        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Hub')}>
                            <Text style={styles.buttonText}>Connections</Text>
                          </TouchableOpacity>
-    </View>
+        </View>
   );
 }
 

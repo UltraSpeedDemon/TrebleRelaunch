@@ -65,7 +65,7 @@ function WelcomeScreen({ navigation }) {
         Welcome to
       </Animated.Text>
       <Animated.Text style={[styles.largeText, { opacity: fadeAnim }]}>
-        Bass
+        Treble
       </Animated.Text>
     </View>
   );

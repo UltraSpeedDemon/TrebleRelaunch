@@ -4,7 +4,7 @@ import { View, Text, Button, StyleSheet, TouchableOpacity } from 'react-native';
 export default function Home({ navigation }) {
   return (
     <View style={styles.container}>
-      <Text style={styles.largeText}>Bass</Text>
+      <Text style={styles.largeText}>Treble</Text>
       <Text style={styles.mediumText}>A Music Social Platform</Text>
 
       <Text style={styles.mediumText}></Text>
