@@ -11,21 +11,6 @@ import * as Linking from 'expo-linking';
 //etcurtis@lakeheadu.ca
 //MusicProject123
 
-
-//SPOTIFY API DEVELOPERS
-const spotifyClientId = 'ff279a53cc6c4b29af108b043f904cc6';
-const redirectUri = 'myapp'; // Make sure this matches your Spotify Developer app settings
-const scope = 'user-read-private user-read-email user-read-playback-state user-modify-playback-state';
-
-const getSpotifyAuthUrl = () => {
-  return `https://accounts.spotify.com/authorize?client_id=${spotifyClientId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=token`;
-};
-
-const handleSpotifyLogin = () => {
-  const authUrl = getSpotifyAuthUrl();
-  Linking.openURL(authUrl); // Open Spotify login page
-};
-
 // import { createClient } from '@supabase/supabase-js'
 
 //SUPABASE THIRD PARTY AUTHENTICATION
@@ -40,7 +25,51 @@ export default function Hub({ navigation }) {
 
   const [token, setToken] = useState(null);
 
-//    // Sign in with Spotify
+  
+  //SPOTIFY API DEVELOPERS
+  const spotifyClientId = 'ff279a53cc6c4b29af108b043f904cc6';
+  const redirectUri = 'musicproject://redirect';
+  const scope = 'user-read-private user-read-email user-read-playback-state user-modify-playback-state';
+
+  const getSpotifyAuthUrl = () => {
+    return `https://accounts.spotify.com/authorize?client_id=${spotifyClientId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=token`;
+  };
+  
+  const handleSpotifyLogin = () => {
+    const authUrl = getSpotifyAuthUrl();
+    Linking.openURL(authUrl); // Open Spotify login page
+  };
+
+  // Handle deep linking and extract token
+  useEffect(() => {
+    const handleDeepLink = (event) => {
+      const { url } = event;
+      if (url.includes('#access_token=')) {
+        const token = url.split('#access_token=')[1].split('&')[0];
+        setToken(token);
+        console.log('Spotify Access Token:', token);
+      }
+    };
+
+    // Handle the initial URL when the app is opened via deep link
+    Linking.getInitialURL().then((url) => {
+      if (url && url.includes('#access_token=')) {
+        const token = url.split('#access_token=')[1].split('&')[0];
+        setToken(token);
+        console.log('Spotify Access Token (initial):', token);
+      }
+    });
+
+    // Listen for deep link events
+    Linking.addEventListener('url', handleDeepLink);
+
+    return () => {
+      Linking.removeEventListener('url', handleDeepLink);
+    };
+  }, []);
+
+
+//    // Sign in with Spotify SUPABASE ---- 
 //    async function signInWithSpotify() {
 //     try {
 //       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -116,9 +145,8 @@ export default function Hub({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.largeText}>Welcome, {username}!</Text>
+      <Text style={styles.welcome}>Welcome, {username}!</Text>
       <Text style={styles.mediumText}>You are now logged in.</Text>
-      <Text style={styles.mediumText}></Text>
       <Text style={styles.mediumText}></Text>
       <Text style={styles.largeText}>Connect an Account</Text>
       <TouchableOpacity
@@ -135,8 +163,11 @@ export default function Hub({ navigation }) {
               <Text style={styles.buttonTextLast}>Login with Last.fm</Text>
       </TouchableOpacity>
       <Text style={styles.mediumText}></Text>
-      <Text style={styles.mediumText}></Text>
-      <Text style={styles.mediumText}></Text>
+
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Main')}>
+                    <Text style={styles.buttonText}>Not Now?</Text>
+                  </TouchableOpacity>
+                
       <Text style={styles.mediumText}></Text>
       <TouchableOpacity
               style={[styles.button, { backgroundColor: '#8080E0', opacity: 0.7 }]}
@@ -155,6 +186,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
     padding: 20,
+  },
+  welcome: {
+    fontSize: 35,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    margin: 10,
   },
   largeText: {
     fontSize: 30,

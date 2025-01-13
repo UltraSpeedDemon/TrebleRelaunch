@@ -6,50 +6,82 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { saveSession } from '../utils/session';
 
 export default function Main({ navigation }) {
-    const [username, setUsername] = useState(null);
-      const [loading, setLoading] = useState(true);
-    
-      useEffect(() => {
-        const fetchUserData = async () => {
-          try {
-            // Get the current user from Firebase Auth
-            const currentUser = auth.currentUser;
-    
-            if (currentUser) {
-              // Option 1: Use the displayName from Firebase Auth
-              const displayName = currentUser.displayName;
-              setUsername(displayName);
-    
-              // Option 2 (Optional): Fetch additional user data from Firestore
-              const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-              if (userDoc.exists()) {
-                const userData = userDoc.data();
-                setUsername(userData.username); // Use Firestore username if available
-              }
-            } else {
-              navigation.navigate('Home'); // Redirect to Login if no user is logged in
-            }
-          } catch (error) {
-            console.error('Error fetching user data:', error);
-          } finally {
-            setLoading(false);
-          }
-        };
-
-    fetchUserData();
-  }, [navigation]);
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#0000ff" />
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      <Text style={styles.largeText}>Welcome, {username}!</Text>
+      <Text style={styles.largeText}>Bass</Text>
+      <Text style={styles.mediumText}>Connect with Friends!</Text>
+        <Text style={styles.mediumText}></Text>
+       <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Hub')}>
+                           <Text style={styles.buttonText}>Connections</Text>
+                         </TouchableOpacity>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 20,
+  },
+  largeText: {
+    fontSize: 120,
+    color: '#000',
+    marginBottom: 20,
+  },
+  mediumText: {
+    fontSize: 25,
+    color: '#000',
+    marginBottom: 20,
+  },
+  input: {
+    height: 50,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 10,
+    width: '90%',
+    marginBottom: 20,
+    paddingHorizontal: 10,
+    fontSize: 16,
+  },
+  button: {
+    backgroundColor: '#007BFF',
+    fontSize: 20,
+    borderRadius: 25,
+    width: 200,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buttonTextSpotify: {
+    color: 'black',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buttonTextLast: {
+    color: 'red',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  error: {
+    color: 'red',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  red: {
+    color: 'red',
+    fontSize: 28,
+    //bold
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  }
+});

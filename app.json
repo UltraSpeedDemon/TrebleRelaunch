@@ -1,6 +1,7 @@
 {
   "expo": {
-    "scheme": "music.project",
+    "scheme": "musicproject",
+    "platforms": ["ios", "android"],
     "name": "MusicAdvancedProject",
     "slug": "MusicAdvancedProject",
     "version": "1.0.0",
