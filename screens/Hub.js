@@ -7,6 +7,11 @@ import { deleteSession } from '../utils/session';
 
 import * as Linking from 'expo-linking';
 
+//SPOTIFY ACCOUNT DEVELOPER
+//etcurtis@lakeheadu.ca
+//MusicProject123
+
+
 //SPOTIFY API DEVELOPERS
 const spotifyClientId = 'ff279a53cc6c4b29af108b043f904cc6';
 const redirectUri = 'myapp'; // Make sure this matches your Spotify Developer app settings
