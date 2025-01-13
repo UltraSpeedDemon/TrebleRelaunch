@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Button, StyleSheet, ActivityIndicator, TouchableOpacity} from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../utils/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -90,50 +90,7 @@ export default function Hub({ navigation }) {
     fetchUserData();
   }, [navigation]);
 
-  useEffect(() => {
-    const handleSpotifyRedirect = async () => {
-      const url = Linking.createURL(); // Get initial redirect URL
-      console.log(url)
-      if (url && url.includes('#access_token=')) {
-        const token = url.split('#access_token=')[1].split('&')[0];
-        setToken(token); // Save the token
-        console.log('Spotify Access Token:', token);
-      } else {
-        console.warn('No access token found');
-      }
-    };
-
-    handleSpotifyRedirect();
-
-    // Listener for future redirects
-    Linking.addEventListener('url', (event) => {
-      const { url } = event;
-      if (url.includes('#access_token=')) {
-        const token = url.split('#access_token=')[1].split('&')[0];
-        setToken(token); // Save the token
-        console.log('Spotify Access Token:', token);
-      }
-    });
-
-    return () => {
-      Linking.removeAllListeners('url');
-    };
-  }, []);
-
-  if (!token) {
-    return (
-    <View style={styles.container}>
-    <View style={styles.container}>
-    <Button title="Login with Spotify" onPress={handleSpotifyLogin} />
-  </View>
-    <Text style={styles.welcomeText}>Welcome, {username}!</Text>
-    <Button title="Logout" onPress={handleLogout} />
-    <View style={styles.container}>
-  </View>
-  </View>
-    );
-  }
-
+  //For BASS Accounts
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -154,10 +111,34 @@ export default function Hub({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.welcomeText}>Welcome, {username}!</Text>
-      <Button title="Login with Spotify" onPress={signInWithSpotify} />
-      <Button title="Logout of Spotify" onPress={signOut} />
-      <Button title="Logout" onPress={handleLogout} />
+      <Text style={styles.largeText}>Welcome, {username}!</Text>
+      <Text style={styles.mediumText}>You are now logged in.</Text>
+      <Text style={styles.mediumText}></Text>
+      <Text style={styles.mediumText}></Text>
+      <Text style={styles.largeText}>Connect an Account</Text>
+      <TouchableOpacity
+              style={[styles.button, { backgroundColor: 'green', opacity: 0.7 }] }
+              onPress={handleSpotifyLogin}
+            >
+              <Text style={styles.buttonTextSpotify}>Login with Spotify</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+              style={[styles.button, { backgroundColor: 'black', opacity: 0.7 }] }
+              //error screen
+              onPress = {() => navigation.navigate('Error')}
+            >
+              <Text style={styles.buttonTextLast}>Login with Last.fm</Text>
+      </TouchableOpacity>
+      <Text style={styles.mediumText}></Text>
+      <Text style={styles.mediumText}></Text>
+      <Text style={styles.mediumText}></Text>
+      <Text style={styles.mediumText}></Text>
+      <TouchableOpacity
+              style={[styles.button, { backgroundColor: '#8080E0', opacity: 0.7 }]}
+              onPress={handleLogout}
+            >
+              <Text style={styles.buttonText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -168,10 +149,65 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+    padding: 20,
   },
-  welcomeText: {
-    fontSize: 24,
+  largeText: {
+    fontSize: 30,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 20,
+  },
+  mediumText: {
+    fontSize: 20,
+    color: '#000',
+    marginBottom: 20,
+  },
+  input: {
+    height: 50,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 10,
+    width: '90%',
+    marginBottom: 20,
+    paddingHorizontal: 10,
+    fontSize: 16,
+  },
+  button: {
+    backgroundColor: '#007BFF',
+    fontSize: 20,
+    borderRadius: 25,
+    width: 200,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buttonTextSpotify: {
+    color: 'black',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buttonTextLast: {
+    color: 'red',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  error: {
+    color: 'red',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  red: {
+    color: 'red',
+    fontSize: 28,
+    //bold
     fontWeight: 'bold',
     marginBottom: 20,
-  }, 
+    textAlign: 'center',
+  }
 });
