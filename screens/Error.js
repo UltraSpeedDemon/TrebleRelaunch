@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Button, StyleSheet } from 'react-native';
 
-export default function ErrorPage({ navigate }) {
+export default function ErrorPage({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Oops! Something went wrong.</Text>
@@ -9,7 +9,7 @@ export default function ErrorPage({ navigate }) {
 
       <Button
         title="Go to Home"
-        onPress={() => navigate('Home')}
+        onPress = {() => navigation.navigate('Home')}
       />
     </View>
   );

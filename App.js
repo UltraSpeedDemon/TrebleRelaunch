@@ -11,6 +11,7 @@ import Hub from './screens/Hub';
 import ForgotPassword from './screens/ForgotPassword';
 import Register from './screens/Register';
 import Error from './screens/Error';
+import Main from './screens/Main';
 
 // Stack Navigator
 const Stack = createStackNavigator();
@@ -64,7 +65,7 @@ function WelcomeScreen({ navigation }) {
         Welcome to
       </Animated.Text>
       <Animated.Text style={[styles.largeText, { opacity: fadeAnim }]}>
-        Bass
+        Treble
       </Animated.Text>
     </View>
   );
@@ -79,6 +80,7 @@ export default function App() {
         <Stack.Screen name="Home" component={Home} />
         <Stack.Screen name="Login" component={Login} />
         <Stack.Screen name="Hub" component={Hub} />
+        <Stack.Screen name="Main" component={Main} />
         <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
         <Stack.Screen name="Register" component={Register} />
         <Stack.Screen name="Error" component={Error} />

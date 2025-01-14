@@ -1,34 +1,20 @@
-import React from 'react';
-import { View, Text, Button, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, TextInput, Button, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth, db } from '../utils/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { saveSession } from '../utils/session';
 
-export default function Home({ navigation }) {
+export default function Main({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Treble</Text>
-      <Text style={styles.mediumText}>A Music Social Platform</Text>
-
-      <Text style={styles.mediumText}></Text>
-
-       <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Login')}>
-              <Text style={styles.buttonText}>Login</Text>
-            </TouchableOpacity>
-          
-
-
-       <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Register')}>
-              <Text style={styles.buttonText}>Register</Text>
-            </TouchableOpacity>
-
+      <Text style={styles.mediumText}>Connect with Friends!</Text>
         <Text style={styles.mediumText}></Text>
-        <Text style={styles.mediumText}></Text>
-
-        <TouchableOpacity
-                      style={[styles.button, { backgroundColor: '#8080E0', opacity: 0.7 }]}
-                      onPress = {() => navigation.navigate('Welcome')}
-                    >
-                      <Text style={styles.buttonText}>Restart App</Text>
-        </TouchableOpacity>
-    </View>
+       <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Hub')}>
+                           <Text style={styles.buttonText}>Connections</Text>
+                         </TouchableOpacity>
+        </View>
   );
 }
 

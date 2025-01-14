@@ -48,7 +48,7 @@ export default function Login({ navigation }) {
       <Text style={styles.largeText}>Login</Text>
 
       {error && <Text style={styles.error}>{error}</Text>}
-
+      
       <TextInput
         style={styles.input}
         placeholder="Username or Email"
@@ -86,9 +86,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     padding: 20,
   },
+  mediumText: {
+    fontSize: 25,
+    color: '#000',
+    marginBottom: 20,
+  },
   largeText: {
-    fontSize: 30,
-    fontWeight: 'bold',
+    fontSize: 80,
     color: '#000',
     marginBottom: 20,
   },
