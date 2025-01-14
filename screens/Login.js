@@ -1,13 +1,21 @@
-import React, { useState } from 'react';
-import { View, TextInput, Button, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../utils/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { saveSession } from '../utils/session';
+import React, { useState } from "react";
+import {
+  View,
+  TextInput,
+  Button,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Alert,
+} from "react-native";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "../utils/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { saveSession } from "../utils/session";
 
 export default function Login({ navigation }) {
-  const [identifier, setIdentifier] = useState(''); // Can be email or username
-  const [password, setPassword] = useState('');
+  const [identifier, setIdentifier] = useState(""); // Can be email or username
+  const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
 
   const handleLogin = async () => {
@@ -16,13 +24,13 @@ export default function Login({ navigation }) {
       let email = identifier;
 
       // Check if identifier is not an email (assume it's a username)
-      if (!identifier.includes('@')) {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('username', '==', identifier));
+      if (!identifier.includes("@")) {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("username", "==", identifier));
         const querySnapshot = await getDocs(q);
 
         if (querySnapshot.empty) {
-          throw new Error('Username not found');
+          throw new Error("Username not found");
         }
 
         // Extract the email associated with the username
@@ -30,14 +38,18 @@ export default function Login({ navigation }) {
       }
 
       // Authenticate user with Firebase
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
       const user = userCredential.user;
 
       // Save UID to SecureStore for session
-      await saveSession('userUid', user.uid);
+      await saveSession("userUid", user.uid);
 
-      Alert.alert('Success', 'Logged in successfully!');
-      navigation.navigate('Hub'); // Navigate to Hub on successful login
+      Alert.alert("Success", "Logged in successfully!");
+      navigation.navigate("Hub"); // Navigate to Hub on successful login
     } catch (err) {
       setError(err.message); // Show error message
     }
@@ -48,7 +60,7 @@ export default function Login({ navigation }) {
       <Text style={styles.largeText}>Login</Text>
 
       {error && <Text style={styles.error}>{error}</Text>}
-      
+
       <TextInput
         style={styles.input}
         placeholder="Username or Email"
@@ -69,8 +81,8 @@ export default function Login({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: '#8080E0', opacity: 0.7 }]}
-        onPress={() => navigation.navigate('Register')}
+        style={[styles.button, { backgroundColor: "#8080E0", opacity: 0.7 }]}
+        onPress={() => navigation.navigate("Register")}
       >
         <Text style={styles.buttonText}>Register</Text>
       </TouchableOpacity>
@@ -81,48 +93,48 @@ export default function Login({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
     padding: 20,
   },
   mediumText: {
     fontSize: 25,
-    color: '#000',
+    color: "#000",
     marginBottom: 20,
   },
   largeText: {
     fontSize: 80,
-    color: '#000',
+    color: "#000",
     marginBottom: 20,
   },
   input: {
     height: 50,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderWidth: 1,
     borderRadius: 10,
-    width: '90%',
+    width: "90%",
     marginBottom: 20,
     paddingHorizontal: 10,
     fontSize: 16,
   },
   button: {
-    backgroundColor: '#007BFF',
+    backgroundColor: "#007BFF",
     borderRadius: 25,
     width: 200,
     height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginVertical: 10,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   error: {
-    color: 'red',
+    color: "red",
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
 });
