@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Button, StyleSheet, ActivityIndicator, TouchableOpacity} from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../utils/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { deleteSession } from '../utils/session';
 
 import * as Linking from 'expo-linking';
+import { SPOTIFY_CLIENT_ID, SPOTIFY_SCOPE, SPOTIFY_REDIRECT_URI } from '@env';
+
+
 
 //SPOTIFY ACCOUNT DEVELOPER
 //etcurtis@lakeheadu.ca
@@ -13,26 +16,21 @@ import * as Linking from 'expo-linking';
 
 // import { createClient } from '@supabase/supabase-js'
 
-//SUPABASE THIRD PARTY AUTHENTICATION
-// const supabaseUrl = 'https://psbwhmlksuicurraimvo.supabase.co'
-// const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBzYndobWxrc3VpY3VycmFpbXZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODUxMjYsImV4cCI6MjA1MjM2MTEyNn0.GVOq7gUGwAjbyxODcEn_hglznp9YxB4OYtT4MQ7e5ek'
 // const supabase = createClient(supabaseUrl, supabaseKey)
 
 export default function Hub({ navigation }) {
   
   const [username, setUsername] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isSpotifyLinked, setIsSpotifyLinked] = useState(false); // Track Spotify linking status
+
 
   const [token, setToken] = useState(null);
 
   
-  //SPOTIFY API DEVELOPERS
-  const spotifyClientId = 'ff279a53cc6c4b29af108b043f904cc6';
-  const redirectUri = 'musicproject://redirect';
-  const scope = 'user-read-private user-read-email user-read-playback-state user-modify-playback-state';
 
   const getSpotifyAuthUrl = () => {
-    return `https://accounts.spotify.com/authorize?client_id=${spotifyClientId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=token`;
+    return `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&redirect_uri=${SPOTIFY_REDIRECT_URI}&scope=${SPOTIFY_SCOPE}&response_type=token`;
   };
   
   const handleSpotifyLogin = () => {
@@ -42,31 +40,43 @@ export default function Hub({ navigation }) {
 
   // Handle deep linking and extract token
   useEffect(() => {
-    const handleDeepLink = (event) => {
+    const handleDeepLink = async (event) => {
       const { url } = event;
       if (url.includes('#access_token=')) {
         const token = url.split('#access_token=')[1].split('&')[0];
-        setToken(token);
         console.log('Spotify Access Token:', token);
+  
+        // Link Spotify account to Firebase user
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          try {
+            const userDocRef = doc(db, 'users', currentUser.uid);
+            await setDoc(userDocRef, { spotifyToken: token }, { merge: true });
+            console.log('Spotify token linked to Firebase user');
+            setIsSpotifyLinked(true); // Update state to reflect the linking
+          } catch (error) {
+            console.error('Error linking Spotify account:', error);
+          }
+        } else {
+          console.error('No authenticated Firebase user found');
+        }
       }
     };
-
-    // Handle the initial URL when the app is opened via deep link
+  
+    // Check initial URL
     Linking.getInitialURL().then((url) => {
-      if (url && url.includes('#access_token=')) {
-        const token = url.split('#access_token=')[1].split('&')[0];
-        setToken(token);
-        console.log('Spotify Access Token (initial):', token);
-      }
+      if (url) handleDeepLink({ url });
     });
-
+  
     // Listen for deep link events
-    Linking.addEventListener('url', handleDeepLink);
-
+    const unsubscribe = Linking.addEventListener('url', handleDeepLink);
+  
     return () => {
-      Linking.removeEventListener('url', handleDeepLink);
+      unsubscribe.remove(); // Proper cleanup
     };
   }, []);
+  
+  
 
 
 //    // Sign in with Spotify SUPABASE ---- 
@@ -109,7 +119,12 @@ export default function Hub({ navigation }) {
           const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            setUsername(userData.username); // Use Firestore username if available
+            setUsername(userData.username || displayName);
+          
+            // Check if Spotify is linked
+            if (userData.spotifyToken) {
+              setIsSpotifyLinked(true); // Update state to reflect linking status
+            }
           }
         } else {
           navigation.navigate('Home'); // Redirect to Login if no user is logged in
@@ -149,12 +164,16 @@ export default function Hub({ navigation }) {
       <Text style={styles.mediumText}>You are now logged in.</Text>
       <Text style={styles.mediumText}></Text>
       <Text style={styles.largeText}>Connect an Account</Text>
-      <TouchableOpacity
-              style={[styles.button, { backgroundColor: 'green', opacity: 0.7 }] }
-              onPress={handleSpotifyLogin}
-            >
-              <Text style={styles.buttonTextSpotify}>Login with Spotify</Text>
-      </TouchableOpacity>
+      {!isSpotifyLinked ? (
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: 'green', opacity: 0.7 }]}
+          onPress={handleSpotifyLogin}
+        >
+          <Text style={styles.buttonTextSpotify}>Login with Spotify</Text>
+        </TouchableOpacity>
+      ) : (
+        <Text style={styles.mediumText}>Your Spotify account is already linked!</Text>
+      )}
       <TouchableOpacity
               style={[styles.button, { backgroundColor: 'black', opacity: 0.7 }] }
               //error screen
