@@ -1,87 +1,98 @@
-import React, { useState } from 'react';
-import { View, TextInput, Button, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../utils/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { saveSession } from '../utils/session';
+import React, { useState } from "react";
+import {
+  View,
+  TextInput,
+  Button,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Alert,
+} from "react-native";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "../utils/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { saveSession } from "../utils/session";
 
 export default function Main({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Treble</Text>
       <Text style={styles.mediumText}>Connect with Friends!</Text>
-        <Text style={styles.mediumText}></Text>
-       <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Hub')}>
-                           <Text style={styles.buttonText}>Connections</Text>
-                         </TouchableOpacity>
-        </View>
+      <Text style={styles.mediumText}></Text>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => navigation.navigate("Hub")}
+      >
+        <Text style={styles.buttonText}>Connections</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
     padding: 20,
   },
   largeText: {
     fontSize: 120,
-    color: '#000',
+    color: "#000",
     marginBottom: 20,
   },
   mediumText: {
     fontSize: 25,
-    color: '#000',
+    color: "#000",
     marginBottom: 20,
   },
   input: {
     height: 50,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderWidth: 1,
     borderRadius: 10,
-    width: '90%',
+    width: "90%",
     marginBottom: 20,
     paddingHorizontal: 10,
     fontSize: 16,
   },
   button: {
-    backgroundColor: '#007BFF',
+    backgroundColor: "#007BFF",
     fontSize: 20,
     borderRadius: 25,
     width: 200,
     height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginVertical: 10,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   buttonTextSpotify: {
-    color: 'black',
+    color: "black",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   buttonTextLast: {
-    color: 'red',
+    color: "red",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   error: {
-    color: 'red',
+    color: "red",
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
   red: {
-    color: 'red',
+    color: "red",
     fontSize: 28,
     //bold
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 20,
-    textAlign: 'center',
-  }
+    textAlign: "center",
+  },
 });
