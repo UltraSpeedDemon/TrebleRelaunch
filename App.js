@@ -7,11 +7,20 @@ import { auth } from './utils/firebase';
 import { getSession } from './utils/session'; // Session utility
 import Home from './screens/Home';
 import Login from './screens/Login';
-import Hub from './screens/Hub';
+import Connections from './screens/Connections';
 import ForgotPassword from './screens/ForgotPassword';
 import Register from './screens/Register';
 import Error from './screens/Error';
 import Main from './screens/Main';
+import Profile from './screens/Profile';
+import EditProfile from './screens/EditProfile';
+import Settings from './screens/Settings';
+import Groups from './screens/Groups';
+import Messages from './screens/Messages';
+import Notifications from './screens/Notifications';
+import Favourites from './screens/Favourites';
+import FriendsList from './screens/FriendsList';
+
 
 // Stack Navigator
 const Stack = createStackNavigator();
@@ -38,12 +47,12 @@ function WelcomeScreen({ navigation }) {
           // Check for a saved session in SecureStore
           const userUid = await getSession('userUid');
           if (userUid) {
-            navigation.replace('Hub'); // Navigate to Hub if session exists
+            navigation.replace('Main'); // Navigate to Hub if session exists
           } else {
             // Check Firebase Authentication state
             onAuthStateChanged(auth, (currentUser) => {
               if (currentUser) {
-                navigation.replace('Hub'); // Navigate to Hub if logged in
+                navigation.replace('Main'); // Navigate to Hub if logged in
               } else {
                 navigation.replace('Home'); // Navigate to Home if not logged in
               }
@@ -79,11 +88,19 @@ export default function App() {
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
         <Stack.Screen name="Home" component={Home} />
         <Stack.Screen name="Login" component={Login} />
-        <Stack.Screen name="Hub" component={Hub} />
+        <Stack.Screen name="Connections" component={Connections} />
         <Stack.Screen name="Main" component={Main} />
         <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
         <Stack.Screen name="Register" component={Register} />
         <Stack.Screen name="Error" component={Error} />
+        <Stack.Screen name="Profile" component={Profile} />
+        <Stack.Screen name="EditProfile" component={EditProfile} />
+        <Stack.Screen name="Settings" component={Settings} />
+        <Stack.Screen name="Groups" component={Groups} />
+        <Stack.Screen name="Messages" component={Messages} />
+        <Stack.Screen name="Notifications" component={Notifications} />
+        <Stack.Screen name="Favourites" component={Favourites} />
+        <Stack.Screen name="FriendsList" component={FriendsList} />
       </Stack.Navigator>
     </NavigationContainer>
   );

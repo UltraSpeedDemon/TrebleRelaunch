@@ -39,9 +39,9 @@ export default function Register({ navigation }) {
         email: email,
         createdAt: new Date().toISOString(),
       });
-
-      Alert.alert("Success", "User registered successfully!");
-      navigation.navigate("Hub"); // Navigate to the Hub screen
+  
+      Alert.alert('Success', 'User registered successfully!');
+      navigation.navigate('Connections'); // Navigate to the Connections screen
     } catch (error) {
       Alert.alert("Error", error.message);
     }

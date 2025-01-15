@@ -48,8 +48,8 @@ export default function Login({ navigation }) {
       // Save UID to SecureStore for session
       await saveSession("userUid", user.uid);
 
-      Alert.alert("Success", "Logged in successfully!");
-      navigation.navigate("Hub"); // Navigate to Hub on successful login
+      Alert.alert('Success', 'Logged in successfully!');
+      navigation.navigate('Connections'); // Navigate to Connections on successful login
     } catch (err) {
       setError(err.message); // Show error message
     }

@@ -9,7 +9,11 @@ export default function ErrorPage({ navigation }) {
         We encountered an error. Please try again later.
       </Text>
 
-      <Button title="Go to Home" onPress={() => navigation.navigate("Home")} />
+      <Button
+        title="Go Back"
+        //go back to previous screen
+        onPress={() => navigation.goBack()}
+      />
     </View>
   );
 }
