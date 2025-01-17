@@ -28,10 +28,10 @@ assignees: ''
 **Actual Time:** [X hours]  
 
 ## Status  
-🔲 To Do  
-🔲 In Progress  
-🔲 Blocked  
-🔲 Done  
+- [ ] To Do  
+- [ ] In Progress  
+- [ ] Blocked  
+- [ ] Done  
 
 ## Dependencies  
 - [ ] #IssueNumber  

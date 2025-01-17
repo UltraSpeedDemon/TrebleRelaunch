@@ -43,7 +43,6 @@ Provide evidence that the changes are working as expected. Include a screenshot 
 - [ ] I have rebased my branch on `main` before submitting the PR.
 - [ ] I have squashed all related commits into one (use "Squash and Merge").
 - [ ] My code follows the code style and conventions of this project.
-- [ ] I have written tests to cover my changes (if applicable).
 - [ ] I have tested my code on my local machine.
 - [ ] This change is not introducing new errors or bugs.
 
