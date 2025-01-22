@@ -1,5 +1,7 @@
 import React from "react";
 import { View, Text, Button, StyleSheet, TouchableOpacity } from "react-native";
+import colours from "../styles/colours";
+import fontFamily from "../styles/fontFamily";
 
 export default function Home({ navigation }) {
   return (
@@ -10,14 +12,14 @@ export default function Home({ navigation }) {
       <Text style={styles.mediumText}></Text>
 
       <TouchableOpacity
-        style={styles.button}
+         style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("Login")}
       >
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.button}
+        style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("Register")}
       >
         <Text style={styles.buttonText}>Register</Text>
@@ -27,7 +29,7 @@ export default function Home({ navigation }) {
       <Text style={styles.mediumText}></Text>
 
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: "#8080E0", opacity: 0.7 }]}
+        style={[styles.button, { backgroundColor: colours.secondaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("Welcome")}
       >
         <Text style={styles.buttonText}>Restart App</Text>
@@ -41,11 +43,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: colours.bluegrey,
     padding: 20,
   },
   largeText: {
     fontSize: 120,
+    fontFamily: 'Pacifico',
     color: "#000",
     marginBottom: 20,
   },

@@ -23,6 +23,8 @@ Note: '/--/' is required at the end of the redirect uri for the Spotify API to w
 
 1. Run the project
 ``` npm start ```
+ If you have troubles run this instead
+ ```npm start -- --reset-cache --clear```
 1. Open project using Expo Go app on your phone or emulator. This can be done by scanning the QR code generated in the terminal or by entering the URL underneath the QR code into the browser on your phone.
 
 

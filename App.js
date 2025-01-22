@@ -1,10 +1,15 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Animated, ActivityIndicator, Image, Dimensions } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import * as SplashScreen from 'expo-splash-screen';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './utils/firebase';
 import { getSession } from './utils/session'; // Session utility
+import { useFonts } from 'expo-font';
+
+import colours from './styles/colours';
+
 import Home from './screens/Home';
 import Login from './screens/Login';
 import Connections from './screens/Connections';
@@ -21,60 +26,97 @@ import Notifications from './screens/Notifications';
 import Favourites from './screens/Favourites';
 import FriendsList from './screens/FriendsList';
 
+// Prepare the splash screen not to auto-hide
+SplashScreen.preventAutoHideAsync();
 
 // Stack Navigator
 const Stack = createStackNavigator();
+const { width, height } = Dimensions.get('window'); // Get screen dimensions
 
 // Welcome Screen with Animation
 function WelcomeScreen({ navigation }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current; // Start fully visible
+  const scaleAnim = useRef(new Animated.Value(0.75)).current; // Start at original size
+  const rotateAnim = useRef(new Animated.Value(0)).current; // Start at 0 rotation
 
   useEffect(() => {
     const initializeSession = async () => {
+      // Fade in, then fade out
       Animated.sequence([
+      Animated.parallel([
+        // Step 1: Fade In
         Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 2500, // Fade in
+          toValue: 1, // Fully visible
+          duration: 1000, // Fade-in duration
           useNativeDriver: true,
         }),
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 2500, // Fade out
+        Animated.timing(scaleAnim, {
+          toValue: 1, // Scale up slightly (20%)
+          duration: 2400,
           useNativeDriver: true,
         }),
+        Animated.timing(rotateAnim, {
+          toValue: -1.4, // Rotate counterclockwise by 10 degrees
+          duration: 2600,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Step 2: Fade Out
+      Animated.timing(fadeAnim, {
+        toValue: 0, // Fully invisible
+        duration: 1000, // Fade-out duration
+        useNativeDriver: true,
+      }),
       ]).start(async () => {
         try {
           // Check for a saved session in SecureStore
           const userUid = await getSession('userUid');
           if (userUid) {
-            navigation.replace('Main'); // Navigate to Hub if session exists
+            navigation.replace('Main'); // If session exists, go to Main
           } else {
-            // Check Firebase Authentication state
             onAuthStateChanged(auth, (currentUser) => {
               if (currentUser) {
-                navigation.replace('Main'); // Navigate to Hub if logged in
+                navigation.replace('Main');
               } else {
-                navigation.replace('Home'); // Navigate to Home if not logged in
+                navigation.replace('Home');
               }
             });
           }
         } catch (error) {
           console.error('Error checking session:', error);
-          navigation.replace('Error'); // Navigate to Error screen on failure
+          navigation.replace('Error');
         }
       });
     };
 
     initializeSession();
-  }, [fadeAnim, navigation]);
+  }, [fadeAnim, scaleAnim, rotateAnim, navigation]);
 
   return (
-    <View style={styles.container}>
-      <Animated.Text style={[styles.text, { opacity: fadeAnim }]}>
-        Welcome to
-      </Animated.Text>
-      <Animated.Text style={[styles.largeText, { opacity: fadeAnim }]}>
+    <View style={styles.container} backgroundColor={colours.bluegrey}>
+      <Animated.Image
+        source={require('./images/musicNoteIcon.png')} // Path to your music note image
+        style={[
+          styles.icon,
+          {
+            opacity: fadeAnim,
+            transform: [
+              { scale: scaleAnim }, // Scale the image
+              {
+                rotate: rotateAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0deg', '-10deg'], // Rotate counterclockwise
+                }),
+              },
+            ],
+          },
+        ]}
+      />
+      <Animated.Text style={[styles.largeText, { opacity: fadeAnim, fontFamily: 'Pacifico' }]}>
         Treble
+      </Animated.Text>
+      <Animated.Text style={[styles.text, { opacity: fadeAnim }]}>
+        by Bass
       </Animated.Text>
     </View>
   );
@@ -82,6 +124,23 @@ function WelcomeScreen({ navigation }) {
 
 // Main App Component
 export default function App() {
+  // Load fonts
+  const [fontsLoaded] = useFonts({
+    Pacifico: require('./assets/fonts/Pacifico-Regular.ttf'),
+  });
+
+  // Hide splash screen once fonts are loaded
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  // Keep splash screen visible while fonts are still loading
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Welcome" screenOptions={{ headerShown: false }}>
@@ -108,10 +167,15 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: colours.bluegrey,
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+  },
+  icon: {
+    width: width * 0.55,  // Set image size relative to screen width
+    height: height * 0.55, // Maintain aspect ratio or adjust size
   },
   text: {
     fontFamily: 'sans-serif',
@@ -119,7 +183,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   largeText: {
-    fontSize: 100,
+    fontSize: 120,
     color: '#000',
   },
 });

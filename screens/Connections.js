@@ -4,6 +4,7 @@ import { signOut } from 'firebase/auth';
 import { auth, db } from '../utils/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { deleteSession } from '../utils/session';
+import colours from '../styles/colours';
 
 import * as Linking from 'expo-linking';
 import { SPOTIFY_CLIENT_ID, SPOTIFY_SCOPE, SPOTIFY_REDIRECT_URI } from '@env';
@@ -138,17 +139,6 @@ export default function Connections({ navigation }) {
     fetchUserData();
   }, [navigation]);
 
-  //For BASS Accounts
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      await deleteSession('userUid');
-      navigation.navigate('Home'); // Navigate to Login on logout
-    } catch (error) {
-      console.error('Error during logout:', error);
-    }
-  }
-
   if (loading) {
     return (
       <View style={styles.container}>
@@ -165,57 +155,74 @@ export default function Connections({ navigation }) {
       <Text style={styles.largeText}>Connect an Account</Text>
       {!isSpotifyLinked ? (
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: 'green', opacity: 0.7 }]}
+          style={[styles.button, { backgroundColor: "green", opacity: 0.7 }]}
           onPress={handleSpotifyLogin}
         >
           <Text style={styles.buttonTextSpotify}>Login with Spotify</Text>
         </TouchableOpacity>
       ) : (
-        <Text style={styles.textSpotify}>Your Spotify account is already linked!</Text>
+        <Text style={styles.textSpotify}>
+          Your Spotify account is already linked!
+        </Text>
       )}
       <TouchableOpacity
-              style={[styles.button, { backgroundColor: 'black', opacity: 0.7 }] }
-              //error screen
-              onPress = {() => navigation.navigate('Error')}
-            >
-              <Text style={styles.buttonTextLast}>Login with Last.fm</Text>
+        style={[styles.button, { backgroundColor: "black", opacity: 0.7 }]}
+        //error screen
+        onPress={() => navigation.navigate("Error")}
+      >
+        <Text style={styles.buttonTextLast}>Login with Last.fm</Text>
       </TouchableOpacity>
       <TouchableOpacity
-              style={[styles.button, { backgroundColor: '#FA2D48', opacity: 0.7 }] }
-              //error screen
-              onPress = {() => navigation.navigate('Error')}
-            >
-              <Text style={styles.buttonTextApple}>Login with Apple Music</Text>
+        style={[styles.button, { backgroundColor: "#FA2D48", opacity: 0.7 }]}
+        //error screen
+        onPress={() => navigation.navigate("Error")}
+      >
+        <Text style={styles.buttonTextApple}>Login with Apple Music</Text>
       </TouchableOpacity>
-      <Text style={styles.mediumText}></Text>
-      
-      <Text style={styles.mediumText}></Text>
+
       {/* Bottom Navigation Bar (Hotbar) */}
-             <View style={styles.bottomNavBar}>
-             <TouchableOpacity onPress={() => navigation.navigate('Messages')} style={styles.bottomNavItem}>
-                <Image source={require('../images/messagesIcon.png')} style={styles.bottomMessagesIcon} />
-                <Text style={styles.bottomMessagesText}>Messages</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('Main')} style={styles.bottomNavItem}>
-                <Image source={require('../images/homeIcon.png')} style={styles.bottomNavIcon} />
-                <Text style={styles.bottomNavText}>Home</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('Favourites')} style={styles.bottomNavItem}>
-                <Image source={require('../images/favouritesIcon2.png')} style={styles.bottomNavIcon} />
-                <Text style={styles.bottomNavText}>Favourites</Text>
-              </TouchableOpacity>
-            </View>
+      <View style={styles.bottomNavBar}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Messages")}
+          style={styles.bottomNavItem}
+        >
+          <Image
+            source={require("../images/whiteMessagesIcon.png")}
+            style={styles.bottomMessagesIcon}
+          />
+          <Text style={styles.bottomMessagesText}>Messages</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Main")}
+          style={styles.bottomNavItem}
+        >
+          <Image
+            source={require("../images/whiteHomeIcon.png")}
+            style={styles.bottomNavIcon}
+          />
+          <Text style={styles.bottomNavText}>Home</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Favourites")}
+          style={styles.bottomNavItem}
+        >
+          <Image
+            source={require("../images/whiteFavourite.png")}
+            style={styles.bottomNavIcon}
+          />
+          <Text style={styles.bottomNavText}>Favourites</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: colours.bluegrey,
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    top: 20,
-    backgroundColor: '#fff',
     padding: 20,
   },
   welcome: {
@@ -309,24 +316,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   bottomNavBar: {
-    position: 'absolute',
-    bottom: 18,
-    width: '112%',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    backgroundColor: colours.primaryblue, // Apply secondary blue as background
+    position: "absolute",
+    bottom: 0,
+    width: "112%",
+    flexDirection: "row",
+    justifyContent: "space-around",
+    borderTopColor: colours.lightblue,
+    borderTopWidth: 3,
     paddingVertical: 10,
   },
   bottomNavItem: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
   },
   bottomNavIcon: {
     width: 25,
     height: 25,
-    resizeMode: 'contain',
+    resizeMode: "contain",
   },
   bottomMessagesIcon: {
     width: 50,
@@ -335,11 +342,11 @@ const styles = StyleSheet.create({
   },
   bottomMessagesText: {
     bottom: 25,
-    fontSize: 12,
-    color: '#555',
+    fontSize: 14,
+    color: "#fff",
   },
   bottomNavText: {
-    fontSize: 12,
-    color: '#555',
+    fontSize: 14,
+    color: "#fff",
   },
 });

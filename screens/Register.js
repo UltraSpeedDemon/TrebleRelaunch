@@ -12,6 +12,7 @@ import { db, auth } from "../utils/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { saveSession } from "../utils/session";
+import colours from "../styles/colours";
 
 export default function Register({ navigation }) {
   const [username, setUsername] = useState("");
@@ -62,6 +63,7 @@ export default function Register({ navigation }) {
           },
         ]}
         placeholder="Enter your username"
+        placeholderTextColor={colours.darkgrey}
         value={username}
         onChangeText={(text) => setUsername(text)}
       />
@@ -77,6 +79,7 @@ export default function Register({ navigation }) {
           },
         ]}
         placeholder="Enter your email"
+        placeholderTextColor={colours.darkgrey}
         value={email}
         onChangeText={(text) => setEmail(text)}
         keyboardType="email-address"
@@ -94,11 +97,12 @@ export default function Register({ navigation }) {
           },
         ]}
         placeholder="Enter your password"
+        placeholderTextColor={colours.darkgrey}
         secureTextEntry
         value={password}
         onChangeText={(text) => setPassword(text)}
       />
-
+      <Text style={styles.text}></Text>
       <TouchableOpacity style={styles.button} onPress={handleRegister}>
         <Text style={styles.buttonText}>Register</Text>
       </TouchableOpacity>
@@ -106,7 +110,7 @@ export default function Register({ navigation }) {
       <TouchableOpacity
         style={[
           styles.button, // Correctly reference the style object
-          { backgroundColor: "#8080E0", opacity: 0.7 }, // Change the background color
+          { backgroundColor: colours.secondaryblue, opacity: 0.7 }, // Change the background color
         ]}
         onPress={() => navigation.navigate("Login")}
       >
@@ -119,9 +123,9 @@ export default function Register({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colours.bluegrey,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
   },
   text: {
     fontFamily: "sans-serif",
@@ -136,7 +140,7 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 40,
-    borderColor: "#ccc",
+    borderColor: colours.secondaryblue, // Primary blue color
     borderWidth: 1,
     width: "100%",
     marginBottom: 20,
@@ -144,7 +148,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   button: {
-    backgroundColor: "#007BFF", // Blue background
+    backgroundColor: colours.primaryblue, // Primary blue color
     borderRadius: 25, // Rounded corners
     width: 200, // Static width
     height: 50, // Static height

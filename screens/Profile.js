@@ -3,12 +3,16 @@ import {View,Text,StyleSheet,Image,TouchableOpacity,Alert,ActivityIndicator} fro
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../utils/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import colours from '../styles/colours';
+import PersistentLayout from '../components/PersistentLayout';
 
 export default function Profile({ navigation }) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [avatar, setAvatar] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const basicAvatar = '../images/avatarIcon.png';
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -23,7 +27,7 @@ export default function Profile({ navigation }) {
           if (userDoc.exists()) {
             const userData = userDoc.data();
             setUsername(userData.username || displayName);
-            setAvatar(userData.avatar || null);
+            setAvatar(userData.avatar || basicAvatar);
           } else {
             setUsername(displayName);
           }
@@ -59,21 +63,15 @@ export default function Profile({ navigation }) {
         }
       };
 
+  const noAvatar = require('../images/avatarIcon.png');
+
   return (
     <View style={styles.container}>
-      {/* Go Back Button with Image */}
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.goBackButton}>
-        <Image
-          source={require('../images/arrowLeftIcon.png')} // Place your go back icon image here
-          style={styles.goBackImage}
-        />
-      </TouchableOpacity>
       {/* Avatar */}
       <Image
-        source={avatar ? { uri: avatar } : require('../images/avatarIcon.png')}
+        source={avatar ? { uri: avatar } : noAvatar}
         style={styles.avatar}
       />
-
       {/* Username */}
       <Text style={styles.username}>{username}</Text>
 
@@ -92,36 +90,55 @@ export default function Profile({ navigation }) {
        <TouchableOpacity style={[styles.button, styles.logoutButton]} onPress={handleLogout}>
         <Text style={styles.buttonText}>Log Out</Text>
       </TouchableOpacity>
-      {/* Bottom Navigation Bar (Hotbar) */}
-             <View style={styles.bottomNavBar}>
-             <TouchableOpacity onPress={() => navigation.navigate('Messages')} style={styles.bottomNavItem}>
-                <Image source={require('../images/messagesIcon.png')} style={styles.bottomMessagesIcon} />
-                <Text style={styles.bottomMessagesText}>Messages</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('Main')} style={styles.bottomNavItem}>
-                <Image source={require('../images/homeIcon.png')} style={styles.bottomNavIcon} />
-                <Text style={styles.bottomNavText}>Home</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('Favourites')} style={styles.bottomNavItem}>
-                <Image source={require('../images/favouritesIcon2.png')} style={styles.bottomNavIcon} />
-                <Text style={styles.bottomNavText}>Favourites</Text>
-              </TouchableOpacity>
+      
+              {/* Bottom Navigation Bar (Hotbar) */}
+              <View style={styles.bottomNavBar}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("Messages")}
+                  style={styles.bottomNavItem}
+                >
+                  <Image
+                    source={require("../images/whiteMessagesIcon.png")}
+                    style={styles.bottomMessagesIcon}
+                  />
+                  <Text style={styles.bottomMessagesText}>Messages</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("Main")}
+                  style={styles.bottomNavItem}
+                >
+                  <Image
+                    source={require("../images/whiteHomeIcon.png")}
+                    style={styles.bottomNavIcon}
+                  />
+                  <Text style={styles.bottomNavText}>Home</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("Favourites")}
+                  style={styles.bottomNavItem}
+                >
+                  <Image
+                    source={require("../images/whiteFavourite.png")}
+                    style={styles.bottomNavIcon}
+                  />
+                  <Text style={styles.bottomNavText}>Favourites</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: colours.bluegrey,
     padding: 70,
-    alignItems: 'center',
+    alignItems: "center",
   },
   loader: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   avatar: {
     width: 120,
@@ -131,75 +148,75 @@ const styles = StyleSheet.create({
   },
   username: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginTop: 10,
   },
   email: {
     fontSize: 16,
-    color: '#555',
+    color: "#555",
     marginBottom: 20,
   },
   logoutButton: {
-    backgroundColor: '#FF0000',
+    backgroundColor: "#FF0000",
   },
   button: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: "#4CAF50",
     padding: 15,
     borderRadius: 5,
     marginTop: 10,
-    width: '80%',
-    alignItems: 'center',
+    width: "80%",
+    alignItems: "center",
   },
   buttonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
-},
-goBackButton: {
-    position: 'absolute',
+    fontWeight: "bold",
+  },
+  goBackButton: {
+    position: "absolute",
     top: 50,
     left: 20,
     padding: 10,
     zIndex: 1,
-},
-goBackImage: {
+  },
+  goBackImage: {
     width: 30,
     height: 30,
-    resizeMode: 'contain',
-},
- bottomNavBar: {
-     position: 'absolute',
+    resizeMode: "contain",
+  },
+  bottomNavBar: {
+    backgroundColor: colours.primaryblue, // Apply secondary blue as background
+    position: "absolute",
     bottom: 0,
-    width: '150%',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    width: "160%",
+    flexDirection: "row",
+    justifyContent: "space-around",
+    borderTopColor: colours.lightblue,
+    borderTopWidth: 3,
     paddingVertical: 10,
-},
-bottomNavItem: {
+  },
+  bottomNavItem: {
     flex: 1,
-    alignItems: 'center',
-},
-bottomNavIcon: {
+    alignItems: "center",
+  },
+  bottomNavIcon: {
     width: 25,
-        height: 25,
-        resizeMode: 'contain',
-      },
-      bottomMessagesIcon: {
-        width: 50,
-        height: 50,
-        bottom: 12,
-      },
-      bottomMessagesText: {
-        bottom: 25,
-        fontSize: 12,
-        color: '#555',
-      },
-      bottomNavText: {
-        fontSize: 12,
-        color: '#555',
-      },
+    height: 25,
+    resizeMode: "contain",
+  },
+  bottomMessagesIcon: {
+    width: 50,
+    height: 50,
+    bottom: 12,
+  },
+  bottomMessagesText: {
+    bottom: 25,
+    fontSize: 14,
+    color: "#fff",
+  },
+  bottomNavText: {
+    fontSize: 14,
+    color: "#fff",
+  },
 });

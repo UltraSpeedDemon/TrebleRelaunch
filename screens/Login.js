@@ -12,6 +12,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../utils/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { saveSession } from "../utils/session";
+import colours from "../styles/colours";
 
 export default function Login({ navigation }) {
   const [identifier, setIdentifier] = useState(""); // Can be email or username
@@ -64,6 +65,7 @@ export default function Login({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Username or Email"
+        placeholderTextColor={colours.darkgrey}
         value={identifier}
         onChangeText={setIdentifier}
         autoCapitalize="none"
@@ -71,6 +73,7 @@ export default function Login({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor={colours.darkgrey}
         value={password}
         secureTextEntry
         onChangeText={setPassword}
@@ -81,7 +84,7 @@ export default function Login({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: "#8080E0", opacity: 0.7 }]}
+        style={[styles.button, { backgroundColor: colours.secondaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("Register")}
       >
         <Text style={styles.buttonText}>Register</Text>
@@ -95,7 +98,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: colours.bluegrey,
     padding: 20,
   },
   mediumText: {
@@ -110,7 +113,7 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 50,
-    borderColor: "#ccc",
+    borderColor: colours.secondaryblue,
     borderWidth: 1,
     borderRadius: 10,
     width: "90%",
@@ -119,7 +122,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    backgroundColor: "#007BFF",
+    backgroundColor: colours.primaryblue,
     borderRadius: 25,
     width: 200,
     height: 50,
