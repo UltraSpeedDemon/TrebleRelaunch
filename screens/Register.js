@@ -7,50 +7,107 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  Image,
 } from "react-native";
 import { db, auth } from "../utils/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { collection, query as fsQuery, where, getDocs, doc, setDoc } from "firebase/firestore";
 import { saveSession } from "../utils/session";
 import colours from "../styles/colours";
+
 
 export default function Register({ navigation }) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [avatar, setAvatar] = useState(null);
+
+  const handlePickAvatar = async () => {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+  
+      if (!result.canceled) {
+        setAvatar(result.assets[0].uri);
+      }
+    };
 
   const handleRegister = async () => {
     try {
-      // Create a new user with email and password
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      const user = userCredential.user;
+      // Check if any fields are empty
+      if (!username || !email || !password) {
+        throw new Error("Please fill out all fields");
+      }
 
-      await saveSession("userUid", user.uid);
+      //check if email is valid
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        throw new Error("Please enter a valid email");
+      }
 
-      // Update the user's display name with the username
-      await updateProfile(auth.currentUser, { displayName: username });
+      // Check if password is at least 6 characters
+      if (password.length < 6) {
+        throw new Error("Password must be at least 6 characters");
+      }
 
-      // Save user data to Firestore
-      await setDoc(doc(db, "users", user.uid), {
-        username: username,
-        email: email,
-        createdAt: new Date().toISOString(),
-      });
-  
-      Alert.alert('Success', 'User registered successfully!');
-      navigation.navigate('Connections'); // Navigate to the Connections screen
-    } catch (error) {
-      Alert.alert("Error", error.message);
+      // Check if username is at least 3 characters
+      if (username.length < 3) {
+        throw new Error("Username must be at least 3 characters");
+      }
+
+      // Check if username is already taken
+      const usersRef = collection(db, "users");
+    const userQuery1 = fsQuery(usersRef, where("usernameLower", "==", username.toLowerCase()));
+    const querySnapshot1 = await getDocs(userQuery1);
+
+    if (!querySnapshot1.empty) {
+      throw new Error("Username is already taken");
     }
-  };
+
+    // Check if email is already taken
+    const userQuery2 = fsQuery(usersRef, where("emailLower", "==", email.toLowerCase()));
+    const querySnapshot2 = await getDocs(userQuery2);
+    
+    if (!querySnapshot2.empty) {
+      throw new Error("Email is already taken");
+    }
+
+
+
+      // Create user
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // Save username/displayName
+    await updateProfile(auth.currentUser, { displayName: username });
+
+    // Create user doc in Firestore
+    await setDoc(doc(db, "users", user.uid), {
+      username: username,
+      usernameLower: username.toLowerCase(),
+      email: email,
+      emailLower: email.toLowerCase(),
+      avatar,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Save session and navigate
+    await saveSession("userUid", user.uid);
+    Alert.alert("Success", "User registered successfully!");
+    navigation.replace("Main");
+  } catch (error) {
+    Alert.alert("Error", error.message);
+  }
+};
+  
 
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Register</Text>
+
 
       <Text style={styles.text}>Username</Text>
       <TextInput
@@ -103,6 +160,7 @@ export default function Register({ navigation }) {
         onChangeText={(text) => setPassword(text)}
       />
       <Text style={styles.text}></Text>
+
       <TouchableOpacity style={styles.button} onPress={handleRegister}>
         <Text style={styles.buttonText}>Register</Text>
       </TouchableOpacity>
@@ -128,13 +186,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   text: {
-    fontFamily: "sans-serif",
+    fontFamily: 'Domine',
+    fontWeight: 'bold',
     fontSize: 20,
     color: "#000",
     marginVertical: 5,
   },
   largeText: {
-    fontSize: 80,
+    fontSize: 100,
+    fontFamily: 'Lobster',
     color: "#000",
     marginBottom: 20,
   },
@@ -142,13 +202,14 @@ const styles = StyleSheet.create({
     height: 40,
     borderColor: colours.secondaryblue, // Primary blue color
     borderWidth: 1,
+    fontFamily: 'Domine',
     width: "100%",
     marginBottom: 20,
     paddingHorizontal: 10,
     fontSize: 18,
   },
   button: {
-    backgroundColor: colours.primaryblue, // Primary blue color
+    backgroundColor: colours.navbarBlue, // Primary blue color
     borderRadius: 25, // Rounded corners
     width: 200, // Static width
     height: 50, // Static height

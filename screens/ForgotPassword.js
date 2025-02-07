@@ -1,32 +1,56 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, StyleSheet } from "react-native";
+import { View, TextInput, TouchableOpacity, StyleSheet, Text, Alert } from "react-native";
+import { auth } from "../utils/firebase";
+import colours from "../styles/colours";
 
-export default function ForgotPassword({ navigate }) {
+export default function ForgotPassword({ navigation }) {
   const [email, setEmail] = useState("");
+  const [error, setError] = useState(null);
 
-  const handleSubmit = () => {
-    // Handle password reset logic here (e.g., API call)
-    console.log(`Password reset requested for ${email}`);
-    // Navigate back to login page after submitting
-    navigate("Login");
+  const handleResetPassword = () => {
+    if (!email) {
+      Alert.alert("Error", "Please enter your email address.");
+      return;
+    }
+
+    auth
+      .sendPasswordResetEmail(email)
+      .then(() => {
+        Alert.alert("Success", "Password reset email sent! Please check your inbox.");
+        navigation.navigate("Login"); // Redirect to Login page
+      })
+      .catch((error) => {
+        console.error("Error sending reset email:", error);
+        Alert.alert("Error", "Failed to send password reset email. Please try again.");
+      });
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.largeText}>Forgot Password</Text>
+      <Text style={styles.largeText}>Forgot Password?</Text>
 
-      <Text style={styles.text}>Enter your email</Text>
+      {error && <Text style={styles.error}>{error}</Text>}
+
       <TextInput
         style={styles.input}
         placeholder="Enter your email"
+        placeholderTextColor={colours.darkgrey}
         value={email}
-        onChangeText={(text) => setEmail(text)}
+        onChangeText={setEmail}
+        autoCapitalize="none"
         keyboardType="email-address"
       />
 
-      <Button title="Submit" onPress={handleSubmit} />
+      <TouchableOpacity style={styles.button} onPress={handleResetPassword}>
+        <Text style={styles.buttonText}>Send Reset Link</Text>
+      </TouchableOpacity>
 
-      <Button title="Back to Login" onPress={() => navigate("Login")} />
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: colours.secondaryblue, opacity: 0.7 }]}
+        onPress={() => navigation.navigate("Login")}
+      >
+        <Text style={styles.buttonText}>Back to Login</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -36,27 +60,44 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: colours.bluegrey,
     padding: 20,
   },
-  text: {
-    fontFamily: "sans-serif",
-    fontSize: 20,
-    color: "#000",
-    marginVertical: 5,
-  },
   largeText: {
-    fontSize: 40,
+    fontSize: 50,
+    fontFamily: 'Lobster',
     color: "#000",
-    marginBottom: 20,
+    marginBottom: 40,
   },
   input: {
-    height: 40,
-    borderColor: "#ccc",
+    height: 50,
+    borderColor: colours.primaryblue,
     borderWidth: 1,
-    width: "100%",
+    fontFamily: 'Domine',
+    borderRadius: 10,
+    width: "90%",
     marginBottom: 20,
     paddingHorizontal: 10,
-    fontSize: 18,
+    fontSize: 16,
+  },
+  button: {
+    backgroundColor: colours.navbarBlue,
+    borderRadius: 25,
+    width: 200,
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  error: {
+    color: "red",
+    fontFamily: 'Domine',
+    marginBottom: 20,
+    textAlign: "center",
   },
 });

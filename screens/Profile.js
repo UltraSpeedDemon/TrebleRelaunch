@@ -4,13 +4,16 @@ import { signOut } from 'firebase/auth';
 import { auth, db } from '../utils/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import colours from '../styles/colours';
-import PersistentLayout from '../components/PersistentLayout';
+import Sidebar from '../components/Sidebar';
+import BottomNavbar from '../components/BottomNavbar';
 
 export default function Profile({ navigation }) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [avatar, setAvatar] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [avatar, setAvatar] = useState("../images/avatarIcon.png");
+
+  const noAvatar = require('../images/avatarIcon.png');
 
   const basicAvatar = '../images/avatarIcon.png';
 
@@ -27,7 +30,7 @@ export default function Profile({ navigation }) {
           if (userDoc.exists()) {
             const userData = userDoc.data();
             setUsername(userData.username || displayName);
-            setAvatar(userData.avatar || basicAvatar);
+            setAvatar(userData.avatar || noAvatar);
           } else {
             setUsername(displayName);
           }
@@ -63,10 +66,14 @@ export default function Profile({ navigation }) {
         }
       };
 
-  const noAvatar = require('../images/avatarIcon.png');
 
   return (
     <View style={styles.container}>
+       <View style={styles.sideMenu}>
+              {/* Sidebar */}
+              <Sidebar />
+        </View>
+
       {/* Avatar */}
       <Image
         source={avatar ? { uri: avatar } : noAvatar}
@@ -90,41 +97,11 @@ export default function Profile({ navigation }) {
        <TouchableOpacity style={[styles.button, styles.logoutButton]} onPress={handleLogout}>
         <Text style={styles.buttonText}>Log Out</Text>
       </TouchableOpacity>
-      
-              {/* Bottom Navigation Bar (Hotbar) */}
-              <View style={styles.bottomNavBar}>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("Messages")}
-                  style={styles.bottomNavItem}
-                >
-                  <Image
-                    source={require("../images/whiteMessagesIcon.png")}
-                    style={styles.bottomMessagesIcon}
-                  />
-                  <Text style={styles.bottomMessagesText}>Messages</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("Main")}
-                  style={styles.bottomNavItem}
-                >
-                  <Image
-                    source={require("../images/whiteHomeIcon.png")}
-                    style={styles.bottomNavIcon}
-                  />
-                  <Text style={styles.bottomNavText}>Home</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("Favourites")}
-                  style={styles.bottomNavItem}
-                >
-                  <Image
-                    source={require("../images/whiteFavourite.png")}
-                    style={styles.bottomNavIcon}
-                  />
-                  <Text style={styles.bottomNavText}>Favourites</Text>
-                </TouchableOpacity>
-              </View>
+          {/* Bottom Navigation Bar */}
+          <View style={styles.bottomNavBar}>
+              <BottomNavbar />
             </View>
+      </View>
   );
 }
 
@@ -132,8 +109,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colours.bluegrey,
-    padding: 70,
     alignItems: "center",
+    paddingTop: 70,
   },
   loader: {
     flex: 1,
@@ -186,37 +163,21 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
   },
   bottomNavBar: {
-    backgroundColor: colours.primaryblue, // Apply secondary blue as background
     position: "absolute",
     bottom: 0,
-    width: "160%",
+    width: "100%",
     flexDirection: "row",
-    justifyContent: "space-around",
-    borderTopColor: colours.lightblue,
-    borderTopWidth: 3,
-    paddingVertical: 10,
   },
-  bottomNavItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  bottomNavIcon: {
-    width: 25,
-    height: 25,
-    resizeMode: "contain",
-  },
-  bottomMessagesIcon: {
-    width: 50,
-    height: 50,
-    bottom: 12,
-  },
-  bottomMessagesText: {
-    bottom: 25,
-    fontSize: 14,
-    color: "#fff",
-  },
-  bottomNavText: {
-    fontSize: 14,
-    color: "#fff",
+  sideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 100,
+    bottom: 0,
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 10,
   },
 });

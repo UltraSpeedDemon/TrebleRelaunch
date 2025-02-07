@@ -1,133 +1,65 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, StyleSheet, ActivityIndicator, TouchableOpacity, Image} from 'react-native';
-import { signOut } from 'firebase/auth';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
 import { auth, db } from '../utils/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { deleteSession } from '../utils/session';
 import colours from '../styles/colours';
+import Sidebar from '../components/Sidebar';
+import BottomNavbar from '../components/BottomNavbar';
 
-import * as Linking from 'expo-linking';
-import { SPOTIFY_CLIENT_ID, SPOTIFY_SCOPE, SPOTIFY_REDIRECT_URI } from '@env';
 
-
-//SPOTIFY ACCOUNT DEVELOPER
-//etcurtis@lakeheadu.ca
-//MusicProject123
-
-// import { createClient } from '@supabase/supabase-js'
-
-// const supabase = createClient(supabaseUrl, supabaseKey)
+import * as AuthSession from 'expo-auth-session';
+import colours from '../styles/colours';
+import Sidebar from '../components/Sidebar';
+import BottomNavbar from '../components/BottomNavbar';
+import { SPOTIFY_CLIENT_ID } from '@env';
+import { discovery, SPOTIFY_SCOPES, REDIRECT_URI } from '../utils/spotifyAuth';
 
 export default function Connections({ navigation }) {
-  
   const [username, setUsername] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isSpotifyLinked, setIsSpotifyLinked] = useState(false); // Track Spotify linking status
+  const [isSpotifyLinked, setIsSpotifyLinked] = useState(false);
 
+  // Step 1: Set up a request object with useAuthRequest
+  const [request, response, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: SPOTIFY_CLIENT_ID,
+      redirectUri: REDIRECT_URI,
+      scopes: SPOTIFY_SCOPES,
+      // PKCE code challenge
+      codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
+    },
+    discovery
+  );
+  console.log('REQUEST:', request);
+  console.log('RESPONSE:', response);
+  console.log('REDIRECT_URI:', REDIRECT_URI);
 
-  const [token, setToken] = useState(null);
-
-
-
-  const getSpotifyAuthUrl = () => {
-    return `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&redirect_uri=${SPOTIFY_REDIRECT_URI}&scope=${SPOTIFY_SCOPE}&response_type=token`;
-  };
-  
-  const handleSpotifyLogin = () => {
-    const authUrl = getSpotifyAuthUrl();
-    Linking.openURL(authUrl); // Open Spotify login page
-  };
-
-  // Handle deep linking and extract tokens
-  useEffect(() => {
-    const handleDeepLink = async (event) => {
-      const { url } = event;
-      if (url.includes('#access_token=')) {
-        const token = url.split('#access_token=')[1].split('&')[0];
-        console.log('Spotify Access Token:', token);
-  
-        // Link Spotify account to Firebase user
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-          try {
-            const userDocRef = doc(db, 'users', currentUser.uid);
-            await setDoc(userDocRef, { spotifyToken: token }, { merge: true });
-            console.log('Spotify token linked to Firebase user');
-            setIsSpotifyLinked(true); // Update state to reflect the linking
-          } catch (error) {
-            console.error('Error linking Spotify account:', error);
-          }
-        } else {
-          console.error('No authenticated Firebase user found');
-        }
-      }
-    };
-  
-    // Check initial URL
-    Linking.getInitialURL().then((url) => {
-      if (url) handleDeepLink({ url });
-    });
-  
-    // Listen for deep link events
-    const unsubscribe = Linking.addEventListener('url', handleDeepLink);
-  
-    return () => {
-      unsubscribe.remove(); // Proper cleanup
-    };
-  }, []);
-  
-  
-
-
-//    // Sign in with Spotify SUPABASE ---- 
-//    async function signInWithSpotify() {
-//     try {
-//       const { data, error } = await supabase.auth.signInWithOAuth({
-//         provider: 'spotify',
-//       });
-
-//       if (error) {
-//         console.error('Error during authentication:', error);
-//         alert('Authentication failed. Please try again.');
-//       } else {
-//         console.log('Spotify authentication data:', data);
-//         // Navigate to a different screen if you need
-//         // navigation.navigate('SomeOtherScreen');
-//       }
-//     } catch (err) {
-//       console.error('Unexpected error:', err);
-//       alert('An unexpected error occurred. Please try again.');
-//     }
-//   }
-
-//   async function signOut() {
-//     const { error } = await supabase.auth.signOut()
-//   }
-
+  // Fetch user data from Firestore and check if Spotify is already linked
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        // Get the current user from Firebase Auth
         const currentUser = auth.currentUser;
+        if (!currentUser) {
+          // If no user is logged in, redirect to Home (or Login)
+          navigation.navigate('Home');
+          return;
+        }
 
-        if (currentUser) {
-          // Option 1: Use the displayName from Firebase Auth
-          const displayName = currentUser.displayName;
-          setUsername(displayName);
+        const displayName = currentUser.displayName;
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userSnapshot = await getDoc(userDocRef);
 
-          // Option 2 (Optional): Fetch additional user data from Firestore
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUsername(userData.username || displayName);
-          
-            // Check if Spotify is linked
-            if (userData.spotifyToken) {
-              setIsSpotifyLinked(true); // Update state to reflect linking status
-            }
+        if (userSnapshot.exists()) {
+          const userData = userSnapshot.data();
+          setUsername(userData.username || displayName);
+
+          if (userData.spotifyAccessToken) {
+            setIsSpotifyLinked(true);
           }
         } else {
-          navigation.navigate('Home'); // Redirect to Login if no user is logged in
+          // If no user doc, at least set display name from Firebase Auth
+          setUsername(displayName);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -139,6 +71,56 @@ export default function Connections({ navigation }) {
     fetchUserData();
   }, [navigation]);
 
+
+  // Step 2: Listen for the authorization code response
+  useEffect(() => {
+    if (response?.type === 'success' && response.params?.code) {
+      const { code } = response.params;
+
+      // Step 3: Exchange the code for tokens
+      AuthSession.exchangeCodeAsync({
+        code,
+        clientId: SPOTIFY_CLIENT_ID,
+        redirectUri: REDIRECT_URI,
+        extraParams: {
+          code_verifier: request.codeVerifier, // set the exact param name
+        },
+      }, discovery)      
+      
+        .then(async (tokenResponse) => {
+          console.log('Spotify Token Response:', tokenResponse);
+          const { accessToken, refreshToken } = tokenResponse;
+
+          // Store tokens in Firestore
+          const currentUser = auth.currentUser;
+          if (currentUser) {
+            try {
+              const userDocRef = doc(db, 'users', currentUser.uid);
+              await setDoc(
+                userDocRef,
+                { 
+                  spotifyAccessToken: accessToken, 
+                  spotifyRefreshToken: refreshToken 
+                },
+                { merge: true }
+              );
+              setIsSpotifyLinked(true);
+            } catch (err) {
+              console.error('Error linking Spotify account:', err);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('Error exchanging code for tokens:', err);
+        });
+    }
+  }, [response]);
+
+  // Trigger the Spotify login flow
+  const handleSpotifyLogin = () => {
+    promptAsync();
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -149,14 +131,21 @@ export default function Connections({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <View style={styles.sideMenu}>
+        {/* Sidebar */}
+          <Sidebar />
+            </View>
       <Text style={styles.welcome}>Welcome, {username}!</Text>
       <Text style={styles.mediumText}>You are now logged in.</Text>
       <Text style={styles.mediumText}></Text>
       <Text style={styles.largeText}>Connect an Account</Text>
+
+      {/* Spotify Connection */}
       {!isSpotifyLinked ? (
         <TouchableOpacity
           style={[styles.button, { backgroundColor: "green", opacity: 0.7 }]}
           onPress={handleSpotifyLogin}
+          disabled={!request} // disable if request is not ready
         >
           <Text style={styles.buttonTextSpotify}>Login with Spotify</Text>
         </TouchableOpacity>
@@ -165,6 +154,8 @@ export default function Connections({ navigation }) {
           Your Spotify account is already linked!
         </Text>
       )}
+
+      {/* Last.fm Connection (placeholder) */}
       <TouchableOpacity
         style={[styles.button, { backgroundColor: "black", opacity: 0.7 }]}
         //error screen
@@ -172,6 +163,8 @@ export default function Connections({ navigation }) {
       >
         <Text style={styles.buttonTextLast}>Login with Last.fm</Text>
       </TouchableOpacity>
+
+      {/* Apple Music Connection (placeholder) */}
       <TouchableOpacity
         style={[styles.button, { backgroundColor: "#FA2D48", opacity: 0.7 }]}
         //error screen
@@ -179,78 +172,41 @@ export default function Connections({ navigation }) {
       >
         <Text style={styles.buttonTextApple}>Login with Apple Music</Text>
       </TouchableOpacity>
-
-      {/* Bottom Navigation Bar (Hotbar) */}
-      <View style={styles.bottomNavBar}>
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Messages")}
-          style={styles.bottomNavItem}
-        >
-          <Image
-            source={require("../images/whiteMessagesIcon.png")}
-            style={styles.bottomMessagesIcon}
-          />
-          <Text style={styles.bottomMessagesText}>Messages</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Main")}
-          style={styles.bottomNavItem}
-        >
-          <Image
-            source={require("../images/whiteHomeIcon.png")}
-            style={styles.bottomNavIcon}
-          />
-          <Text style={styles.bottomNavText}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Favourites")}
-          style={styles.bottomNavItem}
-        >
-          <Image
-            source={require("../images/whiteFavourite.png")}
-            style={styles.bottomNavIcon}
-          />
-          <Text style={styles.bottomNavText}>Favourites</Text>
-        </TouchableOpacity>
-      </View>
+              {/* Bottom Navigation Bar */}
+              <View style={styles.bottomNavBar}>
+                <BottomNavbar />
+            </View>
     </View>
   );
 }
 
+// -------------------- STYLES --------------------
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colours.bluegrey,
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   welcome: {
-    fontSize: 35,
+    fontSize: 55,
+    fontFamily: 'Lobster',
     fontWeight: 'bold',
     textAlign: 'center',
     margin: 10,
   },
   largeText: {
-    fontSize: 30,
+    fontSize: 40,
+    fontFamily: 'Lobster',
     fontWeight: 'bold',
     color: '#000',
     marginBottom: 20,
   },
   mediumText: {
-    fontSize: 20,
+    fontSize: 30,
+    fontFamily: 'Lobster',
     color: '#000',
     marginBottom: 20,
-  },
-  input: {
-    height: 50,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    borderRadius: 10,
-    width: '90%',
-    marginBottom: 20,
-    paddingHorizontal: 10,
-    fontSize: 16,
   },
   button: {
     backgroundColor: '#007BFF',
@@ -264,24 +220,22 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
+    fontFamily: 'Domine',
     fontSize: 16,
     fontWeight: 'bold',
   },
   buttonTextSpotify: {
     color: 'black',
+    top: 3,
     fontSize: 16,
     fontWeight: 'bold',
   },
   textSpotify: {
     color: 'black',
     fontWeight: 'bold',
-    backgroundColor: 'green', 
-    //smooth border 
-    borderRadius: 25,
-    //make thicker
+    backgroundColor: 'green',
     opacity: 0.7,
     fontSize: 18,
-    //lower text position in button
     padding: 10,
     marginBottom: 20,
     borderRadius: 25,
@@ -302,51 +256,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  error: {
-    color: 'red',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  red: {
-    color: 'red',
-    fontSize: 28,
-    //bold
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
   bottomNavBar: {
-    backgroundColor: colours.primaryblue, // Apply secondary blue as background
     position: "absolute",
     bottom: 0,
-    width: "112%",
+    width: "100%",
     flexDirection: "row",
-    justifyContent: "space-around",
-    borderTopColor: colours.lightblue,
-    borderTopWidth: 3,
-    paddingVertical: 10,
   },
-  bottomNavItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  bottomNavIcon: {
-    width: 25,
-    height: 25,
-    resizeMode: "contain",
-  },
-  bottomMessagesIcon: {
-    width: 50,
-    height: 50,
-    bottom: 12,
-  },
-  bottomMessagesText: {
-    bottom: 25,
-    fontSize: 14,
-    color: "#fff",
-  },
-  bottomNavText: {
-    fontSize: 14,
-    color: "#fff",
+  sideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 100,
+    bottom: 0,
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 10,
   },
 });

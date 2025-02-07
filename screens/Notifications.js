@@ -1,63 +1,94 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
-import { db } from '../utils/firebase'; // Ensure this path is correct
-import { collection, getDocs } from 'firebase/firestore';
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  Animated,
+  StyleSheet,
+} from "react-native";
+import Sidebar from "../components/Sidebar";
+import BottomNavbar from "../components/BottomNavbar";
+import colours from "../styles/colours";
 
 export default function Notifications({ navigation }) {
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchAnimation] = useState(new Animated.Value(0));
 
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'notifications'));
-        const notificationsList = querySnapshot.docs.map(doc => doc.data());
-        setNotifications(notificationsList);
-      } catch (err) {
-        setError('Failed to fetch notifications');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Toggle search bar visibility
+  const toggleSearch = () => {
+    const toValue = searchOpen ? 0 : 1;
+    Animated.timing(searchAnimation, {
+      toValue,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+    setSearchOpen(!searchOpen);
+  };
 
-    fetchNotifications();
-  }, []);
+  // Interpolations for search bar animation
+  const searchWidth = searchAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0%", "67%"],
+  });
 
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#0000ff" />
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centered}>
-        <Text>{error}</Text>
-      </View>
-    );
-  }
+  const searchOpacity = searchAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
 
   return (
     <View style={styles.container}>
-      {/* Bottom Navigation Bar (Hotbar) */}
-             <View style={styles.bottomNavBar}>
-             <TouchableOpacity onPress={() => navigation.navigate('Messages')} style={styles.bottomNavItem}>
-                <Image source={require('../images/messagesIcon.png')} style={styles.bottomMessagesIcon} />
-                <Text style={styles.bottomMessagesText}>Messages</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('Main')} style={styles.bottomNavItem}>
-                <Image source={require('../images/homeIcon.png')} style={styles.bottomNavIcon} />
-                <Text style={styles.bottomNavText}>Home</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('Favourites')} style={styles.bottomNavItem}>
-                <Image source={require('../images/favouritesIcon2.png')} style={styles.bottomNavIcon} />
-                <Text style={styles.bottomNavText}>Favourites</Text>
-              </TouchableOpacity>
-            </View>
+      {/* Search Bar */}
+      <Animated.View
+        style={[
+          styles.searchBar,
+          {
+            transform: [
+              {
+                translateX: searchAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [300, 0],
+                }),
+              },
+            ],
+            width: searchWidth,
+            opacity: searchOpacity,
+          },
+        ]}
+      >
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search Notifications..."
+          placeholderTextColor="#fff"
+        />
+      </Animated.View>
+
+      {/* Search Icon */}
+      <TouchableOpacity style={styles.searchIcon} onPress={toggleSearch}>
+        <Image
+          source={require("../images/blackSearchIcon.png")}
+          style={styles.icon}
+        />
+      </TouchableOpacity>
+
+      {/* Sidebar */}
+      <View style={styles.sideMenu}>
+        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+      </View>
+
+      {/* Main Content */}
+      <View style={styles.content}>
+        <Text style={styles.header}>Notifications</Text>
+        <Text style={styles.subText}>Stay updated with the latest alerts!</Text>
+      </View>
+
+      {/* Bottom Navigation Bar */}
+      <View style={styles.bottomNavBar}>
+        <BottomNavbar />
+      </View>
     </View>
   );
 }
@@ -65,53 +96,68 @@ export default function Notifications({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    backgroundColor: colours.bluegrey,
   },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  searchIcon: {
+    width: 40,
+    height: 40,
+    position: "absolute",
+    top: 70,
+    right: 20,
   },
-  item: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ccc',
+  icon: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "contain",
   },
-  itemText: {
+  searchBar: {
+    position: "absolute",
+    width: "80%",
+    height: 40,
+    top: 70,
+    left: 60,
+    borderRadius: 8,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colours.lightblue,
+    backgroundColor: colours.darkblue,
+  },
+  searchInput: {
     fontSize: 16,
+    color: "#fff",
+  },
+  sideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 100,
+    bottom: 0,
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 10,
+  },
+  content: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  header: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: colours.lightblue,
+  },
+  subText: {
+    fontSize: 16,
+    color: colours.darkblue,
+    marginTop: 10,
   },
   bottomNavBar: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
-    width: '112%',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
-    paddingVertical: 10,
-  },
-  bottomNavItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  bottomNavIcon: {
-    width: 25,
-    height: 25,
-    resizeMode: 'contain',
-  },
-  bottomMessagesIcon: {
-    width: 50,
-    height: 50,
-    bottom: 12,
-  },
-  bottomMessagesText: {
-    bottom: 25,
-    fontSize: 12,
-    color: '#555',
-  },
-  bottomNavText: {
-    fontSize: 12,
-    color: '#555',
+    width: "100%",
+    flexDirection: "row",
   },
 });

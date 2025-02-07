@@ -3,6 +3,9 @@ import {View,Text,TextInput,StyleSheet,TouchableOpacity,Image,Alert,ActivityIndi
 import { auth, db } from '../utils/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
+import BottomNavbar from '../components/BottomNavbar';
+import colours from '../styles/colours';
+import Sidebar from '../components/Sidebar';
 
 export default function EditProfile ({ navigation }) {
   const [username, setUsername] = useState('');
@@ -95,13 +98,10 @@ export default function EditProfile ({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Go Back Button with Image */}
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.goBackButton}>
-        <Image
-          source={require('../images/arrowLeftIcon.png')} // Place your go back icon image here
-          style={styles.goBackImage}
-        />
-      </TouchableOpacity>
+     <View style={styles.sideMenu}>
+        {/* Sidebar */}
+          <Sidebar />
+            </View>
 
       {/* Avatar */}
       <TouchableOpacity onPress={handlePickAvatar}>
@@ -111,7 +111,7 @@ export default function EditProfile ({ navigation }) {
         />
         <Text style={styles.changeAvatarText}>Change Avatar</Text>
       </TouchableOpacity>
-
+        
       {/* Username */}
       <Text style={styles.label}>Username</Text>
       <TextInput
@@ -138,20 +138,10 @@ export default function EditProfile ({ navigation }) {
       >
         <Text style={styles.buttonText}>{saving ? 'Saving...' : 'Save Changes'}</Text>
       </TouchableOpacity>
-      {/* Bottom Navigation Bar (Hotbar) */}
-             <View style={styles.bottomNavBar}>
-             <TouchableOpacity onPress={() => navigation.navigate('Messages')} style={styles.bottomNavItem}>
-                <Image source={require('../images/messagesIcon.png')} style={styles.bottomMessagesIcon} />
-                <Text style={styles.bottomMessagesText}>Messages</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('Main')} style={styles.bottomNavItem}>
-                <Image source={require('../images/homeIcon.png')} style={styles.bottomNavIcon} />
-                <Text style={styles.bottomNavText}>Home</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => navigation.navigate('Favourites')} style={styles.bottomNavItem}>
-                <Image source={require('../images/favouritesIcon2.png')} style={styles.bottomNavIcon} />
-                <Text style={styles.bottomNavText}>Favourites</Text>
-              </TouchableOpacity>
+
+      {/* Bottom Navigation Bar */}
+      <View style={styles.bottomNavBar}>
+              <BottomNavbar />
             </View>
     </View>
   );
@@ -160,9 +150,9 @@ export default function EditProfile ({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9f9f9',
-    padding: 50,
+    backgroundColor: colours.bluegrey,
     alignItems: 'center',
+    paddingTop: 70,
   },
   loader: {
     flex: 1,
@@ -182,13 +172,16 @@ const styles = StyleSheet.create({
   },
   label: {
     alignSelf: 'flex-start',
+    textAlign: 'Center',
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 5,
+    marginLeft: 55,
   },
   input: {
-    width: '100%',
+    alignItems: 'center',
+    width: '70%',
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 5,
@@ -201,11 +194,12 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   button: {
+    alignContent: 'center',
     backgroundColor: '#4CAF50',
     padding: 15,
     borderRadius: 5,
     marginTop: 10,
-    width: '100%',
+    width: '70%',
     alignItems: 'center',
   },
   buttonText: {
@@ -229,37 +223,21 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   bottomNavBar: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
-    width: '135%',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
-    paddingVertical: 10,
+    width: "100%",
+    flexDirection: "row",
   },
-  bottomNavItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  bottomNavIcon: {
-    width: 25,
-    height: 25,
-    resizeMode: 'contain',
-  },
-  bottomMessagesIcon: {
-    width: 50,
-    height: 50,
-    bottom: 12,
-  },
-  bottomMessagesText: {
-    bottom: 25,
-    fontSize: 12,
-    color: '#555',
-  },
-  bottomNavText: {
-    fontSize: 12,
-    color: '#555',
+  sideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 100,
+    bottom: 0,
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 10,
   },
 });

@@ -26,14 +26,17 @@ import {
 import { saveSession } from "../utils/session";
 import { useNavigation } from "@react-navigation/native";
 import colours from "../styles/colours";
+import fontFamily from "../styles/fontFamily";
  
 const Sidebar = ({ children }) => {
   const navigation = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuAnimation] = useState(new Animated.Value(-300));
-  const [avatar, setAvatar] = useState(null);
+  const [avatar, setAvatar] = useState("../images/avatarIcon.png");
   const [username, setUsername] = useState("User");
   const [email, setEmail] = useState("email@example.com");
+
+  const noAvatar = require("../images/avatarIcon.png");
 
   const toggleMenu = () => {
     Animated.timing(menuAnimation, {
@@ -54,9 +57,7 @@ const Sidebar = ({ children }) => {
         }).start();
         setMenuOpen(false);
       };
-  
-    const basicAvatar = require("../images/avatarIcon.png");
-  
+
     useEffect(() => {
       const fetchUserData = async () => {
         try {
@@ -73,7 +74,7 @@ const Sidebar = ({ children }) => {
             if (userDoc.exists()) {
               const userData = userDoc.data();
               setUsername(userData.username || displayName);
-              setAvatar(userData.avatar || basicAvatar);
+              setAvatar(userData.avatar || noAvatar);
             }
           } else {
             navigation.navigate("Home"); // Redirect to Login if no user is logged in
@@ -114,8 +115,6 @@ const Sidebar = ({ children }) => {
     },
   });
 
-  const noAvatar = require("../images/avatarIcon.png");
-
   const handleLogout = () => {
     auth.signOut().then(() => navigation.navigate("Home"));
   };
@@ -147,28 +146,31 @@ const Sidebar = ({ children }) => {
         <View style={styles.profileSection}>
           <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
             <Image
-              source={avatar ? { uri: avatar } : noAvatar}
+              source={avatar ? { uri: avatar } : require('../images/avatarIcon.png')}
               style={styles.avatar}
             />
           </TouchableOpacity>
           <Text style={styles.profileName}>{username || "Loading..."}</Text>
           <Text style={styles.profileName2}>{email}</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("EditProfile")}>
+              <Text style={styles.editAccount}>Edit Account</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Menu Items */}
         <TouchableOpacity
           style={styles.menuItem}
-          onPress={() => navigation.navigate("Profile")}
+          onPress={() => navigation.navigate("RecentlyViewed")}
         >
           <Image
-            source={require("../images/profileIcon2.png")}
+            source={require("../images/blackClockIcon.png")}
             style={styles.menuIcon}
           />
-          <Text style={styles.menuText}>Account</Text>
+          <Text style={styles.menuText}>Recently Viewed</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.menuItem}
-          onPress={() => navigation.navigate("Connections")}
+          onPress={() => navigation.navigate("FriendsList")}
         >
           <Image
             source={require("../images/friendsIcon.png")}
@@ -184,7 +186,7 @@ const Sidebar = ({ children }) => {
             source={require("../images/groupsIcon.png")}
             style={styles.menuIcon}
           />
-          <Text style={styles.menuText}>Groups</Text>
+          <Text style={styles.menuText}>Community</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.menuItem}
@@ -236,7 +238,7 @@ const Sidebar = ({ children }) => {
           />
           <Text style={styles.menuText}>Settings</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+        <TouchableOpacity style={[styles.menuItem, {alignItems: "right"}]} onPress={handleLogout}>
           <Text style={styles.menuText}>Logout</Text>
         </TouchableOpacity>
       </Animated.View>
@@ -248,16 +250,7 @@ const styles = StyleSheet.create({
     container: {
       flex: 1,
       paddingTop: 30,
-    },
-    feed: {
-      flex: 0.8,
-      textAlign: "center",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    feedText: {
-      fontSize: 60,
-      color: "#333",
+      right: 100,
     },
     overlay: {
         position: 'absolute',
@@ -274,6 +267,14 @@ const styles = StyleSheet.create({
       justifyContent: "space-between",
       paddingHorizontal: 15,
       marginBottom: 10,
+    },
+    editAccount: {
+      top: 5,
+      left: 110,
+      color: "#333",
+      fontSize: 10,
+      fontFamily: 'Domine',
+      alignContent: "right",
     },
     hamburger: {
       width: 40,
@@ -382,40 +383,6 @@ const styles = StyleSheet.create({
     menuText: {
       fontSize: 16,
       color: "#555",
-    },
-    bottomNavBar: {
-      backgroundColor: colours.primaryblue, // Apply secondary blue as background
-      position: "absolute",
-      bottom: 0,
-      width: "100%",
-      flexDirection: "row",
-      justifyContent: "space-around",
-      borderTopColor: colours.lightblue,
-      borderTopWidth: 3,
-      paddingVertical: 10,
-    },
-    bottomNavItem: {
-      flex: 1,
-      alignItems: "center",
-    },
-    bottomNavIcon: {
-      width: 25,
-      height: 25,
-      resizeMode: "contain",
-    },
-    bottomMessagesIcon: {
-      width: 50,
-      height: 50,
-      bottom: 12,
-    },
-    bottomMessagesText: {
-      bottom: 25,
-      fontSize: 14,
-      color: "#fff",
-    },
-    bottomNavText: {
-      fontSize: 14,
-      color: "#fff",
     },
   });
 

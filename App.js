@@ -9,7 +9,6 @@ import { getSession } from './utils/session'; // Session utility
 import { useFonts } from 'expo-font';
 
 import colours from './styles/colours';
-
 import Home from './screens/Home';
 import Login from './screens/Login';
 import Connections from './screens/Connections';
@@ -25,9 +24,11 @@ import Messages from './screens/Messages';
 import Notifications from './screens/Notifications';
 import Favourites from './screens/Favourites';
 import FriendsList from './screens/FriendsList';
-
+import Explore from './screens/Explore';
+import RecentlyViewed from './screens/RecentlyViewed';
 // Prepare the splash screen not to auto-hide
 SplashScreen.preventAutoHideAsync();
+import { ColorSpace } from 'react-native-reanimated';
 
 // Stack Navigator
 const Stack = createStackNavigator();
@@ -87,6 +88,44 @@ function WelcomeScreen({ navigation }) {
           navigation.replace('Error');
         }
       });
+
+      // Start the loop without resetting values
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(rotateAnim, {
+            toValue: 1, // Rotate clockwise
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(rotateAnim, {
+            toValue: -1, // Rotate counterclockwise
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ]),
+        {
+          resetBeforeIteration: false, // Prevent resetting between loop iterations
+        }
+      ).start();
+
+      // Perform initialization logic and navigate after the animation
+      try {
+        const userUid = await getSession('userUid');
+        if (userUid) {
+          navigation.replace('Main');
+        } else {
+          onAuthStateChanged(auth, (currentUser) => {
+            if (currentUser) {
+              navigation.replace('Main');
+            } else {
+              navigation.replace('Home');
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error during initialization:', error);
+        navigation.replace('Error');
+      }
     };
 
     initializeSession();
@@ -112,15 +151,17 @@ function WelcomeScreen({ navigation }) {
           },
         ]}
       />
-      <Animated.Text style={[styles.largeText, { opacity: fadeAnim, fontFamily: 'Pacifico' }]}>
+      <Animated.Text style={[styles.largeText, { fontSize: 120, opacity: fadeAnim, fontFamily: 'Pacifico' }]}>
         Treble
       </Animated.Text>
-      <Animated.Text style={[styles.text, { opacity: fadeAnim }]}>
-        by Bass
+      <Animated.Text style={[styles.text, { opacity: fadeAnim, bottom: 20, fontFamily: 'Lobster', fontWeight: 'bold', }]}>
+        By Bass
       </Animated.Text>
     </View>
   );
 }
+
+
 
 // Main App Component
 export default function App() {
@@ -160,6 +201,8 @@ export default function App() {
         <Stack.Screen name="Notifications" component={Notifications} />
         <Stack.Screen name="Favourites" component={Favourites} />
         <Stack.Screen name="FriendsList" component={FriendsList} />
+        <Stack.Screen name="Explore" component={Explore} />
+        <Stack.Screen name="RecentlyViewed" component={RecentlyViewed} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -178,12 +221,12 @@ const styles = StyleSheet.create({
     height: height * 0.55, // Maintain aspect ratio or adjust size
   },
   text: {
-    fontFamily: 'sans-serif',
-    fontSize: 30,
+    fontSize: 55,
+    fontWeight: 'bold',
     color: '#000',
   },
   largeText: {
-    fontSize: 120,
+    fontSize: 105,
     color: '#000',
   },
 });

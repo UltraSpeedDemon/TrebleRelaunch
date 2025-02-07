@@ -1,88 +1,163 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image, navigation, navigate } from 'react-native';
-import { db } from '../utils/firebase'; // Import Firebase instance
-import { doc, getDoc } from 'firebase/firestore'; // Firestore functions
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  Animated,
+  StyleSheet,
+} from "react-native";
+import Sidebar from "../components/Sidebar";
+import BottomNavbar from "../components/BottomNavbar";
+import colours from "../styles/colours";
 
 export default function Messages({ navigation }) {
-    return (
-      <View style={styles.container}>
-            {/* Bottom Navigation Bar (Hotbar) */}
-                   <View style={styles.bottomNavBar}>
-                   <TouchableOpacity onPress={() => navigation.navigate('Messages')} style={styles.bottomNavItem}>
-                      <Image source={require('../images/messagesIcon.png')} style={styles.bottomMessagesIcon} />
-                      <Text style={styles.bottomMessagesText}>Messages</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => navigation.navigate('Main')} style={styles.bottomNavItem}>
-                      <Image source={require('../images/homeIcon.png')} style={styles.bottomNavIcon} />
-                      <Text style={styles.bottomNavText}>Home</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => navigation.navigate('Favourites')} style={styles.bottomNavItem}>
-                      <Image source={require('../images/favouritesIcon2.png')} style={styles.bottomNavIcon} />
-                      <Text style={styles.bottomNavText}>Favourites</Text>
-                    </TouchableOpacity>
-                  </View>
-          </View>
-    );
-    }
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchAnimation] = useState(new Animated.Value(0));
+
+  // Toggle search bar visibility
+  const toggleSearch = () => {
+    const toValue = searchOpen ? 0 : 1;
+    Animated.timing(searchAnimation, {
+      toValue,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+    setSearchOpen(!searchOpen);
+  };
+
+  // Interpolations for search bar animation
+  const searchWidth = searchAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0%", "67%"],
+  });
+
+  const searchOpacity = searchAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
+  return (
+    <View style={styles.container}>
+      {/* Search Bar */}
+      <Animated.View
+        style={[
+          styles.searchBar,
+          {
+            transform: [
+              {
+                translateX: searchAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [300, 0],
+                }),
+              },
+            ],
+            width: searchWidth,
+            opacity: searchOpacity,
+          },
+        ]}
+      >
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search Messages..."
+          placeholderTextColor="#fff"
+        />
+      </Animated.View>
+
+      {/* Search Icon */}
+      <TouchableOpacity style={styles.searchIcon} onPress={toggleSearch}>
+        <Image
+          source={require("../images/blackSearchIcon.png")}
+          style={styles.icon}
+        />
+      </TouchableOpacity>
+
+      {/* Sidebar */}
+      <View style={styles.sideMenu}>
+        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+      </View>
+
+      {/* Main Content */}
+      <View style={styles.content}>
+        <Text style={styles.header}>Messages</Text>
+        <Text style={styles.subText}>Stay connected with your conversations!</Text>
+      </View>
+
+      {/* Bottom Navigation Bar */}
+      <View style={styles.bottomNavBar}>
+        <BottomNavbar />
+      </View>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: colours.bluegrey,
   },
-  messageDetail: {
-    padding: 20,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+  searchIcon: {
+    width: 40,
+    height: 40,
+    position: "absolute",
+    top: 70,
+    right: 20,
   },
-  senderName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+  icon: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "contain",
   },
-  messageContent: {
+  searchBar: {
+    position: "absolute",
+    width: "80%",
+    height: 40,
+    top: 70,
+    left: 60,
+    borderRadius: 8,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colours.lightblue,
+    backgroundColor: colours.darkblue,
+  },
+  searchInput: {
     fontSize: 16,
+    color: "#fff",
+  },
+  sideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 100,
+    bottom: 0,
+    shadowColor: "#000",
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 10,
+  },
+  content: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  header: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: colours.lightblue,
+  },
+  subText: {
+    fontSize: 16,
+    color: colours.darkblue,
     marginTop: 10,
-    color: '#666',
   },
   bottomNavBar: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
-    width: '112%',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
-    paddingVertical: 10,
-  },
-  bottomNavItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  bottomNavIcon: {
-    width: 25,
-    height: 25,
-    resizeMode: 'contain',
-  },
-  bottomMessagesIcon: {
-    width: 50,
-    height: 50,
-    bottom: 12,
-  },
-  bottomMessagesText: {
-    bottom: 25,
-    fontSize: 12,
-    color: '#555',
-  },
-  bottomNavText: {
-    fontSize: 12,
-    color: '#555',
+    width: "100%",
+    flexDirection: "row",
   },
 });

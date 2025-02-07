@@ -3,13 +3,48 @@ import { View, Text, Button, StyleSheet, TouchableOpacity } from "react-native";
 import colours from "../styles/colours";
 import fontFamily from "../styles/fontFamily";
 
+import { AuthSession } from "expo";
+import { SPOTIFY_CLIENT_ID } from "@env";
+import { setAccessToken, setRefreshToken } from "../utils/spotifyAuth";
+import { discovery } from "../utils/spotifyAuth";
+
+
+
+const refreshTokens = async () => {
+  if (!refreshToken) return;
+
+
+  try {
+    const refreshResult = await AuthSession.refreshAsync(
+      {
+        clientId: SPOTIFY_CLIENT_ID,
+        refreshToken: refreshToken,
+      },
+      discovery
+    );
+
+    if (refreshResult.accessToken) {
+      setAccessToken(refreshResult.accessToken);
+      setRefreshToken(refreshResult.refreshToken ?? refreshToken);
+      // Sometimes the refresh token can change; if Spotify returns a new one,
+      // store that. Otherwise, keep using the old one.
+    }
+  } catch (error) {
+    console.log('Error refreshing token', error);
+  }
+};
+
+
+
 export default function Home({ navigation }) {
+  // check if users spotify token is still valid, if not refresh it
+  refreshTokens();
+
+
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Treble</Text>
-      <Text style={styles.mediumText}>A Music Social Platform</Text>
-
-      <Text style={styles.mediumText}></Text>
+      <Text style={styles.mediumText} >A Music Social Platform</Text>
 
       <TouchableOpacity
          style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]}
@@ -53,7 +88,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   mediumText: {
-    fontSize: 25,
+    fontSize: 30,
+    bottom: 20,
+    fontFamily: 'Lobster',
+    fontWeight: 'bold',
     color: "#000",
     marginBottom: 20,
   },

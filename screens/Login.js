@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../utils/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, setDoc } from "firebase/firestore";
 import { saveSession } from "../utils/session";
 import colours from "../styles/colours";
 
@@ -19,46 +19,58 @@ export default function Login({ navigation }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
 
+
+  function isEmail(input) {
+    // Very minimal check:
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(input);
+  }
+
   const handleLogin = async () => {
     try {
-      setError(null); // Reset error state
-      let email = identifier;
-
-      // Check if identifier is not an email (assume it's a username)
-      if (!identifier.includes("@")) {
+      setError(null);
+  
+      let userEmail = identifier;
+  
+      if (isEmail(identifier)) {
+        // If it's an email, we'll just use signInWithEmailAndPassword directly
+        userEmail = identifier.toLowerCase();
+      } else {
+        // Otherwise, treat it as a username. Query Firestore for the matching email.
         const usersRef = collection(db, "users");
-        const q = query(usersRef, where("username", "==", identifier));
+        const q = query(usersRef, where("usernameLower", "==", identifier.toLowerCase()));
         const querySnapshot = await getDocs(q);
-
+  
         if (querySnapshot.empty) {
           throw new Error("Username not found");
         }
-
-        // Extract the email associated with the username
-        email = querySnapshot.docs[0].data().email;
+        userEmail = querySnapshot.docs[0].data().email;
       }
-
-      // Authenticate user with Firebase
+  
       const userCredential = await signInWithEmailAndPassword(
         auth,
-        email,
+        userEmail,
         password
       );
       const user = userCredential.user;
-
-      // Save UID to SecureStore for session
+  
+      // Save UID to SecureStore
       await saveSession("userUid", user.uid);
-
-      Alert.alert('Success', 'Logged in successfully!');
-      navigation.navigate('Connections'); // Navigate to Connections on successful login
+  
+      Alert.alert("Success", "Logged in successfully!");
+      navigation.replace("Main");
     } catch (err) {
-      setError(err.message); // Show error message
+      setError(err.message);
     }
   };
+  
 
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Login</Text>
+
+      <Text style={styles.text}></Text>
+
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -79,6 +91,7 @@ export default function Login({ navigation }) {
         onChangeText={setPassword}
       />
 
+
       <TouchableOpacity style={styles.button} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
@@ -88,6 +101,17 @@ export default function Login({ navigation }) {
         onPress={() => navigation.navigate("Register")}
       >
         <Text style={styles.buttonText}>Register</Text>
+      </TouchableOpacity>
+      
+      <Text style={styles.text}></Text>
+      <Text style={styles.text}></Text>
+      <Text style={styles.text}></Text>
+
+      <TouchableOpacity
+        style={[styles.button, { backgroundColor: colours.secondaryblue, opacity: 0.7 }]}
+        onPress={() => navigation.navigate("ForgotPassword")}
+      >
+        <Text style={styles.buttonText}>Forgot Password?</Text>
       </TouchableOpacity>
     </View>
   );
@@ -107,14 +131,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   largeText: {
-    fontSize: 80,
+    fontSize: 100,
+    fontFamily: 'Lobster',
     color: "#000",
     marginBottom: 20,
   },
   input: {
     height: 50,
-    borderColor: colours.secondaryblue,
+    borderColor: colours.primaryblue,
     borderWidth: 1,
+    fontFamily: 'Domine',
+    placeholderFontFamily: 'Domine',
     borderRadius: 10,
     width: "90%",
     marginBottom: 20,
@@ -122,7 +149,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    backgroundColor: colours.primaryblue,
+    backgroundColor: colours.navbarBlue,
     borderRadius: 25,
     width: 200,
     height: 50,
@@ -137,6 +164,7 @@ const styles = StyleSheet.create({
   },
   error: {
     color: "red",
+    fontFamily: 'Domine',
     marginBottom: 20,
     textAlign: "center",
   },
