@@ -2,25 +2,15 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  getRedirectResult,
-  getAuthFromPersistence,
   initializeAuth,
-  getReactNativePersistence
+  getReactNativePersistence,
+  onAuthStateChanged
 } from "firebase/auth";
-import { getFirestore, collection, getDocs } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getDatabase } from "firebase/database";
-import { FIREBASE_API_KEY } from "@env";
+import { getFirestore } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import { FIREBASE_API_KEY } from "@env";
 
 // Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: FIREBASE_API_KEY,
   authDomain: "musicapp-c7e76.firebaseapp.com",
@@ -33,6 +23,12 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+// Initialize Firebase Auth with persistence
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
+
 // Check if analytics is supported
 isSupported().then((supported) => {
   if (supported) {
@@ -44,6 +40,4 @@ isSupported().then((supported) => {
 });
 
 export const db = getFirestore(app);
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+export { auth, onAuthStateChanged };

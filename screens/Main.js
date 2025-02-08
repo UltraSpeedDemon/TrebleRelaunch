@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,9 +10,90 @@ import {
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
+import { auth, db } from "../utils/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import * as AuthSession from "expo-auth-session";
+import { SPOTIFY_CLIENT_ID, REDIRECT_URI, SPOTIFY_SCOPES } from "@env";
+import { discovery, setAccessToken, setRefreshToken } from "../utils/spotifyAuth";
 
 export default function Feed({ navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleSpotifyReAuth = async () => {
+    const [request, response, promptAsync] = AuthSession.useAuthRequest(
+      {
+        clientId: SPOTIFY_CLIENT_ID,
+        redirectUri: REDIRECT_URI,
+        scopes: SPOTIFY_SCOPES,
+        codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
+      },
+      discovery
+    );
+
+    useEffect(() => {
+      if (response?.type === 'success' && response.params?.code) {
+        // Handle the response and save the new tokens
+        // You can use the same logic as in your Connections.js file
+      }
+    }, [response]);
+
+    promptAsync();
+  };
+
+  const refreshSpotifyToken = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    const userDocRef = doc(db, "users", currentUser.uid);
+    const userSnapshot = await getDoc(userDocRef);
+
+    if (userSnapshot.exists()) {
+      const userData = userSnapshot.data();
+      const refreshToken = userData.spotifyRefreshToken;
+
+      if (refreshToken) {
+        try {
+          if (AuthSession.refreshAsync) {
+            const refreshResult = await AuthSession.refreshAsync(
+              {
+                clientId: SPOTIFY_CLIENT_ID,
+                refreshToken: refreshToken,
+              },
+              discovery
+            );
+
+            if (refreshResult.accessToken) {
+              await setDoc(
+                userDocRef,
+                {
+                  spotifyAccessToken: refreshResult.accessToken,
+                  spotifyRefreshToken: refreshResult.refreshToken ?? refreshToken,
+                },
+                { merge: true }
+              );
+              setAccessToken(refreshResult.accessToken);
+              setRefreshToken(refreshResult.refreshToken ?? refreshToken);
+            } else {
+              console.log("Failed to refresh token, re-authentication required");
+              handleSpotifyReAuth();
+            }
+          } else {
+            console.log("AuthSession.refreshAsync is not available");
+          }
+        } catch (error) {
+          console.log("Error refreshing token", error);
+          if (error.message.includes("Refresh token revoked")) {
+            console.log("Refresh token revoked, re-authentication required");
+            handleSpotifyReAuth();
+          }
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    refreshSpotifyToken();
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -28,7 +109,7 @@ export default function Feed({ navigation }) {
       {/* Notifications Button */}
       <TouchableOpacity style={styles.notificationsIcon} onPress={() => navigation.navigate("Notifications")}>
         <Image
-          source={require("../images/notificationsIcon2.png")} // Replace with your notifications icon
+          source={require("../images/notificationsIcon2.png")}
           style={styles.notifIcon}
         />
       </TouchableOpacity>
@@ -48,8 +129,9 @@ export default function Feed({ navigation }) {
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
-    );
-  };
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   container: {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, ActivityIndicator, Image, Dimensions } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import * as SplashScreen from 'expo-splash-screen';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -35,133 +35,70 @@ const Stack = createStackNavigator();
 const { width, height } = Dimensions.get('window'); // Get screen dimensions
 
 // Welcome Screen with Animation
-function WelcomeScreen({ navigation }) {
+function WelcomeScreen() {
+  const navigation = useNavigation();
   const fadeAnim = useRef(new Animated.Value(0)).current; // Start fully visible
   const scaleAnim = useRef(new Animated.Value(0.75)).current; // Start at original size
   const rotateAnim = useRef(new Animated.Value(0)).current; // Start at 0 rotation
 
   useEffect(() => {
-    const initializeSession = async () => {
-      // Fade in, then fade out
-      Animated.sequence([
-      Animated.parallel([
-        // Step 1: Fade In
-        Animated.timing(fadeAnim, {
-          toValue: 1, // Fully visible
-          duration: 1000, // Fade-in duration
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1, // Scale up slightly (20%)
-          duration: 2400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(rotateAnim, {
-          toValue: -1.4, // Rotate counterclockwise by 10 degrees
-          duration: 2600,
-          useNativeDriver: true,
-        }),
-      ]),
-      // Step 2: Fade Out
-      Animated.timing(fadeAnim, {
-        toValue: 0, // Fully invisible
-        duration: 1000, // Fade-out duration
-        useNativeDriver: true,
-      }),
-      ]).start(async () => {
-        try {
-          // Check for a saved session in SecureStore
-          const userUid = await getSession('userUid');
-          if (userUid) {
-            navigation.replace('Main'); // If session exists, go to Main
-          } else {
-            onAuthStateChanged(auth, (currentUser) => {
-              if (currentUser) {
-                navigation.replace('Main');
-              } else {
-                navigation.replace('Home');
-              }
-            });
-          }
-        } catch (error) {
-          console.error('Error checking session:', error);
-          navigation.replace('Error');
-        }
-      });
-
-      // Start the loop without resetting values
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(rotateAnim, {
-            toValue: 1, // Rotate clockwise
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(rotateAnim, {
-            toValue: -1, // Rotate counterclockwise
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ]),
-        {
-          resetBeforeIteration: false, // Prevent resetting between loop iterations
-        }
-      ).start();
-
-      // Perform initialization logic and navigate after the animation
-      try {
-        const userUid = await getSession('userUid');
-        if (userUid) {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setTimeout(() => {
+        if (user) {
+          // User is signed in, navigate to the main screen
           navigation.replace('Main');
         } else {
-          onAuthStateChanged(auth, (currentUser) => {
-            if (currentUser) {
-              navigation.replace('Main');
-            } else {
-              navigation.replace('Home');
-            }
-          });
+          // User is signed out, stay on the login screen
+          navigation.replace('Login');
         }
-      } catch (error) {
-        console.error('Error during initialization:', error);
-        navigation.replace('Error');
-      }
-    };
+      }, 4000); // Delay navigation by 4 seconds
+    });
 
-    initializeSession();
-  }, [fadeAnim, scaleAnim, rotateAnim, navigation]);
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, [navigation]);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 3000, // Increase duration to 3 seconds
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 2,
+        useNativeDriver: true,
+      }),
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 3000, // Increase duration to 3 seconds
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, scaleAnim, rotateAnim]);
+
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   return (
-    <View style={styles.container} backgroundColor={colours.bluegrey}>
+    <View style={styles.container}>
       <Animated.Image
-        source={require('./images/musicNoteIcon.png')} // Path to your music note image
+        source={require('./assets/icon.png')}
         style={[
           styles.icon,
           {
             opacity: fadeAnim,
-            transform: [
-              { scale: scaleAnim }, // Scale the image
-              {
-                rotate: rotateAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: ['0deg', '-10deg'], // Rotate counterclockwise
-                }),
-              },
-            ],
+            transform: [{ scale: scaleAnim }, { rotate }],
           },
         ]}
       />
-      <Animated.Text style={[styles.largeText, { fontSize: 120, opacity: fadeAnim, fontFamily: 'Pacifico' }]}>
-        Treble
-      </Animated.Text>
-      <Animated.Text style={[styles.text, { opacity: fadeAnim, bottom: 20, fontFamily: 'Lobster', fontWeight: 'bold', }]}>
-        By Bass
-      </Animated.Text>
+      <Text style={styles.text}>Welcome</Text>
     </View>
   );
 }
-
-
 
 // Main App Component
 export default function App() {
@@ -217,7 +154,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   icon: {
-    width: width * 0.55,  // Set image size relative to screen width
+    width: width * 0.55, // Set image size relative to screen width
     height: height * 0.55, // Maintain aspect ratio or adjust size
   },
   text: {

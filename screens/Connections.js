@@ -6,12 +6,8 @@ import { deleteSession } from '../utils/session';
 import colours from '../styles/colours';
 import Sidebar from '../components/Sidebar';
 import BottomNavbar from '../components/BottomNavbar';
+import * as AuthSession from 'expo-auth-session'; // Ensure AuthSession is imported correctly
 
-
-import * as AuthSession from 'expo-auth-session';
-import colours from '../styles/colours';
-import Sidebar from '../components/Sidebar';
-import BottomNavbar from '../components/BottomNavbar';
 import { SPOTIFY_CLIENT_ID } from '@env';
 import { discovery, SPOTIFY_SCOPES, REDIRECT_URI } from '../utils/spotifyAuth';
 
@@ -71,7 +67,6 @@ export default function Connections({ navigation }) {
     fetchUserData();
   }, [navigation]);
 
-
   // Step 2: Listen for the authorization code response
   useEffect(() => {
     if (response?.type === 'success' && response.params?.code) {
@@ -85,8 +80,7 @@ export default function Connections({ navigation }) {
         extraParams: {
           code_verifier: request.codeVerifier, // set the exact param name
         },
-      }, discovery)      
-      
+      }, discovery)
         .then(async (tokenResponse) => {
           console.log('Spotify Token Response:', tokenResponse);
           const { accessToken, refreshToken } = tokenResponse;
@@ -133,8 +127,8 @@ export default function Connections({ navigation }) {
     <View style={styles.container}>
       <View style={styles.sideMenu}>
         {/* Sidebar */}
-          <Sidebar />
-            </View>
+        <Sidebar />
+      </View>
       <Text style={styles.welcome}>Welcome, {username}!</Text>
       <Text style={styles.mediumText}>You are now logged in.</Text>
       <Text style={styles.mediumText}></Text>
@@ -172,10 +166,10 @@ export default function Connections({ navigation }) {
       >
         <Text style={styles.buttonTextApple}>Login with Apple Music</Text>
       </TouchableOpacity>
-              {/* Bottom Navigation Bar */}
-              <View style={styles.bottomNavBar}>
-                <BottomNavbar />
-            </View>
+      {/* Bottom Navigation Bar */}
+      <View style={styles.bottomNavBar}>
+        <BottomNavbar />
+      </View>
     </View>
   );
 }
