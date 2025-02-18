@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from "react-native";
 import Sidebar from "../components/Sidebar";
+import SearchBar from "../components/SearchBar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
 
@@ -17,13 +18,7 @@ export default function Explore({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Search Bar */}
-      <View style={styles.searchBar}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search for Songs..."
-          placeholderTextColor="#fff"
-        />
-      </View>
+      <SearchBar />
 
       {/* Notifications Button */}
       <TouchableOpacity style={styles.notificationsIcon} onPress={() => navigation.navigate("Notifications")}>

@@ -60,7 +60,7 @@ export default function Login({ navigation }) {
       Alert.alert("Success", "Logged in successfully!");
       navigation.replace("Main");
     } catch (err) {
-      setError(err.message);
+      setError("Invalid username or password.");
     }
   };
   

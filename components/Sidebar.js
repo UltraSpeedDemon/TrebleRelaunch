@@ -74,7 +74,7 @@ const Sidebar = ({ children }) => {
             if (userDoc.exists()) {
               const userData = userDoc.data();
               setUsername(userData.username || displayName);
-              setAvatar(userData.avatar || noAvatar);
+              setAvatar(userData.avatar || null);
             }
           } else {
             navigation.navigate("Home"); // Redirect to Login if no user is logged in

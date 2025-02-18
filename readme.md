@@ -17,9 +17,19 @@ FIREBASE_APP_ID=your_app_id
 SPOTIFY_CLIENT_ID=your_client_id
 SPOTIFY_CLIENT_SECRET=your_client_secret
 SPOTIFY_REDIRECT_URI=your_redirect_uri
+SPOTIFY_SCOPE="user-read-private user-read-email user-read-playback-state user-modify-playback-state"
+API_TUNNEL_URL="URL_FROM_NGROK"
+API_URL="ONLY IF DEPLOYING INTO NON-DEV ENVIRONMENT [STAGING, PROD]"
 ```
 The 'SPOTIFY_REDIRECT_URI' should be set to 'exp://localhost:19000/--/' for development or it can also be found underneath the QR code when running the project using Expo Go app on your phone using Tunnel mode which we recommend for testing on a physical device.
 Note: '/--/' is required at the end of the redirect uri for the Spotify API to work correctly.
+
+#### Acquiring API_TUNNEL_URL
+Install ngrok for your platform using the install command.
+https://ngrok.com/downloads/windows
+https://ngrok.com/downloads/mac-os
+
+Then, sign into and sign up for ngrok. Claim a free static domain, make a note of the domain name, and go to the **mobile app** codebase and add it as `API_TUNNEL_URL` in your .env file.
 
 1. Run the project
 ``` npm start ```

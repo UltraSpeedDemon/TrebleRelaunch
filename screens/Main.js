@@ -15,6 +15,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import * as AuthSession from "expo-auth-session";
 import { SPOTIFY_CLIENT_ID, REDIRECT_URI, SPOTIFY_SCOPES } from "@env";
 import { discovery, setAccessToken, setRefreshToken } from "../utils/spotifyAuth";
+import SearchBar from "../components/SearchBar";
 
 export default function Feed({ navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -98,13 +99,7 @@ export default function Feed({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Search Bar */}
-      <View style={styles.searchBar}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search for Songs..."
-          placeholderTextColor="#fff"
-        />
-      </View>
+      <SearchBar />
 
       {/* Notifications Button */}
       <TouchableOpacity style={styles.notificationsIcon} onPress={() => navigation.navigate("Notifications")}>

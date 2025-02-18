@@ -26,6 +26,7 @@ import Favourites from './screens/Favourites';
 import FriendsList from './screens/FriendsList';
 import Explore from './screens/Explore';
 import RecentlyViewed from './screens/RecentlyViewed';
+import Search from './screens/Search';
 // Prepare the splash screen not to auto-hide
 SplashScreen.preventAutoHideAsync();
 import { ColorSpace } from 'react-native-reanimated';
@@ -139,6 +140,7 @@ export default function App() {
         <Stack.Screen name="Favourites" component={Favourites} />
         <Stack.Screen name="FriendsList" component={FriendsList} />
         <Stack.Screen name="Explore" component={Explore} />
+        <Stack.Screen name="Search" component={Search} />
         <Stack.Screen name="RecentlyViewed" component={RecentlyViewed} />
       </Stack.Navigator>
     </NavigationContainer>

@@ -78,7 +78,7 @@ export default function EditProfile ({ navigation }) {
         }
 
         Alert.alert('Success', 'Profile updated successfully!');
-        navigation.goBack(); // Go back to the profile screen
+        navigation.push("Profile"); // Go back to the profile screen
       }
     } catch (error) {
       console.error('Error saving profile:', error);

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, TextInput, TouchableOpacity, StyleSheet, Text, Alert } from "react-native";
 import { auth } from "../utils/firebase";
+import { sendPasswordResetEmail } from "firebase/auth";
 import colours from "../styles/colours";
 
 export default function ForgotPassword({ navigation }) {
@@ -13,8 +14,7 @@ export default function ForgotPassword({ navigation }) {
       return;
     }
 
-    auth
-      .sendPasswordResetEmail(email)
+    sendPasswordResetEmail(auth, email)
       .then(() => {
         Alert.alert("Success", "Password reset email sent! Please check your inbox.");
         navigation.navigate("Login"); // Redirect to Login page

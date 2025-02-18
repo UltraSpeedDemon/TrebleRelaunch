@@ -7,9 +7,16 @@ import colours from '../styles/colours';
 import Sidebar from '../components/Sidebar';
 import BottomNavbar from '../components/BottomNavbar';
 
+// This code can be uncommented to demonstrate how to receive a response from the local dev API.
+// import { getHelloWorld } from '../providers/rest';
+
 export default function Profile({ navigation }) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+
+  // This code can be uncommented to demonstrate how to receive a response from the local dev API.
+  // const [helloWorld, setHelloWorld] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [avatar, setAvatar] = useState("../images/avatarIcon.png");
 
@@ -30,7 +37,7 @@ export default function Profile({ navigation }) {
           if (userDoc.exists()) {
             const userData = userDoc.data();
             setUsername(userData.username || displayName);
-            setAvatar(userData.avatar || noAvatar);
+            setAvatar(userData.avatar || null);
           } else {
             setUsername(displayName);
           }
@@ -47,6 +54,17 @@ export default function Profile({ navigation }) {
 
     fetchUserData();
   }, [navigation]);
+
+  // This code can be uncommented to demonstrate how to receive a response from the local dev API.
+  // async function getStuff() {
+  //   const response = await getHelloWorld()
+  //   const json = await response.json()
+  //   setHelloWorld(json["message"])
+  // }
+
+  // useEffect(() => {
+  //   getStuff();
+  // }, [])
 
   if (loading) {
     return (
@@ -135,7 +153,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   logoutButton: {
-    backgroundColor: "#FF0000",
+    backgroundColor: "#BB0000",
   },
   button: {
     backgroundColor: "#4CAF50",
