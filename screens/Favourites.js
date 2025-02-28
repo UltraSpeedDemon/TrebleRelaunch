@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   sideMenu: {
     position: "absolute",
     top: 40,
-    left: 100,
+    right: 525,
     bottom: 0,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
@@ -170,5 +170,5 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-  },
+},
 });

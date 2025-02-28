@@ -15,7 +15,7 @@ import Connections from './screens/Connections';
 import ForgotPassword from './screens/ForgotPassword';
 import Register from './screens/Register';
 import Error from './screens/Error';
-import Main from './screens/Main';
+import Feed from './screens/Feed';
 import Profile from './screens/Profile';
 import EditProfile from './screens/EditProfile';
 import Settings from './screens/Settings';
@@ -27,6 +27,9 @@ import FriendsList from './screens/FriendsList';
 import Explore from './screens/Explore';
 import RecentlyViewed from './screens/RecentlyViewed';
 import Search from './screens/Search';
+import CreatePost from './screens/CreatePost';
+import Posts from './screens/Posts';
+
 // Prepare the splash screen not to auto-hide
 SplashScreen.preventAutoHideAsync();
 import { ColorSpace } from 'react-native-reanimated';
@@ -36,67 +39,90 @@ const Stack = createStackNavigator();
 const { width, height } = Dimensions.get('window'); // Get screen dimensions
 
 // Welcome Screen with Animation
-function WelcomeScreen() {
-  const navigation = useNavigation();
+function WelcomeScreen({ navigation }) {
   const fadeAnim = useRef(new Animated.Value(0)).current; // Start fully visible
   const scaleAnim = useRef(new Animated.Value(0.75)).current; // Start at original size
   const rotateAnim = useRef(new Animated.Value(0)).current; // Start at 0 rotation
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setTimeout(() => {
-        if (user) {
-          // User is signed in, navigate to the main screen
-          navigation.replace('Main');
-        } else {
-          // User is signed out, stay on the login screen
-          navigation.replace('Login');
-        }
-      }, 4000); // Delay navigation by 4 seconds
-    });
-
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, [navigation]);
-
-  useEffect(() => {
-    Animated.parallel([
+    const initializeSession = async () => {
+      // Fade in, then fade out
+      Animated.sequence([
+      Animated.parallel([
+        // Step 1: Fade In
+        Animated.timing(fadeAnim, {
+          toValue: 1, // Fully visible
+          duration: 1000, // Fade-in duration
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1, // Scale up slightly (20%)
+          duration: 2400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(rotateAnim, {
+          toValue: -1.4, // Rotate counterclockwise by 10 degrees
+          duration: 2600,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Step 2: Fade Out
       Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 3000, // Increase duration to 3 seconds
+        toValue: 0, // Fully invisible
+        duration: 1000, // Fade-out duration
         useNativeDriver: true,
       }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 2,
-        useNativeDriver: true,
-      }),
-      Animated.timing(rotateAnim, {
-        toValue: 1,
-        duration: 3000, // Increase duration to 3 seconds
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fadeAnim, scaleAnim, rotateAnim]);
+      ]).start(async () => {
+        try {
+          // Check for a saved session in SecureStore
+          const userUid = await getSession('userUid');
+          if (userUid) {
+            navigation.replace('Feed'); // If session exists, go to Main
+          } else {
+            onAuthStateChanged(auth, (currentUser) => {
+              if (currentUser) {
+                navigation.replace('Feed');
+              } else {
+                navigation.replace('Home');
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error checking session:', error);
+          navigation.replace('Error');
+        }
+      });
+    };
 
-  const rotate = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+    initializeSession();
+  }, [fadeAnim, scaleAnim, rotateAnim, navigation]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} backgroundColor={colours.bluegrey}>
       <Animated.Image
-        source={require('./assets/icon.png')}
+        source={require('./images/musicNoteIcon.png')} // Path to your music note image
         style={[
           styles.icon,
           {
             opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }, { rotate }],
+            transform: [
+              { scale: scaleAnim }, // Scale the image
+              {
+                rotate: rotateAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0deg', '-10deg'], // Rotate counterclockwise
+                }),
+              },
+            ],
           },
         ]}
       />
-      <Text style={styles.text}>Welcome</Text>
+      <Animated.Text style={[styles.largeText, { opacity: fadeAnim, fontFamily: 'Pacifico' }]}>
+        Treble
+      </Animated.Text>
+      <Animated.Text style={[styles.text, { opacity: fadeAnim, fontFamily: 'Lobster' }]}>
+        By Bass
+      </Animated.Text>
     </View>
   );
 }
@@ -106,6 +132,9 @@ export default function App() {
   // Load fonts
   const [fontsLoaded] = useFonts({
     Pacifico: require('./assets/fonts/Pacifico-Regular.ttf'),
+    Domine: require('./assets/fonts/Domine-VariableFont_wght.ttf'),
+    Lobster: require('./assets/fonts/Lobster-Regular.ttf'),
+    Lilita: require('./assets/fonts/LilitaOne-Regular.ttf'),
   });
 
   // Hide splash screen once fonts are loaded
@@ -122,12 +151,12 @@ export default function App() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Welcome" screenOptions={{ headerShown: false }}>
+      <Stack.Navigator initialRouteName="Welcome" screenOptions={{ headerShown: false, animation: "none" }}>
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
         <Stack.Screen name="Home" component={Home} />
         <Stack.Screen name="Login" component={Login} />
         <Stack.Screen name="Connections" component={Connections} />
-        <Stack.Screen name="Main" component={Main} />
+        <Stack.Screen name="Feed" component={Feed} />
         <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
         <Stack.Screen name="Register" component={Register} />
         <Stack.Screen name="Error" component={Error} />
@@ -140,6 +169,8 @@ export default function App() {
         <Stack.Screen name="Favourites" component={Favourites} />
         <Stack.Screen name="FriendsList" component={FriendsList} />
         <Stack.Screen name="Explore" component={Explore} />
+        <Stack.Screen name="CreatePost" component={CreatePost} />
+        <Stack.Screen name="Posts" component={Posts} />
         <Stack.Screen name="Search" component={Search} />
         <Stack.Screen name="RecentlyViewed" component={RecentlyViewed} />
       </Stack.Navigator>

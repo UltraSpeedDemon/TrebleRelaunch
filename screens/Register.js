@@ -9,9 +9,9 @@ import {
   Alert,
   Image,
 } from "react-native";
-import { db, auth } from "../utils/firebase";
+import { auth } from "../utils/firebase";
+import { createUser } from "../providers/rest";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { collection, query as fsQuery, where, getDocs, doc, setDoc } from "firebase/firestore";
 import { saveSession } from "../utils/session";
 import colours from "../styles/colours";
 
@@ -35,73 +35,62 @@ export default function Register({ navigation }) {
       }
     };
 
-  const handleRegister = async () => {
-    try {
-      // Check if any fields are empty
-      if (!username || !email || !password) {
-        throw new Error("Please fill out all fields");
-      }
-
-      //check if email is valid
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        throw new Error("Please enter a valid email");
-      }
-
-      // Check if password is at least 6 characters
-      if (password.length < 6) {
-        throw new Error("Password must be at least 6 characters");
-      }
-
-      // Check if username is at least 3 characters
-      if (username.length < 3) {
-        throw new Error("Username must be at least 3 characters");
-      }
-
-      // Check if username is already taken
-      const usersRef = collection(db, "users");
-    const userQuery1 = fsQuery(usersRef, where("usernameLower", "==", username.toLowerCase()));
-    const querySnapshot1 = await getDocs(userQuery1);
-
-    if (!querySnapshot1.empty) {
-      throw new Error("Username is already taken");
-    }
-
-    // Check if email is already taken
-    const userQuery2 = fsQuery(usersRef, where("emailLower", "==", email.toLowerCase()));
-    const querySnapshot2 = await getDocs(userQuery2);
+    const handleRegister = async () => {
+      try {
+        // Validate input fields
+        if (!username || !email || !password) {
+          throw new Error("Please fill out all fields");
+        }
     
-    if (!querySnapshot2.empty) {
-      throw new Error("Email is already taken");
-    }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          throw new Error("Please enter a valid email");
+        }
+        if (password.length < 6) {
+          throw new Error("Password must be at least 6 characters");
+        }
+        if (username.length < 3) {
+          throw new Error("Username must be at least 3 characters");
+        }
+    
+        // Create user with Firebase Auth
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+    
+        // Save the username as displayName in Firebase Auth
+        await updateProfile(auth.currentUser, { displayName: username });
+    
+        const payload = {
+          userId: user.uid,
+          username: username.toLowerCase(),
+          email: email,
+          avatar: avatar, 
+          isPublic: true, // Update this with a checkbox in the UI later
+          spotifyAccessToken: "",
+          spotifyIsLinked: false,
+          spotifyRefreshToken: "",
+          createdAt: new Date().toISOString(),
+        };
+    
+        // Call your Orient endpoint to create the user record
+        const response = await createUser(payload);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Error creating user in backend");
+        }
 
-
-
-      // Create user
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    // Save username/displayName
-    await updateProfile(auth.currentUser, { displayName: username });
-
-    // Create user doc in Firestore
-    await setDoc(doc(db, "users", user.uid), {
-      username: username,
-      usernameLower: username.toLowerCase(),
-      email: email,
-      emailLower: email.toLowerCase(),
-      avatar,
-      createdAt: new Date().toISOString(),
-    });
-
-    // Save session and navigate
-    await saveSession("userUid", user.uid);
-    Alert.alert("Success", "User registered successfully!");
-    navigation.replace("Main");
-  } catch (error) {
-    Alert.alert("Error", error.message);
-  }
-};
+        //duplicate email
+        if (response.status === 409) {
+          throw new Error("Email already exists");
+        }
+    
+        // Save the user session and navigate to the main screen
+        await saveSession("userUid", user.uid);
+        navigation.replace("Feed");
+      } catch (error) {
+        Alert.alert("Error", error.message);
+      }
+    };
   
 
   return (
@@ -186,14 +175,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   text: {
-    fontFamily: 'Domine',
-    fontWeight: 'bold',
+    fontFamily: "sans-serif",
     fontSize: 20,
     color: "#000",
     marginVertical: 5,
   },
   largeText: {
-    fontSize: 100,
+    fontSize: 80,
     fontFamily: 'Lobster',
     color: "#000",
     marginBottom: 20,
@@ -202,8 +190,8 @@ const styles = StyleSheet.create({
     height: 40,
     borderColor: colours.secondaryblue, // Primary blue color
     borderWidth: 1,
-    fontFamily: 'Domine',
     width: "100%",
+    fontFamily: 'Domine',
     marginBottom: 20,
     paddingHorizontal: 10,
     fontSize: 18,

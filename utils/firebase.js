@@ -6,7 +6,6 @@ import {
   getReactNativePersistence,
   onAuthStateChanged
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FIREBASE_API_KEY } from "@env";
 
@@ -39,5 +38,4 @@ isSupported().then((supported) => {
   }
 });
 
-export const db = getFirestore(app);
 export { auth, onAuthStateChanged };

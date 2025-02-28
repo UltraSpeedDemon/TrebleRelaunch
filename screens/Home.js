@@ -44,7 +44,9 @@ export default function Home({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Treble</Text>
-      <Text style={styles.mediumText} >A Music Social Platform</Text>
+      <Text style={styles.mediumText}>A Music Social Platform</Text>
+
+      <Text style={styles.mediumText}></Text>
 
       <TouchableOpacity
          style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]}
@@ -88,10 +90,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   mediumText: {
-    fontSize: 30,
-    bottom: 20,
-    fontFamily: 'Lobster',
-    fontWeight: 'bold',
+    fontSize: 25,
+    fontWeight: "bold",
+    fontFamily: 'Domine',
     color: "#000",
     marginBottom: 20,
   },

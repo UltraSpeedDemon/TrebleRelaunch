@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
-import { auth, db } from '../utils/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth } from '../utils/firebase';
 import { deleteSession } from '../utils/session';
 import colours from '../styles/colours';
+import { getUser, updateUser } from "../providers/rest"; // Orient endpoints
 import Sidebar from '../components/Sidebar';
 import BottomNavbar from '../components/BottomNavbar';
 import * as AuthSession from 'expo-auth-session'; // Ensure AuthSession is imported correctly
@@ -43,19 +43,16 @@ export default function Connections({ navigation }) {
         }
 
         const displayName = currentUser.displayName;
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        const userSnapshot = await getDoc(userDocRef);
+        // Fetch user data from Orient instead of Firestore
+        const orientRes = await getUser(currentUser.uid);
+        if (!orientRes.ok) {
+          throw new Error('Failed to fetch user data from OrientDB.');
+        }
+        const userData = await orientRes.json();
+        setUsername(userData.username || displayName);
 
-        if (userSnapshot.exists()) {
-          const userData = userSnapshot.data();
-          setUsername(userData.username || displayName);
-
-          if (userData.spotifyAccessToken) {
-            setIsSpotifyLinked(true);
-          }
-        } else {
-          // If no user doc, at least set display name from Firebase Auth
-          setUsername(displayName);
+        if (userData.spotifyAccessToken) {
+          setIsSpotifyLinked(true);
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -89,15 +86,11 @@ export default function Connections({ navigation }) {
           const currentUser = auth.currentUser;
           if (currentUser) {
             try {
-              const userDocRef = doc(db, 'users', currentUser.uid);
-              await setDoc(
-                userDocRef,
-                { 
-                  spotifyAccessToken: accessToken, 
-                  spotifyRefreshToken: refreshToken 
-                },
-                { merge: true }
-              );
+              await updateUser(currentUser.uid, {
+                spotifyAccessToken: accessToken,
+                spotifyRefreshToken: refreshToken,
+                spotifyIsLinked: true,
+              });
               setIsSpotifyLinked(true);
             } catch (err) {
               console.error('Error linking Spotify account:', err);
@@ -125,48 +118,81 @@ export default function Connections({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* Sidebar */}
       <View style={styles.sideMenu}>
-        {/* Sidebar */}
         <Sidebar />
       </View>
-      <Text style={styles.welcome}>Welcome, {username}!</Text>
-      <Text style={styles.mediumText}>You are now logged in.</Text>
-      <Text style={styles.mediumText}></Text>
-      <Text style={styles.largeText}>Connect an Account</Text>
 
-      {/* Spotify Connection */}
-      {!isSpotifyLinked ? (
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: "green", opacity: 0.7 }]}
-          onPress={handleSpotifyLogin}
-          disabled={!request} // disable if request is not ready
-        >
-          <Text style={styles.buttonTextSpotify}>Login with Spotify</Text>
-        </TouchableOpacity>
-      ) : (
-        <Text style={styles.textSpotify}>
-          Your Spotify account is already linked!
-        </Text>
-      )}
+      {/* Main Content */}
+      <View style={styles.mainContent}>
+        <Text style={styles.header}>Connections</Text>
+        <Text style={styles.subHeader}>Manage your linked accounts</Text>
 
-      {/* Last.fm Connection (placeholder) */}
-      <TouchableOpacity
-        style={[styles.button, { backgroundColor: "black", opacity: 0.7 }]}
-        //error screen
-        onPress={() => navigation.navigate("Error")}
-      >
-        <Text style={styles.buttonTextLast}>Login with Last.fm</Text>
-      </TouchableOpacity>
+        <View style={styles.connectionCard}>
+          <Image
+            source={require("../images/spotifyLogo.png")}
+            style={styles.logo}
 
-      {/* Apple Music Connection (placeholder) */}
-      <TouchableOpacity
-        style={[styles.button, { backgroundColor: "#FA2D48", opacity: 0.7 }]}
-        //error screen
-        onPress={() => navigation.navigate("Error")}
-      >
-        <Text style={styles.buttonTextApple}>Login with Apple Music</Text>
-      </TouchableOpacity>
-      {/* Bottom Navigation Bar */}
+            // style={[styles.logo, isSpotifyLinked ? null : styles.grayscale]}
+          />
+          <View style={styles.connectionInfo}>
+            <Text style={styles.connectionName}>Spotify</Text>
+            <Text style={styles.connectionStatus}>
+              {isSpotifyLinked ? "Connected" : "Not Connected"}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              isSpotifyLinked
+                ? styles.disconnectButton
+                : styles.connectButton,
+            ]}
+            onPress={isSpotifyLinked ? null : handleSpotifyLogin}
+            disabled={isSpotifyLinked}
+          >
+            <Text style={styles.buttonText}>
+              {isSpotifyLinked ? "Connected" : "Connect"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.connectionCard}>
+          <Image
+            source={require("../images/lastfmLogo.png")}
+            style={styles.logo}
+          />
+          <View style={styles.connectionInfo}>
+            <Text style={styles.connectionName}>Last.fm</Text>
+            <Text style={styles.connectionStatus}>Not Connected</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.button, styles.connectButton]}
+            onPress={() => navigation.navigate("Error")}
+          >
+            <Text style={styles.buttonText}>Connect</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.connectionCard}>
+          <Image
+            source={require("../images/appleMusicLogo.png")}
+            style={styles.logo}
+          />
+          <View style={styles.connectionInfo}>
+            <Text style={styles.connectionName}>Apple Music</Text>
+            <Text style={styles.connectionStatus}>Not Connected</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.button, styles.connectButton]}
+            onPress={() => navigation.navigate("Error")}
+          >
+            <Text style={styles.buttonText}>Connect</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Bottom Navbar */}
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
@@ -174,92 +200,20 @@ export default function Connections({ navigation }) {
   );
 }
 
-// -------------------- STYLES --------------------
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colours.bluegrey,
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: colours.bluegrey,
   },
-  welcome: {
-    fontSize: 55,
-    fontFamily: 'Lobster',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    margin: 10,
-  },
-  largeText: {
-    fontSize: 40,
-    fontFamily: 'Lobster',
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 20,
-  },
-  mediumText: {
-    fontSize: 30,
-    fontFamily: 'Lobster',
-    color: '#000',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: '#007BFF',
-    fontSize: 20,
-    borderRadius: 25,
-    width: 250,
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontFamily: 'Domine',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  buttonTextSpotify: {
-    color: 'black',
-    top: 3,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  textSpotify: {
-    color: 'black',
-    fontWeight: 'bold',
-    backgroundColor: 'green',
-    opacity: 0.7,
-    fontSize: 18,
-    padding: 10,
-    marginBottom: 20,
-    borderRadius: 25,
-    width: 380,
-    height: 50,
-    textAlign: 'center',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  buttonTextLast: {
-    color: 'red',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  buttonTextApple: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  bottomNavBar: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    flexDirection: "row",
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   sideMenu: {
     position: "absolute",
     top: 40,
-    left: 100,
+    right: 525,
     bottom: 0,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
@@ -267,5 +221,69 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
+},
+  mainContent: {
+    marginTop: 140, // Ensures content starts below the sidebar
+    paddingHorizontal: 20,
+  },
+  header: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: colours.lightblue,
+    marginBottom: 10,
+  },
+  subHeader: {
+    fontSize: 16,
+    color: "#aaa",
+    marginBottom: 20,
+  },
+  connectionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colours.darkblue,
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+  },
+  logo: {
+    width: 50,
+    height: 50,
+    marginRight: 15,
+  },
+  grayscale: {
+    tintColor: "#aaa",
+  },
+  connectionInfo: {
+    flex: 1,
+  },
+  connectionName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  connectionStatus: {
+    fontSize: 14,
+    color: "#aaa",
+  },
+  button: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 5,
+  },
+  connectButton: {
+    backgroundColor: "#4CAF50",
+  },
+  disconnectButton: {
+    backgroundColor: "#FF0000",
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  bottomNavBar: {
+    position: "absolute",
+    bottom: 0,
+    width: "100%",
   },
 });

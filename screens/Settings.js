@@ -11,8 +11,9 @@ import {
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { auth, db } from '../utils/firebase';
-import { doc, getDoc, updateDoc } from "firebase/firestore"; // Firebase Firestore imports
+import { auth } from '../utils/firebase';
+import { getUser, updateUser } from "../providers/rest";
+import { updateProfile } from "firebase/auth";
 
 export default function Settings({ navigation }) {
   const [username, setUsername] = useState("");
@@ -20,24 +21,23 @@ export default function Settings({ navigation }) {
   const [darkMode, setDarkMode] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Fetch user data on mount
   useEffect(() => {
     const fetchUserData = async () => {
       try {
         const currentUser = auth.currentUser;
 
         if (currentUser) {
-          const displayName = currentUser.displayName || "";
-          setEmail(currentUser.email || "");
-
-          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUsername(userData.username || displayName);
-            setDarkMode(userData.darkMode || false); // Get dark mode preference from Firestore
-          } else {
-            setUsername(displayName);
+          console.log("[DEBUG] Fetching user data from Orient for UID:", currentUser.uid);
+          const response = await getUser(currentUser.uid);
+          if (!response.ok) {
+            throw new Error("Failed to fetch user data from backend.");
           }
+          const userData = await response.json();
+          console.log("[DEBUG] Received user data from OrientDB:", userData);
+          setUsername(userData.username || currentUser.displayName || "");
+          setEmail(userData.email || currentUser.email || "");
+          // Assuming Orient stores a darkMode field for the user's preference
+          //setDarkMode(userData.darkMode || false);
         } else {
           navigation.navigate("Home"); // Redirect to Login if no user is logged in
         }
@@ -56,18 +56,23 @@ export default function Settings({ navigation }) {
     try {
       const currentUser = auth.currentUser;
       if (currentUser) {
-        const userRef = doc(db, "users", currentUser.uid);
-        await updateDoc(userRef, {
+        const payload = {
           username: username.trim(),
-          darkMode: darkMode, // Store dark mode preference
-        });
+          //darkMode: darkMode, // Save dark mode preference
+        };
 
-        if (currentUser.displayName !== username.trim()) {
-          await currentUser.updateProfile({
-            displayName: username.trim(),
-          });
+        console.log("[DEBUG] Updating settings with payload:", payload);
+        const response = await updateUser(currentUser.uid, payload);
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to update settings on backend.");
         }
+        console.log("[DEBUG] Settings updated successfully for UID:", currentUser.uid);
 
+        // Optionally update Firebase Auth profile if display name changed
+        if (currentUser.displayName !== username.trim()) {
+          await updateProfile(currentUser, { displayName: username.trim() });
+        }
         Alert.alert("Success", "Settings saved successfully!");
       }
     } catch (error) {
@@ -99,36 +104,39 @@ export default function Settings({ navigation }) {
     <View style={styles.container}>
       {/* Sidebar */}
       <View style={styles.sideMenu}>
-        <Sidebar menuOpen={false} setMenuOpen={() => {}} />
+        <Sidebar />
       </View>
 
-      {/* Main Content */}
-      <View style={styles.content}>
-        <Text style={styles.largeText}>Settings</Text>
+      {/* Settings Header */}
+      <Text style={styles.header}>Settings</Text>
+      <Text style={styles.subHeader}>Manage your preferences</Text>
 
-        {/* Username */}
-        <Text style={styles.label}>Username</Text>
+      {/* Username Section */}
+      <View style={styles.settingCard}>
+        <Text style={styles.settingLabel}>Username</Text>
         <TextInput
           style={styles.input}
           value={username}
           onChangeText={setUsername}
           placeholder="Enter your username"
         />
+      </View>
 
-        {/* Email (read-only) */}
-        <Text style={styles.label}>Email</Text>
+      {/* Email Section */}
+      <View style={styles.settingCard}>
+        <Text style={styles.settingLabel}>Email</Text>
         <TextInput
-          style={[styles.inputEmail, styles.disabledInput]}
+          style={[styles.input, styles.disabledInput]}
           value={email}
-          color={colours.darkblue}
           editable={false}
           selectTextOnFocus={false}
         />
+      </View>
 
-        {/* Dark Mode Toggle */}
-        <Text style={styles.label}>Dark Mode</Text>
+      {/* Dark Mode Section */}
+      <View style={styles.settingCard}>
+        <Text style={styles.settingLabel}>Dark Mode</Text>
         <View style={styles.switchContainer}>
-          <Text style={styles.switchLabel}>Enable Dark Mode</Text>
           <Switch
             value={darkMode}
             onValueChange={(value) => setDarkMode(value)}
@@ -136,17 +144,17 @@ export default function Settings({ navigation }) {
             thumbColor={darkMode ? "#fff" : "#f4f3f4"}
           />
         </View>
-
-        {/* Save Settings Button */}
-        <TouchableOpacity style={styles.button} onPress={handleSaveSettings}>
-          <Text style={styles.buttonText}>Save Settings</Text>
-        </TouchableOpacity>
-
-        {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
-        </TouchableOpacity>
       </View>
+
+      {/* Save Button */}
+      <TouchableOpacity style={styles.saveButton} onPress={handleSaveSettings}>
+        <Text style={styles.buttonText}>Save Settings</Text>
+      </TouchableOpacity>
+
+      {/* Logout Button */}
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Text style={styles.buttonText}>Logout</Text>
+      </TouchableOpacity>
 
       {/* Bottom Navigation Bar */}
       <View style={styles.bottomNavBar}>
@@ -158,13 +166,15 @@ export default function Settings({ navigation }) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colours.bluegrey,
     flex: 1,
+    backgroundColor: colours.bluegrey,
+    paddingHorizontal: 20,
+    paddingTop: 140,
   },
   sideMenu: {
     position: "absolute",
     top: 40,
-    left: 100,
+    right: 525,
     bottom: 0,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
@@ -172,85 +182,73 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-  },
-  content: {
+},
+  loader: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 25,
   },
-  largeText: {
-    fontSize: 32,
+  header: {
+    fontSize: 28,
     fontWeight: "bold",
     color: colours.lightblue,
+    marginBottom: 10,
   },
-  label: {
+  subHeader: {
     fontSize: 16,
-    color: colours.darkblue,
-    marginTop: 20,
+    color: "#aaa",
+    marginBottom: 20,
+  },
+  settingCard: {
+    backgroundColor: colours.darkblue,
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+  },
+  settingLabel: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 10,
   },
   input: {
-    width: "80%",
-    height: 40,
-    borderColor: colours.lightblue,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingLeft: 10,
     backgroundColor: "#fff",
-    marginTop: 10,
-  },
-  inputEmail: {
-    backgroundColor: "#f5f5f5", 
-    width: "80%",
-    height: 40,
-    borderColor: colours.lightblue,
-    borderWidth: 1,
     borderRadius: 8,
-    paddingLeft: 10,
-    marginTop: 10,
+    padding: 10,
+    fontSize: 14,
+    color: "#333",
   },
   disabledInput: {
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#e0e0e0",
+    color: "#999",
   },
   switchContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "80%",
+    alignItems: "flex-start",
     marginTop: 10,
   },
-  switchLabel: {
-    fontSize: 16,
-    color: colours.darkblue,
-  },
-  button: {
-    marginTop: 30,
-    paddingVertical: 12,
-    paddingHorizontal: 40,
+  saveButton: {
     backgroundColor: colours.lightblue,
     borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  logoutButton: {
+    backgroundColor: "red",
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    alignItems: "center",
   },
   buttonText: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  logoutButton: {
-    marginTop: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 40,
-    backgroundColor: "red",
-    borderRadius: 8,
-  },
-  logoutButtonText: {
-    color: "#fff",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
   },
   bottomNavBar: {
     position: "absolute",
     bottom: 0,
-    width: "100%",
-    flexDirection: "row",
+    width: "112%",
   },
 });

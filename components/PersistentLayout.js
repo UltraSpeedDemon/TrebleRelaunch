@@ -18,15 +18,8 @@ import {
   PanResponder,
 } from "react-native";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "../utils/firebase";
-import {
-  collection,
-  query,
-  where,
-  getDoc,
-  doc,
-  getDocs,
-} from "firebase/firestore";
+import { auth } from "../utils/firebase";
+import { getUser } from "../providers/rest";
 import { saveSession } from "../utils/session";
 import { useNavigation } from "@react-navigation/native";
 import colours from "../styles/colours";
@@ -66,19 +59,17 @@ const PersistentLayout = ({ children }) => {
         try {
           // Get the current user from Firebase Auth
           const currentUser = auth.currentUser;
-  
-          // Option 1: Use the displayName from Firebase Auth
           if (currentUser) {
             const displayName = currentUser.displayName || "";
             setEmail(currentUser.email || "");
-  
-            // Option 2 (Optional): Fetch additional user data from Firestore
-            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-            if (userDoc.exists()) {
-              const userData = userDoc.data();
-              setUsername(userData.username || displayName);
-              setAvatar(userData.avatar || basicAvatar);
+            // Fetch additional user data from Orient using getUser
+            const orientRes = await getUser(currentUser.uid);
+            if (!orientRes.ok) {
+              throw new Error("Failed to fetch user data from OrientDB.");
             }
+            const userData = await orientRes.json();
+            setUsername(userData.username || displayName);
+            setAvatar(userData.avatar || basicAvatar);
           } else {
             navigation.navigate("Home"); // Redirect to Login if no user is logged in
           }

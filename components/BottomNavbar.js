@@ -23,7 +23,7 @@ const BottomNavbar = () => {
 
       {/* Feed Button */}
       <TouchableOpacity
-        onPress={() => navigation.navigate("Main")} // Navigate to Main screen
+        onPress={() => navigation.navigate("Feed")} // Navigate to Main screen
         style={styles.bottomNavItem}
       >
         <Image

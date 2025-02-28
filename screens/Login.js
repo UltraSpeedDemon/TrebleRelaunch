@@ -9,8 +9,8 @@ import {
   Alert,
 } from "react-native";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "../utils/firebase";
-import { collection, query, where, getDocs, doc, setDoc } from "firebase/firestore";
+import { auth } from "../utils/firebase";
+import { getUserByUsername } from "../providers/rest";
 import { saveSession } from "../utils/session";
 import colours from "../styles/colours";
 
@@ -32,32 +32,32 @@ export default function Login({ navigation }) {
   
       let userEmail = identifier;
   
-      if (isEmail(identifier)) {
-        // If it's an email, we'll just use signInWithEmailAndPassword directly
-        userEmail = identifier.toLowerCase();
-      } else {
-        // Otherwise, treat it as a username. Query Firestore for the matching email.
-        const usersRef = collection(db, "users");
-        const q = query(usersRef, where("usernameLower", "==", identifier.toLowerCase()));
-        const querySnapshot = await getDocs(q);
-  
-        if (querySnapshot.empty) {
+      if (!isEmail(identifier)) {
+        console.log("[DEBUG] Looking up user by username:", identifier);
+        const response = await getUserByUsername(identifier.toLowerCase());
+        if (!response.ok) {
+          throw new Error("Failed to fetch user by username from backend.");
+        }
+        const users = await response.json();
+        if (!users || users.length === 0) {
           throw new Error("Username not found");
         }
-        userEmail = querySnapshot.docs[0].data().email;
+        userEmail = users[0].email;
+      } else {
+        userEmail = identifier.toLowerCase();
       }
-  
+
+      // Authenticate user with Firebase
       const userCredential = await signInWithEmailAndPassword(
         auth,
-        userEmail,
+        email,
         password
       );
       const user = userCredential.user;
-  
-      // Save UID to SecureStore
+
+      // Save UID to SecureStore for session
       await saveSession("userUid", user.uid);
   
-      Alert.alert("Success", "Logged in successfully!");
       navigation.replace("Main");
     } catch (err) {
       setError("Invalid username or password.");
@@ -102,10 +102,8 @@ export default function Login({ navigation }) {
       >
         <Text style={styles.buttonText}>Register</Text>
       </TouchableOpacity>
-      
-      <Text style={styles.text}></Text>
-      <Text style={styles.text}></Text>
-      <Text style={styles.text}></Text>
+
+      <Text style={styles.mediumText}></Text>
 
       <TouchableOpacity
         style={[styles.button, { backgroundColor: colours.secondaryblue, opacity: 0.7 }]}
@@ -131,18 +129,19 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   largeText: {
-    fontSize: 100,
+    fontSize: 80,
     fontFamily: 'Lobster',
     color: "#000",
     marginBottom: 20,
   },
   input: {
     height: 50,
-    borderColor: colours.primaryblue,
+    borderColor: colours.secondaryblue,
     borderWidth: 1,
     fontFamily: 'Domine',
     placeholderFontFamily: 'Domine',
     borderRadius: 10,
+    fontFamily: 'Domine',
     width: "90%",
     marginBottom: 20,
     paddingHorizontal: 10,
@@ -164,7 +163,6 @@ const styles = StyleSheet.create({
   },
   error: {
     color: "red",
-    fontFamily: 'Domine',
     marginBottom: 20,
     textAlign: "center",
   },

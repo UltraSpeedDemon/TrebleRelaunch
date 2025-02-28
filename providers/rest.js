@@ -16,15 +16,32 @@ export async function serverGet(endpoint, params=null) {
 
 export async function serverPost(endpoint, body) {
     try {
-        return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
-            method: "POST",
-            body: body
-        })
+      return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      console.error(e);
     }
-    catch (e) {
-        console.error(e)
+  }
+
+  export async function serverPut(endpoint, body) {
+    try {
+      return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      console.error(e);
     }
-}
+  }
+  
 //#endregion
 
 //#region Custom request functions
@@ -44,6 +61,26 @@ export async function postSearchResults(input, type="album,track,artist,user", l
     });
 }
 //#endregion
+
+// #region User endpoints
+export async function createUser(userData) {
+    return await serverPost("users/", userData);
+}
+export async function getUser(userId) {
+    return await serverGet(`users/${userId}`);
+}
+export async function getUserByUsername(username) {
+    return await serverGet("users/", { username });
+}
+export async function updateUser(userId, userData) {
+    return await serverPut(`users/${userId}`, userData);
+}
+  
+
+  
+
+
+// #endregion
 
 export function getServerEndpointBase() {
     if (process.env.NODE_ENV === "development") {

@@ -10,8 +10,8 @@ import {
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { auth, db } from "../utils/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { auth } from "../utils/firebase";
+import { getUser, updateUser } from "../providers/rest";
 import * as AuthSession from "expo-auth-session";
 import { SPOTIFY_CLIENT_ID, REDIRECT_URI, SPOTIFY_SCOPES } from "@env";
 import { discovery, setAccessToken, setRefreshToken } from "../utils/spotifyAuth";
@@ -45,11 +45,9 @@ export default function Feed({ navigation }) {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
 
-    const userDocRef = doc(db, "users", currentUser.uid);
-    const userSnapshot = await getDoc(userDocRef);
-
-    if (userSnapshot.exists()) {
-      const userData = userSnapshot.data();
+    try {
+      // Retrieve user data from Orient using getUser endpoint
+      const userData = await getUser(currentUser.uid);
       const refreshToken = userData.spotifyRefreshToken;
 
       if (refreshToken) {
@@ -64,14 +62,11 @@ export default function Feed({ navigation }) {
             );
 
             if (refreshResult.accessToken) {
-              await setDoc(
-                userDocRef,
-                {
-                  spotifyAccessToken: refreshResult.accessToken,
-                  spotifyRefreshToken: refreshResult.refreshToken ?? refreshToken,
-                },
-                { merge: true }
-              );
+              // Update the user in Orient with the new tokens using updateUser endpoint
+              await updateUser(currentUser.uid, {
+                spotifyAccessToken: refreshResult.accessToken,
+                spotifyRefreshToken: refreshResult.refreshToken ?? refreshToken,
+              });
               setAccessToken(refreshResult.accessToken);
               setRefreshToken(refreshResult.refreshToken ?? refreshToken);
             } else {
@@ -89,6 +84,8 @@ export default function Feed({ navigation }) {
           }
         }
       }
+    } catch (error) {
+      console.log("Error fetching user data from OrientDB", error);
     }
   };
 

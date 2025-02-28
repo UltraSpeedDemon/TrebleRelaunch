@@ -14,25 +14,19 @@ import {
   PanResponder,
 } from "react-native";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "../utils/firebase";
-import {
-  collection,
-  query,
-  where,
-  getDoc,
-  doc,
-  getDocs,
-} from "firebase/firestore";
+import { getUser } from "../providers/rest";
+import { auth } from "../utils/firebase";
 import { saveSession } from "../utils/session";
 import { useNavigation } from "@react-navigation/native";
 import colours from "../styles/colours";
 import fontFamily from "../styles/fontFamily";
- 
-const Sidebar = ({ children }) => {
+
+const Sidebar = () => {
   const navigation = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuAnimation] = useState(new Animated.Value(-300));
-  const [avatar, setAvatar] = useState("../images/avatarIcon.png");
+  const [menuAnimation] = useState(new Animated.Value(0)); // 👈 Starts at 0
+
+  const [avatar, setAvatar] = useState(null);
   const [username, setUsername] = useState("User");
   const [email, setEmail] = useState("email@example.com");
 
@@ -40,47 +34,35 @@ const Sidebar = ({ children }) => {
 
   const toggleMenu = () => {
     Animated.timing(menuAnimation, {
-      toValue: menuOpen ? -300 : 0,
+      toValue: menuOpen ? 0 : 300, // 👈 Moves 600 pixels to the right
       duration: 300,
       useNativeDriver: false,
     }).start();
     setMenuOpen(!menuOpen);
   };
 
-     // Close the menu when clicking outside the sidebar (on the overlay)
-     const closeMenu = () => {
-        console.log("Closing menu...");
-        Animated.timing(menuAnimation, {
-          toValue: -300,
-          duration: 300,
-          useNativeDriver: false,
-        }).start();
-        setMenuOpen(false);
-      };
-
-    useEffect(() => {
+  useEffect(() => {
       const fetchUserData = async () => {
         try {
-          // Get the current user from Firebase Auth
           const currentUser = auth.currentUser;
   
-          // Option 1: Use the displayName from Firebase Auth
           if (currentUser) {
             const displayName = currentUser.displayName || "";
             setEmail(currentUser.email || "");
   
-            // Option 2 (Optional): Fetch additional user data from Firestore
-            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-            if (userDoc.exists()) {
-              const userData = userDoc.data();
-              setUsername(userData.username || displayName);
-              setAvatar(userData.avatar || null);
+            const orientRes = await getUser(currentUser.uid);
+            if (!orientRes.ok) {
+              throw new Error("Failed to fetch user data from OrientDB.");
             }
+            const userData = await orientRes.json();
+            setUsername(userData.username || displayName);
+            setAvatar(userData.avatar || null);
           } else {
-            navigation.navigate("Home"); // Redirect to Login if no user is logged in
+            navigation.navigate("Home");
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
+          Alert.alert("Error", "Unable to fetch user data.");
         } finally {
           setLoading(false);
         }
@@ -89,31 +71,32 @@ const Sidebar = ({ children }) => {
       fetchUserData();
     }, [navigation]);
 
- // PanResponder for swipe-to-close functionality
- const panResponder = PanResponder.create({
+  // PanResponder for swipe-to-close functionality
+  const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onPanResponderMove: (_, gestureState) => {
-      if (menuOpen && gestureState.dx < 0) {
-        const newLeft = Math.max(-300, gestureState.dx);
+      if (menuOpen && gestureState.dx > 0) {
+        const newLeft = Math.min(600, gestureState.dx);
         menuAnimation.setValue(newLeft);
       }
     },
     onPanResponderRelease: (_, gestureState) => {
-      if (menuOpen && gestureState.dx < -100) {
+      if (menuOpen && gestureState.dx > 100) {
         Animated.timing(menuAnimation, {
-          toValue: -300,
-          duration: 300,
-          useNativeDriver: false,
-        }).start(() => setMenuOpen(false));
-      } else if (menuOpen) {
-        Animated.timing(menuAnimation, {
-          toValue: 0,
+          toValue: 600, // Fully open position
           duration: 300,
           useNativeDriver: false,
         }).start();
+      } else {
+        Animated.timing(menuAnimation, {
+          toValue: 0, // Closes back to 0
+          duration: 300,
+          useNativeDriver: false,
+        }).start(() => setMenuOpen(false));
       }
     },
   });
+
 
   const handleLogout = () => {
     auth.signOut().then(() => navigation.navigate("Home"));
@@ -140,7 +123,7 @@ const Sidebar = ({ children }) => {
 
       {/* Side Menu */}
       <Animated.View
-        style={[styles.sideMenu, { left: menuAnimation }]}
+        style={[styles.sideMenu, { left: menuAnimation, }]}
         {...panResponder.panHandlers}
       >
         <View style={styles.profileSection}>
@@ -256,15 +239,16 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         bottom: 0,
-        width: 1000,
-        left: 0,
-        right: 50,
+        left: 200,
+        right: -650,
+        backgroundColor: 'rgba(0,0,0,0.5)',
         zIndex: 9,
       },
     header: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+      
       paddingHorizontal: 15,
       marginBottom: 10,
     },
@@ -279,6 +263,7 @@ const styles = StyleSheet.create({
     hamburger: {
       width: 40,
       height: 40,
+      left: 300,
     },
     searchIcon: {
       width: 40,
@@ -295,10 +280,11 @@ const styles = StyleSheet.create({
     },
     sideMenu: {
       position: "absolute",
+      backgroundColor: "rgba(0,0,0,0.5)",
       top: -40,
       bottom: 0,
       width: 300,
-      backgroundColor: colours.bluegrey2,
+      backgroundColor: colours.bluegrey,
       shadowColor: "#000",
       shadowOffset: { width: 2, height: 0 },
       shadowOpacity: 0.25,
