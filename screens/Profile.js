@@ -173,7 +173,7 @@ export default function Profile({ navigation }) {
       <Text style={styles.activityText}>{item.text}</Text>
       <View style={styles.activityFooter}>
         <Text style={styles.upvotes}>{item.upvotes} Upvotes</Text>
-        <Text style={styles.emojis}>❤️ {item.emojis.heart} 😢 {item.emojis.cry}</Text>
+        <Text style={styles.emojis}>❤️ 😢 </Text>
       </View>
     </View>
   );

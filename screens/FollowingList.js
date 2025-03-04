@@ -11,31 +11,31 @@ import {
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { auth } from "../utils/firebase";
 import MusicCard from "../components/MusicCard";
-import { getFollowing, followUser, unfollowUser } from "../providers/rest";
+import { getFollowers, followUser, unfollowUser } from "../providers/rest";
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
 import colours from "../styles/colours";
 
-export default function FollowingList({ navigation }) {
-  const [followingList, setFollowingList] = useState([]);
+export default function FollowersList({ navigation }) {
+  const [followersList, setFollowersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [followingUsers, setFollowingUsers] = useState({});
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    async function fetchFollowing() {
+    async function fetchFollowers() {
       try {
-        const response = await getFollowing(auth.currentUser.uid);
+        const response = await getFollowers(auth.currentUser.uid);
         const json = await response.json();
-        setFollowingList(json);
+        setFollowersList(json);
       } catch (error) {
-        console.error("Error fetching following:", error);
+        console.error("Error fetching followers:", error);
       } finally {
         setLoading(false);
       }
     }
-    fetchFollowing();
+    fetchFollowers();
   }, []);
 
   const handleFollow = async (user) => {
@@ -72,8 +72,8 @@ export default function FollowingList({ navigation }) {
     <View style={styles.container}>
       {/* Sidebar */}
       <View style={styles.sideMenu}>
-                 <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
-            </View>
+        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+      </View>
 
       {/* Search Bar */}
       <SearchBar />
@@ -88,18 +88,20 @@ export default function FollowingList({ navigation }) {
           style={styles.notifIcon}
         />
       </TouchableOpacity>
+
+      {/* Main Content */}
       <View style={styles.content}>
         <SafeAreaProvider>
           <SafeAreaView>
             <ScrollView>
               {loading ? (
                 <ActivityIndicator size="large" color="#4CAF50" />
-              ) : followingList.length > 0 ? (
-                followingList.map((user) => {
+              ) : followersList.length > 0 ? (
+                followersList.map((user) => {
                   const isFollowing = followingUsers.hasOwnProperty(user.userId)
                     ? followingUsers[user.userId]
                     : user.isFollowing;
-                    console.log(`User ${user.userId} isFollowing:`, isFollowing);
+
                   return (
                     <MusicCard
                       key={user.userId}
@@ -112,16 +114,25 @@ export default function FollowingList({ navigation }) {
                       isFollowing={isFollowing}
                       userCard={true}
                       canFollow={true}
+
+                      // Navigate to the "UserProfiles" screen when tapping the card
+                      onPressCard={() =>
+                        navigation.navigate("UserProfiles", {
+                          userId: user.userId,
+                        })
+                      }
                     />
                   );
                 })
               ) : (
-                <Text style={styles.noResultsText}>No following found.</Text>
+                <Text style={styles.noResultsText}>No followers found.</Text>
               )}
             </ScrollView>
           </SafeAreaView>
         </SafeAreaProvider>
       </View>
+
+      {/* Bottom Navigation Bar */}
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
@@ -145,23 +156,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-},
-  searchBar: {
-    position: "absolute",
-    width: "70%",
-    height: 40,
-    top: 70,
-    left: "15%",
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colours.lightblue,
-    backgroundColor: colours.darkblue,
-  },
-  searchInput: {
-    fontSize: 16,
-    color: "#fff",
   },
   notificationsIcon: {
     width: 40,
