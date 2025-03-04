@@ -50,7 +50,7 @@ export default function Login({ navigation }) {
       // Authenticate user with Firebase
       const userCredential = await signInWithEmailAndPassword(
         auth,
-        email,
+        userEmail,
         password
       );
       const user = userCredential.user;
@@ -58,7 +58,7 @@ export default function Login({ navigation }) {
       // Save UID to SecureStore for session
       await saveSession("userUid", user.uid);
   
-      navigation.replace("Main");
+      navigation.replace("Feed");
     } catch (err) {
       setError("Invalid username or password.");
     }

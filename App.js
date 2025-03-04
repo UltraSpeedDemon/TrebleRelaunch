@@ -29,6 +29,8 @@ import RecentlyViewed from './screens/RecentlyViewed';
 import Search from './screens/Search';
 import CreatePost from './screens/CreatePost';
 import Posts from './screens/Posts';
+import FollowersList from './screens/FollowersList';
+import FollowingList from './screens/FollowingList';
 
 // Prepare the splash screen not to auto-hide
 SplashScreen.preventAutoHideAsync();
@@ -173,6 +175,8 @@ export default function App() {
         <Stack.Screen name="Posts" component={Posts} />
         <Stack.Screen name="Search" component={Search} />
         <Stack.Screen name="RecentlyViewed" component={RecentlyViewed} />
+        <Stack.Screen name="FollowersList" component={FollowersList} />
+        <Stack.Screen name="FollowingList" component={FollowingList} />
       </Stack.Navigator>
     </NavigationContainer>
   );

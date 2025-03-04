@@ -10,68 +10,76 @@ import {
 } from "react-native";
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { auth } from "../utils/firebase";
-import MusicCard from "../components/MusicCard"; // You might create a FriendCard if needed
-import { getFriends, followUser, unfollowUser } from "../providers/rest"; // Assume you have an endpoint to fetch friends
+import MusicCard from "../components/MusicCard";
+import { getFollowers, followUser, unfollowUser } from "../providers/rest";
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
 import colours from "../styles/colours";
 
-export default function FriendsList({ navigation }) {
-  const [friendsList, setFriendsList] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
+export default function FollowersList({ navigation }) {
+  const [followersList, setFollowersList] = useState([]);
+  const [loading, setLoading] = useState(true); // Add loading state
+  // Local state to track follow/unfollow changes.
   const [followingUsers, setFollowingUsers] = useState({});
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    async function fetchFriends() {
+    async function fetchFollowers() {
       try {
-        // Replace getFriends with the appropriate API call for friends.
-        const response = await getFriends(auth.currentUser.uid);
+        const response = await getFollowers(auth.currentUser.uid);
         const json = await response.json();
-        setFriendsList(json);
+        setFollowersList(json);
       } catch (error) {
-        console.error("Error fetching friends:", error);
+        console.error("Error fetching followers:", error);
       } finally {
         setLoading(false);
       }
     }
-    fetchFriends();
+    fetchFollowers();
   }, []);
 
-    const handleFollow = async (user) => {
-      try {
-        console.log("Following user:", user);
-        const response = await followUser(auth.currentUser.uid, user["userId"]);
-        if (response.ok) {
-          setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: true }));
-          console.log("Successfully followed user:", user["userId"]);
-        } else {
-          console.log("Failed to follow user");
-        }
-      } catch (error) {
-        console.error("Error following user:", error);
+  const handleFollow = async (user) => {
+    try {
+      console.log("Following user:", user);
+      const response = await followUser(auth.currentUser.uid, user["userId"]);
+      if (response.ok) {
+        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: true }));
+        console.log("Successfully followed user:", user["userId"]);
+      } else {
+        console.log("Failed to follow user");
       }
-    };
-  
-    const handleUnfollow = async (user) => {
-      try {
-        console.log("Unfollowing user:", user);
-        const response = await unfollowUser(auth.currentUser.uid, user["userId"]);
-        if (response.ok) {
-          setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: false }));
-          console.log("Successfully unfollowed user:", user["userId"]);
-        } else {
-          console.log("Failed to unfollow user");
-        }
-      } catch (error) {
-        console.error("Error unfollowing user:", error);
+    } catch (error) {
+      console.error("Error following user:", error);
+    }
+  };
+
+  const handleUnfollow = async (user) => {
+    try {
+      console.log("Unfollowing user:", user);
+      const response = await unfollowUser(auth.currentUser.uid, user["userId"]);
+      if (response.ok) {
+        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: false }));
+        console.log("Successfully unfollowed user:", user["userId"]);
+      } else {
+        console.log("Failed to unfollow user");
       }
-    };
+    } catch (error) {
+      console.error("Error unfollowing user:", error);
+    }
+  };
 
   return (
     <View style={styles.container}>
+      {/* Sidebar */}
+      <View style={styles.sideMenu}>
+                 <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+            </View>
+
+      {/* Search Bar */}
       <SearchBar />
+
+      {/* Notifications Button */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -81,43 +89,44 @@ export default function FriendsList({ navigation }) {
           style={styles.notifIcon}
         />
       </TouchableOpacity>
-      <View style={styles.sideMenu}>
-        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
-      </View>
+
+      {/* Main Content */}
       <View style={styles.content}>
         <SafeAreaProvider>
           <SafeAreaView>
-            {loading ? (
-              <ActivityIndicator size="large" color="#4CAF50" />
-            ) : friendsList.length > 0 ? (
-              <ScrollView>
-                {friendsList.map((friend) => {
-                  // If your friend objects have a similar structure as your user objects,
-                  // you can reuse MusicCard or create a dedicated FriendCard.
-                  const isFollowing = followingUsers.hasOwnProperty(friend.userId)
-                    ? followingUsers[friend.userId]
-                    : friend.isFollowing;
+            <ScrollView>
+              {loading ? (
+                <ActivityIndicator size="large" color="#4CAF50" />
+              ) : followersList.length > 0 ? (
+                followersList.map((user) => {
+                  const isFollowing = followingUsers.hasOwnProperty(user.userId)
+                    ? followingUsers[user.userId]
+                    : user.isFollowing;
+                    console.log(`User ${user.userId} isFollowing:`, isFollowing);
                   return (
                     <MusicCard
-                      key={friend.userId}
-                      id={friend.userId}
-                      name={friend.username}
-                      image={friend.avatar}
+                      key={user.userId}
+                      id={user.userId}
+                      name={user.username}
+                      image={user.avatar}
                       onFollow={() =>
-                        isFollowing ? handleUnfollow(friend) : handleFollow(friend)
+                        isFollowing ? handleUnfollow(user) : handleFollow(user)
                       }
                       isFollowing={isFollowing}
                       userCard={true}
+                      canFollow={true}
                     />
                   );
-                })}
-              </ScrollView>
-            ) : (
-              <Text style={styles.noResultsText}>No friends found.</Text>
-            )}
+                })
+              ) : (
+                <Text style={styles.noResultsText}>No followers found.</Text>
+              )}
+            </ScrollView>
           </SafeAreaView>
         </SafeAreaProvider>
       </View>
+
+      {/* Bottom Navigation Bar */}
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>

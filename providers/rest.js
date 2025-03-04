@@ -49,7 +49,7 @@ export async function getHelloWorld() {
     return await serverGet("test");
 }
 
-export async function postSearchResults(input, type="album,track,artist,user", limit="10", strict="on", order="RANKING") {
+export async function postSearchResults(input, userId, type="album,track,artist,user", limit="10", strict="on", order="RANKING") {
     // return await serverGet("test");
     // return await serverGet("search");
     return await serverGet("search", {
@@ -57,7 +57,8 @@ export async function postSearchResults(input, type="album,track,artist,user", l
         type,
         limit,
         strict,
-        order
+        order,
+        userId
     });
 }
 //#endregion
@@ -74,6 +75,23 @@ export async function getUserByUsername(username) {
 }
 export async function updateUser(userId, userData) {
     return await serverPut(`users/${userId}`, userData);
+}
+export async function followUser(follower_id, followed_id) {
+  return await serverPost("users/follow", { follower_id, followed_id });
+}
+export async function unfollowUser(follower_id, followed_id) {
+  return await serverPost("users/unfollow", { follower_id, followed_id });
+}
+export async function getFollowers(userId) {
+  return await serverGet(`users/${userId}/followers`);
+}
+
+export async function getFollowing(userId) {
+  return await serverGet(`users/${userId}/following`);
+}
+
+export async function getFriends(userId) {
+  return await serverGet(`users/${userId}/friends`);
 }
   
 

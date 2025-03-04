@@ -120,6 +120,10 @@ export default function Profile({ navigation }) {
           } else {
             setIsSpotifyLinked(false);
           }
+
+          setFollowers(userData.followersCount || 0);
+          setFollowing(userData.followingCount || 0);
+
         } else {
           navigation.navigate('Home');
         }
@@ -197,8 +201,12 @@ export default function Profile({ navigation }) {
             </TouchableOpacity>
             <View style={styles.headerInfo}>
               <Text style={styles.username}>{formatUsername(username)}</Text>
-              <Text style={styles.stats}>Followers: {followers}</Text>
-              <Text style={styles.stats}>Following: {following}</Text>
+              <TouchableOpacity onPress={() => navigation.navigate("FollowersList")}>
+                <Text style={styles.stats}>Followers: {followers}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate("FollowingList")}>
+                <Text style={styles.stats}>Following: {following}</Text>
+              </TouchableOpacity>
               {/* Show Spotify logo below following if linked */}
               {isSpotifyLinked && (
                 <View style={styles.spotifyContainer}>

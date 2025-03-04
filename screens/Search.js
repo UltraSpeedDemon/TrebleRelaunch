@@ -10,26 +10,27 @@ import {
 } from "react-native";
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { Chip } from "@rneui/base";
-
+import { auth } from '../utils/firebase';
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
 import BottomNavbar from "../components/BottomNavbar";
 import useFetchUserData from "../hooks/useFetchUserData";
 import SectionDivider from "../components/SectionDivider";
 import MusicCard from "../components/MusicCard";
-
+import { followUser, unfollowUser } from "../providers/rest";
 import colours from "../styles/colours";
 import { postSearchResults } from "../providers/rest";
 
 export default function Search({ navigation, route }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchResult, setSearchResults] = useState(null);
+  const [followingUsers, setFollowingUsers] = useState({}); // Object to track followed users by their id
   const { searchQuery } = route.params;
-  const { username, isSpotifyLinked, spotifyAccessToken, spotifyRefreshToken, loading } = useFetchUserData();
+  const { username, userId, isSpotifyLinked, spotifyAccessToken, spotifyRefreshToken, loading } = useFetchUserData();
 
   async function getSearchResults() {
     try {
-      const results = await postSearchResults(searchQuery);
+      const results = await postSearchResults(searchQuery, auth.currentUser.uid);
       const json = await results.json();
       setSearchResults(json);
     } catch (error) {
@@ -85,6 +86,38 @@ export default function Search({ navigation, route }) {
     getSearchResults();
   }, []);
 
+  // Function to handle following a user.
+  const handleFollow = async (user) => {
+    try {
+      console.log("User data:", user);
+      const response = await followUser(auth.currentUser.uid, user["userId"]);
+      if (response.ok) {
+        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: true }));
+      } else {
+        console.log("Failed to follow user");
+      }  
+    } catch (error) {
+      console.error("Error following user:", error);
+    }
+  };
+
+  // Function to handle unfollowing a user.
+  const handleUnfollow = async (user) => {
+    try {
+      console.log("Unfollowing user:", user["userId"]);
+      const response = await unfollowUser(auth.currentUser.uid, user["userId"]);
+      if (response.ok) {
+        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: false }));
+        console.log("Successfully unfollowed user:", user["userId"]);
+      } else {
+        console.log("Failed to unfollow user");
+      }
+    } catch (error) {
+      console.error("Error unfollowing user:", error);
+    }
+  };
+
+
   return (
     <View style={styles.container}>
       <SearchBar />
@@ -135,6 +168,7 @@ export default function Search({ navigation, route }) {
                       />
                     </View>
 
+                    {/* Songs Section */}
                     {!(filter.albumOnly || filter.artistOnly || filter.userOnly) && (
                       <View key="SongsView">
                         <SectionDivider key="Songs" title="Songs" nonfirst={false} />
@@ -157,10 +191,12 @@ export default function Search({ navigation, route }) {
                               </TouchableOpacity>
                             );
                           }
+                          return null;
                         })}
                       </View>
                     )}
 
+                    {/* Albums Section */}
                     {!(filter.songOnly || filter.artistOnly || filter.userOnly) && (
                       <View key="AlbumsView">
                         <SectionDivider key="Albums" title="Albums" nonfirst={!filter.albumOnly} />
@@ -168,18 +204,20 @@ export default function Search({ navigation, route }) {
                           if (result["type"] === "album") {
                             return (
                               <MusicCard
-                                id={result["id"]}
                                 key={result["id"]}
+                                id={result["id"]}
                                 image={result["image"]}
                                 name={result["name"]}
                                 artist={result["artist"]}
                               />
                             );
                           }
+                          return null;
                         })}
                       </View>
                     )}
 
+                    {/* Artists Section */}
                     {!(filter.songOnly || filter.albumOnly || filter.userOnly) && (
                       <View key="ArtistsView">
                         <SectionDivider key="Artists" title="Artists" nonfirst={!filter.artistOnly} />
@@ -187,30 +225,56 @@ export default function Search({ navigation, route }) {
                           if (result["type"] === "artist") {
                             return (
                               <MusicCard
-                                id={result["id"]}
                                 key={result["id"]}
+                                id={result["id"]}
                                 image={result["image"]}
                                 artist={result["name"]}
                               />
                             );
                           }
+                          return null;
                         })}
                       </View>
                     )}
 
+                    {/* Users Section */}
                     {!(filter.songOnly || filter.albumOnly || filter.artistOnly) && (
                       <View key="UsersView">
                         <SectionDivider key="Users" title="Users" nonfirst={!filter.userOnly} />
                         {searchResult.map((result) => {
                           if (result["type"] === "user") {
+                            const isCurrentUser = result.userId === auth.currentUser.uid;
+                            
+                            const isFollowing = followingUsers.hasOwnProperty(result.userId)
+                              ? followingUsers[result.userId]
+                              : result.isFollowing;
+
+                            const onFollow = !isCurrentUser
+                            ? () => {
+                                console.log("onFollow triggered for user", result.userId);
+                                return isFollowing
+                                  ? handleUnfollow(result)
+                                  : handleFollow(result);
+                              }
+                            : undefined;
+
+                            const canFollow = !isCurrentUser;
+                            console.log("→ canFollow:", canFollow, "| onFollow is defined:", !!onFollow);
+                            console.log(`User ${result.userId} isFollowing:`, isFollowing);
                             return (
                               <MusicCard
-                                id={result["id"]}
-                                key={result["username"]}
-                                name={result["username"]}
+                                key={result.userId}
+                                id={result.userId}
+                                name={result.username}
+                                image={result.avatar} // if available
+                                onFollow={onFollow}
+                                isFollowing={isFollowing}
+                                userCard={true}
+                                canFollow={canFollow}
                               />
                             );
                           }
+                          return null;
                         })}
                       </View>
                     )}
