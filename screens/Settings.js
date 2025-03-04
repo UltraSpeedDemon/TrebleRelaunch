@@ -57,7 +57,7 @@ export default function Settings({ navigation }) {
       const currentUser = auth.currentUser;
       if (currentUser) {
         const payload = {
-          username: username.trim(),
+          username: newUsername.trim().toLowerCase(),
           //darkMode: darkMode, // Save dark mode preference
         };
 
@@ -77,7 +77,7 @@ export default function Settings({ navigation }) {
         console.log("[DEBUG] Settings updated successfully for UID:", currentUser.uid);
 
         // Optionally update Firebase Auth profile if display name changed
-        if (currentUser.displayName !== username.trim()) {
+        if (currentUser.displayName !== username.trim().toLowerCase()) {
           await updateProfile(currentUser, { displayName: username.trim() });
         }
         Alert.alert("Success", "Settings saved successfully!");

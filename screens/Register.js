@@ -58,11 +58,11 @@ export default function Register({ navigation }) {
         const user = userCredential.user;
     
         // Save the username as displayName in Firebase Auth
-        await updateProfile(auth.currentUser, { displayName: username });
+        await updateProfile(auth.currentUser, { displayName: username.trim().toLowerCase() });
     
         const payload = {
           userId: user.uid,
-          username: username.toLowerCase(),
+          username: username.trim().toLowerCase(),
           email: email,
           avatar: avatar, 
           isPublic: true, // Update this with a checkbox in the UI later

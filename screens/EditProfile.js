@@ -191,7 +191,7 @@ export default function EditProfile({ navigation }) {
 
       // --- Prepare payload for Orient ---
       const orientPayload = {
-        username: newUsername,
+        username: newUsername.trim().toLowerCase(),
         avatar: avatar || null,
         // ...(newUsername !== originalUsername && { lastNameChange: newTimestamp.toISOString() }),
       };
@@ -211,7 +211,7 @@ export default function EditProfile({ navigation }) {
 
       // --- Update Firebase Auth displayName ---
       if (currentUser.displayName !== newUsername) {
-        await updateProfile(currentUser, { displayName: newUsername });
+        await updateProfile(currentUser, { displayName: newUsername.toLowerCase() });
       }
 
       // If username changed, update local state.
