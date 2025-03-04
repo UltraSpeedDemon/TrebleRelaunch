@@ -199,7 +199,14 @@ export default function EditProfile({ navigation }) {
       const orientResponse = await updateUser(currentUser.uid, orientPayload);
       if (!orientResponse.ok) {
         const data = await orientResponse.json();
-        throw new Error(data.error || "Failed to update user in OrientDB.");
+
+        if (orientResponse.status === 409) {
+          // Show the user a message
+          throw new Error(data.error || "Username already exists");
+        } else {
+          // Some other error
+          throw new Error(data.error || "Failed to update user in OrientDB.");
+        }
       }
 
       // --- Update Firebase Auth displayName ---
@@ -219,7 +226,7 @@ export default function EditProfile({ navigation }) {
       ]);
     } catch (error) {
       console.error("Error saving profile:", error);
-      Alert.alert("Error", "Failed to save profile. Please try again.");
+      Alert.alert("Error", error.message);
     } finally {
       setSaving(false);
     }

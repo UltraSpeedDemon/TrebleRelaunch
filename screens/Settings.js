@@ -65,7 +65,14 @@ export default function Settings({ navigation }) {
         const response = await updateUser(currentUser.uid, payload);
         if (!response.ok) {
           const data = await response.json();
-          throw new Error(data.error || "Failed to update settings on backend.");
+      
+          if (response.status === 409) {
+            // Show the user a message
+            throw new Error(data.error || "Username already exists");
+          } else {
+            // Some other error
+            throw new Error(data.error || "Failed to update user in OrientDB.");
+          }
         }
         console.log("[DEBUG] Settings updated successfully for UID:", currentUser.uid);
 
@@ -77,7 +84,7 @@ export default function Settings({ navigation }) {
       }
     } catch (error) {
       console.error("Error saving settings:", error);
-      Alert.alert("Error", "Failed to save settings. Please try again.");
+      Alert.alert("Error", error.message);
     }
   };
 

@@ -76,6 +76,11 @@ export default function Register({ navigation }) {
         const response = await createUser(payload);
         const data = await response.json();
         if (!response.ok) {
+          // The server route returns 409 if username is taken
+          if (response.status === 409) {
+            throw new Error(data.error || "Username already exists");
+          }
+          // Otherwise, some other error
           throw new Error(data.error || "Error creating user in backend");
         }
 
