@@ -58,11 +58,11 @@ export default function Register({ navigation }) {
         const user = userCredential.user;
     
         // Save the username as displayName in Firebase Auth
-        await updateProfile(auth.currentUser, { displayName: username });
+        await updateProfile(auth.currentUser, { displayName: username.trim().toLowerCase() });
     
         const payload = {
           userId: user.uid,
-          username: username.toLowerCase(),
+          username: username.trim().toLowerCase(),
           email: email,
           avatar: avatar, 
           isPublic: true, // Update this with a checkbox in the UI later
@@ -76,6 +76,11 @@ export default function Register({ navigation }) {
         const response = await createUser(payload);
         const data = await response.json();
         if (!response.ok) {
+          // The server route returns 409 if username is taken
+          if (response.status === 409) {
+            throw new Error(data.error || "Username already exists");
+          }
+          // Otherwise, some other error
           throw new Error(data.error || "Error creating user in backend");
         }
 
