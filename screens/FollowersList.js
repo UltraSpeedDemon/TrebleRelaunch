@@ -19,8 +19,7 @@ import colours from "../styles/colours";
 
 export default function FollowersList({ navigation }) {
   const [followersList, setFollowersList] = useState([]);
-  const [loading, setLoading] = useState(true); // Add loading state
-  // Local state to track follow/unfollow changes.
+  const [loading, setLoading] = useState(true);
   const [followingUsers, setFollowingUsers] = useState({});
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -73,8 +72,8 @@ export default function FollowersList({ navigation }) {
     <View style={styles.container}>
       {/* Sidebar */}
       <View style={styles.sideMenu}>
-                 <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
-            </View>
+        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+      </View>
 
       {/* Search Bar */}
       <SearchBar />
@@ -102,7 +101,7 @@ export default function FollowersList({ navigation }) {
                   const isFollowing = followingUsers.hasOwnProperty(user.userId)
                     ? followingUsers[user.userId]
                     : user.isFollowing;
-                    console.log(`User ${user.userId} isFollowing:`, isFollowing);
+
                   return (
                     <MusicCard
                       key={user.userId}
@@ -115,6 +114,13 @@ export default function FollowersList({ navigation }) {
                       isFollowing={isFollowing}
                       userCard={true}
                       canFollow={true}
+
+                      // Navigate to the "UserProfiles" screen when tapping the card
+                      onPressCard={() =>
+                        navigation.navigate("UserProfiles", {
+                          userId: user.userId,
+                        })
+                      }
                     />
                   );
                 })
@@ -150,23 +156,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-},
-  searchBar: {
-    position: "absolute",
-    width: "70%",
-    height: 40,
-    top: 70,
-    left: "15%",
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colours.lightblue,
-    backgroundColor: colours.darkblue,
-  },
-  searchInput: {
-    fontSize: 16,
-    color: "#fff",
   },
   notificationsIcon: {
     width: 40,

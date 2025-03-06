@@ -1,109 +1,114 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, Image } from 'react-native';
-import { auth } from '../utils/firebase';
-import { deleteSession } from '../utils/session';
-import colours from '../styles/colours';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  Image,
+} from "react-native";
+import { auth } from "../utils/firebase";
 import { getUser, updateUser } from "../providers/rest"; // Orient endpoints
-import Sidebar from '../components/Sidebar';
-import BottomNavbar from '../components/BottomNavbar';
-import * as AuthSession from 'expo-auth-session'; // Ensure AuthSession is imported correctly
+import Sidebar from "../components/Sidebar";
+import BottomNavbar from "../components/BottomNavbar";
+import colours from "../styles/colours";
+import * as AuthSession from "expo-auth-session";
+import { SPOTIFY_CLIENT_ID } from "@env";
+import { discovery, SPOTIFY_SCOPES, REDIRECT_URI } from "../utils/spotifyAuth";
 
-import { SPOTIFY_CLIENT_ID } from '@env';
-import { discovery, SPOTIFY_SCOPES, REDIRECT_URI } from '../utils/spotifyAuth';
-
+/**
+ * Connections page for managing external service links (e.g., Spotify).
+ * If user has linked Spotify, it sets isSpotifyLinked = true in the DB.
+ */
 export default function Connections({ navigation }) {
   const [username, setUsername] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSpotifyLinked, setIsSpotifyLinked] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // Step 1: Set up a request object with useAuthRequest
+  // Create an auth request (PKCE-based)
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
       clientId: SPOTIFY_CLIENT_ID,
       redirectUri: REDIRECT_URI,
       scopes: SPOTIFY_SCOPES,
-      // PKCE code challenge
       codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
     },
     discovery
   );
-  console.log('REQUEST:', request);
-  console.log('RESPONSE:', response);
-  console.log('REDIRECT_URI:', REDIRECT_URI);
 
-  // Fetch user data from Firestore and check if Spotify is already linked
+  // 1) Fetch user data from the backend (Orient DB) to see if Spotify is linked
   useEffect(() => {
-    const fetchUserData = async () => {
+    async function fetchUserData() {
       try {
         const currentUser = auth.currentUser;
         if (!currentUser) {
-          // If no user is logged in, redirect to Home (or Login)
-          navigation.navigate('Home');
+          navigation.navigate("Home");
           return;
         }
 
-        const displayName = currentUser.displayName;
-        // Fetch user data from Orient instead of Firestore
         const orientRes = await getUser(currentUser.uid);
         if (!orientRes.ok) {
-          throw new Error('Failed to fetch user data from OrientDB.');
+          throw new Error("Failed to fetch user data from OrientDB.");
         }
         const userData = await orientRes.json();
-        setUsername(userData.username || displayName);
+        setUsername(userData.username || currentUser.displayName);
 
         if (userData.spotifyAccessToken) {
           setIsSpotifyLinked(true);
         }
       } catch (error) {
-        console.error('Error fetching user data:', error);
+        console.error("Error fetching user data:", error);
       } finally {
         setLoading(false);
       }
-    };
+    }
 
     fetchUserData();
   }, [navigation]);
 
-  // Step 2: Listen for the authorization code response
+  // 2) Listen for the authorization code response from Spotify
   useEffect(() => {
-    if (response?.type === 'success' && response.params?.code) {
+    if (response?.type === "success" && response.params?.code) {
       const { code } = response.params;
 
-      // Step 3: Exchange the code for tokens
-      AuthSession.exchangeCodeAsync({
-        code,
-        clientId: SPOTIFY_CLIENT_ID,
-        redirectUri: REDIRECT_URI,
-        extraParams: {
-          code_verifier: request.codeVerifier, // set the exact param name
+      // 3) Exchange the code for tokens
+      AuthSession.exchangeCodeAsync(
+        {
+          code,
+          clientId: SPOTIFY_CLIENT_ID,
+          redirectUri: REDIRECT_URI,
+          extraParams: {
+            code_verifier: request.codeVerifier,
+          },
         },
-      }, discovery)
+        discovery
+      )
         .then(async (tokenResponse) => {
-          console.log('Spotify Token Response:', tokenResponse);
+          console.log("Spotify Token Response:", tokenResponse);
           const { accessToken, refreshToken } = tokenResponse;
-
-          // Store tokens in Firestore
           const currentUser = auth.currentUser;
+
           if (currentUser) {
             try {
               await updateUser(currentUser.uid, {
                 spotifyAccessToken: accessToken,
                 spotifyRefreshToken: refreshToken,
-                spotifyIsLinked: true,
+                spotifyIsLinked: true, // <-- Key line: set isSpotifyLinked to true in DB
               });
               setIsSpotifyLinked(true);
             } catch (err) {
-              console.error('Error linking Spotify account:', err);
+              console.error("Error linking Spotify account:", err);
             }
           }
         })
         .catch((err) => {
-          console.error('Error exchanging code for tokens:', err);
+          console.error("Error exchanging code for tokens:", err);
         });
     }
   }, [response]);
 
-  // Trigger the Spotify login flow
+  // Start the Spotify login flow
   const handleSpotifyLogin = () => {
     promptAsync();
   };
@@ -120,7 +125,7 @@ export default function Connections({ navigation }) {
     <View style={styles.container}>
       {/* Sidebar */}
       <View style={styles.sideMenu}>
-        <Sidebar />
+        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
       </View>
 
       {/* Main Content */}
@@ -128,12 +133,11 @@ export default function Connections({ navigation }) {
         <Text style={styles.header}>Connections</Text>
         <Text style={styles.subHeader}>Manage your linked accounts</Text>
 
+        {/* Spotify Card */}
         <View style={styles.connectionCard}>
           <Image
             source={require("../images/spotifyLogo.png")}
             style={styles.logo}
-
-            // style={[styles.logo, isSpotifyLinked ? null : styles.grayscale]}
           />
           <View style={styles.connectionInfo}>
             <Text style={styles.connectionName}>Spotify</Text>
@@ -157,6 +161,7 @@ export default function Connections({ navigation }) {
           </TouchableOpacity>
         </View>
 
+        {/* Additional integrations, e.g., Last.fm, Apple Music */}
         <View style={styles.connectionCard}>
           <Image
             source={require("../images/lastfmLogo.png")}
@@ -205,11 +210,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colours.bluegrey,
   },
-  loader: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   sideMenu: {
     position: "absolute",
     top: 40,
@@ -221,9 +221,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-},
+  },
   mainContent: {
-    marginTop: 140, // Ensures content starts below the sidebar
+    marginTop: 140,
     paddingHorizontal: 20,
   },
   header: {
@@ -249,9 +249,6 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     marginRight: 15,
-  },
-  grayscale: {
-    tintColor: "#aaa",
   },
   connectionInfo: {
     flex: 1,

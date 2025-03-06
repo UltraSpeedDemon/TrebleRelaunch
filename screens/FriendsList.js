@@ -10,8 +10,8 @@ import {
 } from "react-native";
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { auth } from "../utils/firebase";
-import MusicCard from "../components/MusicCard"; // You might create a FriendCard if needed
-import { getFriends, followUser, unfollowUser } from "../providers/rest"; // Assume you have an endpoint to fetch friends
+import MusicCard from "../components/MusicCard"; 
+import { getFriends, followUser, unfollowUser } from "../providers/rest"; 
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
@@ -26,7 +26,6 @@ export default function FriendsList({ navigation }) {
   useEffect(() => {
     async function fetchFriends() {
       try {
-        // Replace getFriends with the appropriate API call for friends.
         const response = await getFriends(auth.currentUser.uid);
         const json = await response.json();
         setFriendsList(json);
@@ -39,39 +38,42 @@ export default function FriendsList({ navigation }) {
     fetchFriends();
   }, []);
 
-    const handleFollow = async (user) => {
-      try {
-        console.log("Following user:", user);
-        const response = await followUser(auth.currentUser.uid, user["userId"]);
-        if (response.ok) {
-          setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: true }));
-          console.log("Successfully followed user:", user["userId"]);
-        } else {
-          console.log("Failed to follow user");
-        }
-      } catch (error) {
-        console.error("Error following user:", error);
+  const handleFollow = async (user) => {
+    try {
+      console.log("Following user:", user);
+      const response = await followUser(auth.currentUser.uid, user["userId"]);
+      if (response.ok) {
+        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: true }));
+        console.log("Successfully followed user:", user["userId"]);
+      } else {
+        console.log("Failed to follow user");
       }
-    };
-  
-    const handleUnfollow = async (user) => {
-      try {
-        console.log("Unfollowing user:", user);
-        const response = await unfollowUser(auth.currentUser.uid, user["userId"]);
-        if (response.ok) {
-          setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: false }));
-          console.log("Successfully unfollowed user:", user["userId"]);
-        } else {
-          console.log("Failed to unfollow user");
-        }
-      } catch (error) {
-        console.error("Error unfollowing user:", error);
+    } catch (error) {
+      console.error("Error following user:", error);
+    }
+  };
+
+  const handleUnfollow = async (user) => {
+    try {
+      console.log("Unfollowing user:", user);
+      const response = await unfollowUser(auth.currentUser.uid, user["userId"]);
+      if (response.ok) {
+        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: false }));
+        console.log("Successfully unfollowed user:", user["userId"]);
+      } else {
+        console.log("Failed to unfollow user");
       }
-    };
+    } catch (error) {
+      console.error("Error unfollowing user:", error);
+    }
+  };
 
   return (
     <View style={styles.container}>
+      {/* Search Bar */}
       <SearchBar />
+
+      {/* Notifications Button */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -81,9 +83,13 @@ export default function FriendsList({ navigation }) {
           style={styles.notifIcon}
         />
       </TouchableOpacity>
+
+      {/* Sidebar */}
       <View style={styles.sideMenu}>
         <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
       </View>
+
+      {/* Main Content */}
       <View style={styles.content}>
         <SafeAreaProvider>
           <SafeAreaView>
@@ -92,22 +98,29 @@ export default function FriendsList({ navigation }) {
             ) : friendsList.length > 0 ? (
               <ScrollView>
                 {friendsList.map((friend) => {
-                  // If your friend objects have a similar structure as your user objects,
-                  // you can reuse MusicCard or create a dedicated FriendCard.
                   const isFollowing = followingUsers.hasOwnProperty(friend.userId)
                     ? followingUsers[friend.userId]
                     : friend.isFollowing;
+
                   return (
                     <MusicCard
                       key={friend.userId}
                       id={friend.userId}
                       name={friend.username}
                       image={friend.avatar}
+                      isFollowing={isFollowing}
+                      userCard={true}
+                      // Follow/Unfollow button
                       onFollow={() =>
                         isFollowing ? handleUnfollow(friend) : handleFollow(friend)
                       }
-                      isFollowing={isFollowing}
-                      userCard={true}
+                      // Tapping the card -> go to that user's profile
+                      onPressCard={() =>
+                        navigation.navigate("UserProfiles", {
+                          userId: friend.userId,
+                        })
+                      }
+                      canFollow={true}
                     />
                   );
                 })}
@@ -118,6 +131,8 @@ export default function FriendsList({ navigation }) {
           </SafeAreaView>
         </SafeAreaProvider>
       </View>
+
+      {/* Bottom Navigation Bar */}
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
@@ -141,23 +156,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-},
-  searchBar: {
-    position: "absolute",
-    width: "70%",
-    height: 40,
-    top: 70,
-    left: "15%",
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colours.lightblue,
-    backgroundColor: colours.darkblue,
-  },
-  searchInput: {
-    fontSize: 16,
-    color: "#fff",
   },
   notificationsIcon: {
     width: 40,

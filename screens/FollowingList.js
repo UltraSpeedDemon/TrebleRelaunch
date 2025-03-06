@@ -11,6 +11,7 @@ import {
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { auth } from "../utils/firebase";
 import MusicCard from "../components/MusicCard";
+// NOTE: we import getFollowing instead of getFollowers
 import { getFollowing, followUser, unfollowUser } from "../providers/rest";
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
@@ -26,6 +27,7 @@ export default function FollowingList({ navigation }) {
   useEffect(() => {
     async function fetchFollowing() {
       try {
+        // Now we fetch the list of users the current user is following
         const response = await getFollowing(auth.currentUser.uid);
         const json = await response.json();
         setFollowingList(json);
@@ -72,8 +74,8 @@ export default function FollowingList({ navigation }) {
     <View style={styles.container}>
       {/* Sidebar */}
       <View style={styles.sideMenu}>
-                 <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
-            </View>
+        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+      </View>
 
       {/* Search Bar */}
       <SearchBar />
@@ -88,6 +90,8 @@ export default function FollowingList({ navigation }) {
           style={styles.notifIcon}
         />
       </TouchableOpacity>
+
+      {/* Main Content */}
       <View style={styles.content}>
         <SafeAreaProvider>
           <SafeAreaView>
@@ -96,22 +100,31 @@ export default function FollowingList({ navigation }) {
                 <ActivityIndicator size="large" color="#4CAF50" />
               ) : followingList.length > 0 ? (
                 followingList.map((user) => {
+                  // We rely on a local override or user.isFollowing from the backend
                   const isFollowing = followingUsers.hasOwnProperty(user.userId)
                     ? followingUsers[user.userId]
                     : user.isFollowing;
-                    console.log(`User ${user.userId} isFollowing:`, isFollowing);
+
                   return (
                     <MusicCard
                       key={user.userId}
                       id={user.userId}
                       name={user.username}
                       image={user.avatar}
+                      // Follow/Unfollow button
                       onFollow={() =>
                         isFollowing ? handleUnfollow(user) : handleFollow(user)
                       }
                       isFollowing={isFollowing}
                       userCard={true}
                       canFollow={true}
+
+                      // Navigate to the "UserProfiles" screen when tapping the card
+                      onPressCard={() =>
+                        navigation.navigate("UserProfiles", {
+                          userId: user.userId,
+                        })
+                      }
                     />
                   );
                 })
@@ -122,6 +135,8 @@ export default function FollowingList({ navigation }) {
           </SafeAreaView>
         </SafeAreaProvider>
       </View>
+
+      {/* Bottom Navigation Bar */}
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
@@ -145,23 +160,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-},
-  searchBar: {
-    position: "absolute",
-    width: "70%",
-    height: 40,
-    top: 70,
-    left: "15%",
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colours.lightblue,
-    backgroundColor: colours.darkblue,
-  },
-  searchInput: {
-    fontSize: 16,
-    color: "#fff",
   },
   notificationsIcon: {
     width: 40,

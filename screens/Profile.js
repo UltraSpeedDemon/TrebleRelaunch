@@ -173,7 +173,7 @@ export default function Profile({ navigation }) {
       <Text style={styles.activityText}>{item.text}</Text>
       <View style={styles.activityFooter}>
         <Text style={styles.upvotes}>{item.upvotes} Upvotes</Text>
-        <Text style={styles.emojis}>❤️ {item.emojis.heart} 😢 {item.emojis.cry}</Text>
+        <Text style={styles.emojis}>❤️ 😢 </Text>
       </View>
     </View>
   );
@@ -214,7 +214,6 @@ export default function Profile({ navigation }) {
                     source={require("../images/spotifyLogo.png")}
                     style={styles.spotifyLogo}
                   />
-                  <Text style={styles.spotifyText}>Spotify Connected</Text>
                 </View>
               )}
             </View>

@@ -31,6 +31,10 @@ import CreatePost from './screens/CreatePost';
 import Posts from './screens/Posts';
 import FollowersList from './screens/FollowersList';
 import FollowingList from './screens/FollowingList';
+import UserProfiles from './screens/UserProfiles';
+import SongPage from './screens/SongPage';
+import AlbumPage from './screens/AlbumPage';
+import ArtistPage from './screens/ArtistPage';
 
 // Prepare the splash screen not to auto-hide
 SplashScreen.preventAutoHideAsync();
@@ -177,6 +181,10 @@ export default function App() {
         <Stack.Screen name="RecentlyViewed" component={RecentlyViewed} />
         <Stack.Screen name="FollowersList" component={FollowersList} />
         <Stack.Screen name="FollowingList" component={FollowingList} />
+        <Stack.Screen name="UserProfiles" component={UserProfiles} />
+        <Stack.Screen name="SongPage" component={SongPage} />
+        <Stack.Screen name="AlbumPage" component={AlbumPage} />
+        <Stack.Screen name="ArtistPage" component={ArtistPage} />
       </Stack.Navigator>
     </NavigationContainer>
   );
