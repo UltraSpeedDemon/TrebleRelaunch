@@ -13,52 +13,59 @@ import { useRoute } from "@react-navigation/native";
 import { auth } from "../utils/firebase";
 import {
   getUser,
+  getFollowers,
+  getFriends,
   followUser,
   unfollowUser,
-  getFriends,
 } from "../providers/rest";
 import colours from "../styles/colours";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 
+/**
+ * A user profile screen that shows if the user has Spotify linked,
+ * by directly checking data.spotifyIsLinked from the DB.
+ */
 export default function UserProfiles({ navigation }) {
   const route = useRoute();
   const { userId } = route.params;
 
-  // Basic info
+  // Basic user info
   const [username, setUsername] = useState("");
   const [avatar, setAvatar] = useState(require("../images/avatarIcon.png"));
   const noAvatar = require("../images/avatarIcon.png");
 
-  // Follow states
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [friendsList, setFriendsList] = useState([]);
+  // For mutual follow logic
+  const [theirFollowers, setTheirFollowers] = useState([]);
+  const [myFriends, setMyFriends] = useState([]);
 
-  // Basic numeric data
+  // Basic counts
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
-  // Loading/spinners
+  // If the user has Spotify connected
+  const [isSpotifyLinked, setIsSpotifyLinked] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Spotify link status
-  const [isSpotifyLinked, setIsSpotifyLinked] = useState(false);
-
-  // Profile-like sections
+  // Demo placeholders (top tracks, rated, activity)
   const [topTracks, setTopTracks] = useState([]);
   const [topRated, setTopRated] = useState([]);
   const [activity, setActivity] = useState([]);
 
-  // Helper for username
+  // Capitalize username
   const formatUsername = (name) =>
     name ? name.charAt(0).toUpperCase() + name.slice(1) : "";
 
+  // On mount or userId change
   useEffect(() => {
     fetchUserData();
+    fetchTheirFollowers();
     fetchMyFriends();
   }, [userId]);
 
+  // 1) Fetch user data
   async function fetchUserData() {
     try {
       setLoading(true);
@@ -67,24 +74,27 @@ export default function UserProfiles({ navigation }) {
         throw new Error("Failed to fetch user data");
       }
       const data = await resp.json();
+
       setUsername(data.username || "");
       setFollowersCount(data.followersCount || 0);
       setFollowingCount(data.followingCount || 0);
-      setIsFollowing(data.isFollowing || false);
 
+      // If your server returns data.spotifyIsLinked
+      // (or data.spotify_is_linked) as a boolean, read it directly:
+      if (data.spotifyIsLinked === true) {
+        setIsSpotifyLinked(true);
+      } else {
+        setIsSpotifyLinked(false);
+      }
+
+      // If the user has an avatar
       if (data.avatar && data.avatar !== "None") {
         setAvatar({ uri: data.avatar });
       } else {
         setAvatar(noAvatar);
       }
 
-      if (data.spotifyAccessToken && data.spotifyAccessToken !== "") {
-        setIsSpotifyLinked(true);
-      } else {
-        setIsSpotifyLinked(false);
-      }
-
-      // Example placeholders for top tracks, top rated, activity
+      // Demo placeholders
       setTopTracks([
         {
           id: "1",
@@ -143,49 +153,67 @@ export default function UserProfiles({ navigation }) {
     }
   }
 
+  // 2) Fetch their followers
+  async function fetchTheirFollowers() {
+    try {
+      const resp = await getFollowers(userId);
+      if (!resp.ok) {
+        throw new Error("Failed to fetch their followers");
+      }
+      const arr = await resp.json();
+      setTheirFollowers(arr);
+    } catch (error) {
+      console.error("Error fetching their followers:", error);
+    }
+  }
+
+  // 3) Fetch my friend list
   async function fetchMyFriends() {
     try {
       const resp = await getFriends(auth.currentUser.uid);
       if (!resp.ok) {
         throw new Error("Failed to fetch my friends");
       }
-      const myFriends = await resp.json();
-      setFriendsList(myFriends);
+      const friendsArr = await resp.json();
+      setMyFriends(friendsArr);
     } catch (error) {
       console.error("Error fetching my friends:", error);
     }
   }
 
-  // Check if user is in friend list
-  const isInMyFriends = friendsList.some((fr) => fr.userId === userId);
+  // If I'm in their follower list, I'm following them
+  const iAmFollowing = theirFollowers.some(
+    (f) => f.userId === auth.currentUser.uid
+  );
 
-  // If I'm following them or they're in friend list -> "Following"
-  const finalButtonLabel = isInMyFriends || isFollowing ? "Following" : "Follow";
-  // If they're in friend list, we display "Friends"
+  // If user is in my friend list => mutual follow
+  const isInMyFriends = myFriends.some((fr) => fr.userId === userId);
+
+  // final button text
+  const finalButtonLabel = iAmFollowing || isInMyFriends ? "Following" : "Follow";
+
+  // Show "Friends" label if in my friend list
   const showFriendsLabel = isInMyFriends;
 
+  // Follow/unfollow
   async function handleFollowPress() {
     try {
       if (finalButtonLabel === "Following") {
-        // Unfollow
         const resp = await unfollowUser(auth.currentUser.uid, userId);
         if (resp.ok) {
-          setIsFollowing(false);
           setFollowersCount((prev) => Math.max(0, prev - 1));
-          setFriendsList((prev) => prev.filter((f) => f.userId !== userId));
+          await fetchTheirFollowers();
+          setMyFriends((prev) => prev.filter((f) => f.userId !== userId));
         }
       } else {
-        // Follow
         const resp = await followUser(auth.currentUser.uid, userId);
         if (resp.ok) {
-          setIsFollowing(true);
           setFollowersCount((prev) => prev + 1);
-
-          // Re-fetch friend list to see if it’s mutual
+          await fetchTheirFollowers();
           const updatedFriendsResp = await getFriends(auth.currentUser.uid);
           if (updatedFriendsResp.ok) {
             const updatedFriends = await updatedFriendsResp.json();
-            setFriendsList(updatedFriends);
+            setMyFriends(updatedFriends);
           }
         }
       }
@@ -224,14 +252,12 @@ export default function UserProfiles({ navigation }) {
     </View>
   );
 
-  // Upvotes are white, and we keep emojis but remove the numeric counts
   const renderActivity = ({ item }) => (
     <View style={styles.activityCard}>
       <Text style={styles.activityUsername}>{item.username}</Text>
       <Text style={styles.activityText}>{item.text}</Text>
       <View style={styles.activityFooter}>
         <Text style={styles.upvotes}>{item.upvotes} Upvotes</Text>
-        {/* Show emojis, but no counts */}
         <Text style={styles.emojis}>❤️ 😢</Text>
       </View>
     </View>
@@ -260,15 +286,17 @@ export default function UserProfiles({ navigation }) {
         <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
       </View>
 
-      {/* Layout with FlatList */}
       <FlatList
         ListHeaderComponent={
           <View style={styles.profileHeader}>
+            {/* Avatar */}
             <Image source={avatar} style={styles.avatar} />
             <View style={styles.headerInfo}>
               <Text style={styles.username}>{formatUsername(username)}</Text>
               <Text style={styles.stats}>Followers: {followersCount}</Text>
               <Text style={styles.stats}>Following: {followingCount}</Text>
+
+              {/* If isSpotifyLinked is true, show the Spotify logo */}
               {isSpotifyLinked && (
                 <View style={styles.spotifyContainer}>
                   <Image
@@ -282,13 +310,9 @@ export default function UserProfiles({ navigation }) {
 
             {auth.currentUser.uid !== userId && (
               <View style={styles.followContainer}>
-                <TouchableOpacity
-                  style={styles.followButton}
-                  onPress={handleFollowPress}
-                >
+                <TouchableOpacity style={styles.followButton} onPress={handleFollowPress}>
                   <Text style={styles.followButtonText}>{finalButtonLabel}</Text>
                 </TouchableOpacity>
-
                 {showFriendsLabel && (
                   <Text style={styles.friendText}>Friends</Text>
                 )}
@@ -344,7 +368,6 @@ export default function UserProfiles({ navigation }) {
   );
 }
 
-// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -495,7 +518,7 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   emojis: {
-    fontSize: 14,       // you can adjust the size as you like
+    fontSize: 14,
     color: "#fff",
     marginLeft: 10,
   },

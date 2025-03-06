@@ -23,7 +23,7 @@ import colours from "../styles/colours";
 export default function Search({ navigation, route }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchResult, setSearchResults] = useState(null);
-  const [followingUsers, setFollowingUsers] = useState({}); // track followed users by their ID
+  const [followingUsers, setFollowingUsers] = useState({});
   const { searchQuery } = route.params;
 
   // Custom hook to fetch the current user data
@@ -36,27 +36,25 @@ export default function Search({ navigation, route }) {
     loading,
   } = useFetchUserData();
 
-  // Fetch search results from your backend
+  // Fetch search results from backend
   async function getSearchResults() {
     try {
       const results = await postSearchResults(searchQuery, auth.currentUser.uid);
       const json = await results.json();
+      console.log("Search results:", json); // Debug: see the entire result array
       setSearchResults(json);
     } catch (error) {
       console.error("Error fetching search results:", error);
     }
   }
 
-  // Filter state + reducer for toggling between songs, albums, artists, users
+  // Reducer for toggling filters: songs, albums, artists, users
   const [filter, dispatchFilter] = useReducer(
     (state, action) => {
-      let { type } = action;
-      switch (type) {
+      switch (action.type) {
         case "TOGGLE_SONG":
           return {
-            songOnly: state.songOnly
-              ? false
-              : !state.albumOnly && !state.artistOnly && !state.userOnly,
+            songOnly: !state.songOnly,
             albumOnly: false,
             artistOnly: false,
             userOnly: false,
@@ -64,9 +62,7 @@ export default function Search({ navigation, route }) {
         case "TOGGLE_ALBUM":
           return {
             songOnly: false,
-            albumOnly: state.albumOnly
-              ? false
-              : !state.songOnly && !state.artistOnly && !state.userOnly,
+            albumOnly: !state.albumOnly,
             artistOnly: false,
             userOnly: false,
           };
@@ -74,9 +70,7 @@ export default function Search({ navigation, route }) {
           return {
             songOnly: false,
             albumOnly: false,
-            artistOnly: state.artistOnly
-              ? false
-              : !state.songOnly && !state.albumOnly && !state.userOnly,
+            artistOnly: !state.artistOnly,
             userOnly: false,
           };
         case "TOGGLE_USER":
@@ -84,9 +78,7 @@ export default function Search({ navigation, route }) {
             songOnly: false,
             albumOnly: false,
             artistOnly: false,
-            userOnly: state.userOnly
-              ? false
-              : !state.songOnly && !state.albumOnly && !state.artistOnly,
+            userOnly: !state.userOnly,
           };
         default:
           return state;
@@ -104,13 +96,14 @@ export default function Search({ navigation, route }) {
     getSearchResults();
   }, []);
 
-  // Handle following a user
+  // Follow/unfollow user
   const handleFollow = async (user) => {
     try {
       console.log("Following user:", user);
       const response = await followUser(auth.currentUser.uid, user.userId);
       if (response.ok) {
         setFollowingUsers((prev) => ({ ...prev, [user.userId]: true }));
+        console.log("Successfully followed user:", user.userId);
       } else {
         console.log("Failed to follow user");
       }
@@ -119,7 +112,6 @@ export default function Search({ navigation, route }) {
     }
   };
 
-  // Handle unfollowing a user
   const handleUnfollow = async (user) => {
     try {
       console.log("Unfollowing user:", user.userId);
@@ -134,6 +126,12 @@ export default function Search({ navigation, route }) {
       console.error("Error unfollowing user:", error);
     }
   };
+
+  // Which sections to show
+  const shouldShowTrack = !filter.albumOnly && !filter.artistOnly && !filter.userOnly;
+  const shouldShowAlbum = !filter.songOnly && !filter.artistOnly && !filter.userOnly;
+  const shouldShowArtist = !filter.songOnly && !filter.albumOnly && !filter.userOnly;
+  const shouldShowUser = !filter.songOnly && !filter.albumOnly && !filter.artistOnly;
 
   return (
     <View style={styles.container}>
@@ -161,180 +159,160 @@ export default function Search({ navigation, route }) {
         <SafeAreaProvider>
           <SafeAreaView>
             <ScrollView>
-              <View>
-                {searchResult && Array.isArray(searchResult) ? (
-                  <View key="searchResults">
-                    {/* Filter Chips */}
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        gap: 10,
-                        marginLeft: 18,
-                        marginVertical: 10,
-                      }}
-                    >
-                      <Chip
-                        key="songsChip"
-                        title="Songs"
-                        onPress={() => dispatchFilter({ type: "TOGGLE_SONG" })}
-                        type={filter.songOnly ? "solid" : "outline"}
-                      />
-                      <Chip
-                        key="albumsChip"
-                        title="Albums"
-                        onPress={() => dispatchFilter({ type: "TOGGLE_ALBUM" })}
-                        type={filter.albumOnly ? "solid" : "outline"}
-                      />
-                      <Chip
-                        key="artistsChip"
-                        title="Artists"
-                        onPress={() =>
-                          dispatchFilter({ type: "TOGGLE_ARTIST" })
-                        }
-                        type={filter.artistOnly ? "solid" : "outline"}
-                      />
-                      <Chip
-                        key="usersChip"
-                        title="Users"
-                        onPress={() => dispatchFilter({ type: "TOGGLE_USER" })}
-                        type={filter.userOnly ? "solid" : "outline"}
-                      />
-                    </View>
-
-                    {/* Songs Section */}
-                    {!(filter.albumOnly || filter.artistOnly || filter.userOnly) && (
-                      <View key="SongsView">
-                        <SectionDivider key="Songs" title="Songs" nonfirst={false} />
-                        {searchResult.map((result) => {
-                          if (result.type === "track") {
-                            return (
-                              <TouchableOpacity
-                                key={result.id}
-                                onPress={() =>
-                                  navigation.navigate("Posts", {
-                                    post: result,
-                                    posts: searchResult,
-                                  })
-                                }
-                              >
-                                <MusicCard
-                                  id={result.id}
-                                  image={result.image}
-                                  name={result.name}
-                                  artist={result.artist}
-                                  album={result.album}
-                                />
-                              </TouchableOpacity>
-                            );
-                          }
-                          return null;
-                        })}
-                      </View>
-                    )}
-
-                    {/* Albums Section */}
-                    {!(filter.songOnly || filter.artistOnly || filter.userOnly) && (
-                      <View key="AlbumsView">
-                        <SectionDivider
-                          key="Albums"
-                          title="Albums"
-                          nonfirst={!filter.albumOnly}
-                        />
-                        {searchResult.map((result) => {
-                          if (result.type === "album") {
-                            return (
-                              <MusicCard
-                                key={result.id}
-                                id={result.id}
-                                image={result.image}
-                                name={result.name}
-                                artist={result.artist}
-                              />
-                            );
-                          }
-                          return null;
-                        })}
-                      </View>
-                    )}
-
-                    {/* Artists Section */}
-                    {!(filter.songOnly || filter.albumOnly || filter.userOnly) && (
-                      <View key="ArtistsView">
-                        <SectionDivider
-                          key="Artists"
-                          title="Artists"
-                          nonfirst={!filter.artistOnly}
-                        />
-                        {searchResult.map((result) => {
-                          if (result.type === "artist") {
-                            return (
-                              <MusicCard
-                                key={result.id}
-                                id={result.id}
-                                image={result.image}
-                                artist={result.name}
-                              />
-                            );
-                          }
-                          return null;
-                        })}
-                      </View>
-                    )}
-
-                    {/* Users Section */}
-                    {!(filter.songOnly || filter.albumOnly || filter.artistOnly) && (
-                      <View key="UsersView">
-                        <SectionDivider
-                          key="Users"
-                          title="Users"
-                          nonfirst={!filter.userOnly}
-                        />
-                        {searchResult.map((result) => {
-                          if (result.type === "user") {
-                            const isCurrentUser = result.userId === auth.currentUser.uid;
-                            const isFollowing = followingUsers.hasOwnProperty(result.userId)
-                              ? followingUsers[result.userId]
-                              : result.isFollowing;
-
-                            const onFollow = !isCurrentUser
-                              ? () => {
-                                  console.log("onFollow triggered for user", result.userId);
-                                  return isFollowing
-                                    ? handleUnfollow(result)
-                                    : handleFollow(result);
-                                }
-                              : undefined;
-
-                            const canFollow = !isCurrentUser;
-                            return (
-                              <MusicCard
-                                key={result.userId}
-                                id={result.userId}
-                                name={result.username}
-                                image={result.avatar}
-                                onFollow={onFollow}
-                                isFollowing={isFollowing}
-                                userCard={true}
-                                canFollow={canFollow}
-                                
-                                // Navigate to the user profile on card press
-                                onPressCard={() =>
-                                  navigation.navigate("UserProfiles", {
-                                    userId: result.userId,
-                                  })
-                                }
-                              />
-                            );
-                          }
-                          return null;
-                        })}
-                      </View>
-                    )}
+              {!searchResult ? (
+                <ActivityIndicator size="large" color="#4CAF50" />
+              ) : (
+                <View key="searchResults">
+                  {/* Filter Chips */}
+                  <View style={styles.chipContainer}>
+                    <Chip
+                      title="Songs"
+                      onPress={() => dispatchFilter({ type: "TOGGLE_SONG" })}
+                      type={filter.songOnly ? "solid" : "outline"}
+                    />
+                    <Chip
+                      title="Albums"
+                      onPress={() => dispatchFilter({ type: "TOGGLE_ALBUM" })}
+                      type={filter.albumOnly ? "solid" : "outline"}
+                    />
+                    <Chip
+                      title="Artists"
+                      onPress={() => dispatchFilter({ type: "TOGGLE_ARTIST" })}
+                      type={filter.artistOnly ? "solid" : "outline"}
+                    />
+                    <Chip
+                      title="Users"
+                      onPress={() => dispatchFilter({ type: "TOGGLE_USER" })}
+                      type={filter.userOnly ? "solid" : "outline"}
+                    />
                   </View>
-                ) : (
-                  <ActivityIndicator size="large" color="#4CAF50" />
+
+                  {/* Songs Section */}
+                  {shouldShowTrack && (
+                    <View key="SongsView">
+                      <SectionDivider title="Songs" />
+                      {searchResult.map((item) => {
+                      
+                        // Adjust condition if your backend uses "song" instead of "track"
+                        if (item.type === "track") {
+                          console.log("Navigating to SongPage with item:", item.id);
+                          return (
+                              <MusicCard
+                              key={item.id}
+                              id={item.id}
+                              image={item.image}
+                              name={item.name}
+                              artist={item.artist}
+                              album={item.album}
+                              // When the card is pressed, go to SongPage
+                              onPressCard={() =>
+                                navigation.navigate("SongPage", {
+                                  track: item, // pass the full track object or just an ID
+                                })
+                              }
+                            />
+                            );
+                          }
+                        return null;
+                      })}
+                    </View>
+                  )}
+
+                  {/* Albums Section */}
+                  {shouldShowAlbum && (
+                  <View key="AlbumsView">
+                    <SectionDivider title="Albums" />
+                    {searchResult.map((item) => {
+                      if (item.type === "album") {
+                        return (
+                          <MusicCard
+                            key={item.id}
+                            id={item.id}
+                            image={item.image}
+                            name={item.name}
+                            artist={item.artist}
+                            // Press goes to AlbumPage with { album: item }
+                            onPressCard={() =>
+                              navigation.navigate("AlbumPage", {
+                                album: item, // <-- pass it as 'album'
+                              })
+                            }
+                          />
+                        );
+                      }
+                      return null;
+                    })}
+                  </View>
                 )}
-              </View>
+
+                  {/* Artists Section */}
+                {shouldShowArtist && (
+                <View key="ArtistsView">
+                  <SectionDivider title="Artists" />
+                  {searchResult.map((item) => {
+                    if (item.type === "artist") {
+                      return (
+                        <MusicCard
+                          key={item.id}
+                          id={item.id}
+                          image={item.image}
+                          artist={item.name}
+                          onPressCard={() =>
+                            navigation.navigate("ArtistPage", {
+                              artist: item, // pass the data as 'artist'
+                            })
+                          }
+                        />
+                      );
+                    }
+                    return null;
+                  })}
+                </View>
+              )}
+                  {/* Users Section */}
+                  {shouldShowUser && (
+                    <View key="UsersView">
+                      <SectionDivider title="Users" />
+                      {searchResult.map((item) => {
+                        if (item.type === "user") {
+                          const isCurrentUser = item.userId === auth.currentUser.uid;
+                          const isFollowing = followingUsers.hasOwnProperty(item.userId)
+                            ? followingUsers[item.userId]
+                            : item.isFollowing;
+
+                          const onFollow = !isCurrentUser
+                            ? () => {
+                                if (isFollowing) handleUnfollow(item);
+                                else handleFollow(item);
+                              }
+                            : undefined;
+
+                          const canFollow = !isCurrentUser;
+                          return (
+                            <MusicCard
+                              key={item.userId}
+                              id={item.userId}
+                              name={item.username}
+                              image={item.avatar}
+                              onFollow={onFollow}
+                              isFollowing={isFollowing}
+                              userCard={true}
+                              canFollow={canFollow}
+                              // Navigate to user profile on card press
+                              onPressCard={() =>
+                                navigation.navigate("UserProfiles", {
+                                  userId: item.userId,
+                                })
+                              }
+                            />
+                          );
+                        }
+                        return null;
+                      })}
+                    </View>
+                  )}
+                </View>
+              )}
             </ScrollView>
           </SafeAreaView>
         </SafeAreaProvider>
@@ -352,23 +330,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colours.bluegrey,
-  },
-  searchBar: {
-    position: "absolute",
-    width: "70%",
-    height: 40,
-    top: 70,
-    left: "15%",
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colours.lightblue,
-    backgroundColor: colours.darkblue,
-  },
-  searchInput: {
-    fontSize: 16,
-    color: "#fff",
   },
   notificationsIcon: {
     width: 40,
@@ -403,32 +364,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  header: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: colours.lightblue,
-  },
-  subText: {
-    fontSize: 16,
-    color: colours.darkblue,
-    marginTop: 10,
-  },
   bottomNavBar: {
     position: "absolute",
     bottom: 0,
     width: "100%",
+  },
+  chipContainer: {
     flexDirection: "row",
-  },
-  onTop: {
-    zIndex: 999,
-  },
-  musicCard: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  musicInfo: {
-    right: 1,
-    width: "80%",
+    gap: 10,
+    marginLeft: 18,
+    marginVertical: 10,
   },
 });

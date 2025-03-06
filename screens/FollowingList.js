@@ -11,31 +11,33 @@ import {
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { auth } from "../utils/firebase";
 import MusicCard from "../components/MusicCard";
-import { getFollowers, followUser, unfollowUser } from "../providers/rest";
+// NOTE: we import getFollowing instead of getFollowers
+import { getFollowing, followUser, unfollowUser } from "../providers/rest";
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
 import colours from "../styles/colours";
 
-export default function FollowersList({ navigation }) {
-  const [followersList, setFollowersList] = useState([]);
+export default function FollowingList({ navigation }) {
+  const [followingList, setFollowingList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [followingUsers, setFollowingUsers] = useState({});
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    async function fetchFollowers() {
+    async function fetchFollowing() {
       try {
-        const response = await getFollowers(auth.currentUser.uid);
+        // Now we fetch the list of users the current user is following
+        const response = await getFollowing(auth.currentUser.uid);
         const json = await response.json();
-        setFollowersList(json);
+        setFollowingList(json);
       } catch (error) {
-        console.error("Error fetching followers:", error);
+        console.error("Error fetching following:", error);
       } finally {
         setLoading(false);
       }
     }
-    fetchFollowers();
+    fetchFollowing();
   }, []);
 
   const handleFollow = async (user) => {
@@ -96,8 +98,9 @@ export default function FollowersList({ navigation }) {
             <ScrollView>
               {loading ? (
                 <ActivityIndicator size="large" color="#4CAF50" />
-              ) : followersList.length > 0 ? (
-                followersList.map((user) => {
+              ) : followingList.length > 0 ? (
+                followingList.map((user) => {
+                  // We rely on a local override or user.isFollowing from the backend
                   const isFollowing = followingUsers.hasOwnProperty(user.userId)
                     ? followingUsers[user.userId]
                     : user.isFollowing;
@@ -108,6 +111,7 @@ export default function FollowersList({ navigation }) {
                       id={user.userId}
                       name={user.username}
                       image={user.avatar}
+                      // Follow/Unfollow button
                       onFollow={() =>
                         isFollowing ? handleUnfollow(user) : handleFollow(user)
                       }
@@ -125,7 +129,7 @@ export default function FollowersList({ navigation }) {
                   );
                 })
               ) : (
-                <Text style={styles.noResultsText}>No followers found.</Text>
+                <Text style={styles.noResultsText}>No following found.</Text>
               )}
             </ScrollView>
           </SafeAreaView>

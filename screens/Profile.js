@@ -214,7 +214,6 @@ export default function Profile({ navigation }) {
                     source={require("../images/spotifyLogo.png")}
                     style={styles.spotifyLogo}
                   />
-                  <Text style={styles.spotifyText}>Spotify Connected</Text>
                 </View>
               )}
             </View>
