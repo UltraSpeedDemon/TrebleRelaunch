@@ -15,18 +15,18 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { getUser } from "../providers/rest";
+import { getUser, populateMetadata } from "../providers/rest";
 
 export default function AlbumPage({ route, navigation }) {
   const { album } = route.params; // Expecting "album" passed from navigation
   const [username, setUsername] = useState("");
   const [loadingUser, setLoadingUser] = useState(true);
 
-  // Comments state
-  const [comment, setComment] = useState("");
-  const [commentRating, setCommentRating] = useState(0);
+  // Reviews state
+  const [review, setReview] = useState("");
+  const [reviewRating, setReviewRating] = useState(0);
   const [selectedEmojis, setSelectedEmojis] = useState([]);
-  const [comments, setComments] = useState([
+  const [reviews, setReviews] = useState([
     {
       id: "1",
       username: "User1",
@@ -57,6 +57,11 @@ export default function AlbumPage({ route, navigation }) {
 
   // 1) Fetch user data
   useEffect(() => {
+    try {
+      populateMetadata(album.type, album.id);
+    } catch (error) {
+      console.error("Error populating metadata:", error);
+    }
     async function fetchUserData() {
       try {
         const currentUser = auth.currentUser;
@@ -78,9 +83,9 @@ export default function AlbumPage({ route, navigation }) {
     fetchUserData();
   }, [navigation]);
 
-  // Sort comments by upvotes desc
-  const getSortedComments = () => {
-    return [...comments].sort((a, b) => b.upvotes - a.upvotes);
+  // Sort reviews by upvotes desc
+  const getSortedReviews = () => {
+    return [...reviews].sort((a, b) => b.upvotes - a.upvotes);
   };
 
   // Handlers
@@ -97,11 +102,11 @@ export default function AlbumPage({ route, navigation }) {
     setSelectedEmojis((prev) => [...prev, emoji]);
   };
 
-  const handleAddComment = () => {
-    if (!comment.trim()) return;
+  const handleAddReview = () => {
+    if (!review.trim()) return;
     Alert.alert(
       "Confirm",
-      "Are you sure you want to post?",
+      "Are you sure you want to post this review?",
       [
         {
           text: "No",
@@ -110,31 +115,32 @@ export default function AlbumPage({ route, navigation }) {
         {
           text: "Yes",
           style: "default",
-          onPress: () => actuallyAddComment(),
+          onPress: () => actuallyAddReview(),
         },
       ],
       { cancelable: true }
     );
   };
 
-  const actuallyAddComment = () => {
-    const newComment = {
+  const actuallyAddReview = () => {
+
+    const newReview = {
       id: Date.now().toString(),
       username: username || "Anonymous",
-      text: comment.trim(),
+      text: review.trim(),
       upvotes: 0,
       upvoted: false,
-      rating: commentRating,
+      rating: reviewRating,
       userSelectedEmojis: [...selectedEmojis],
     };
-    setComments((prev) => [...prev, newComment]);
-    setComment("");
-    setCommentRating(0);
+    setReviews((prev) => [...prev, newReview]);
+    setReview("");
+    setReviewRating(0);
     setSelectedEmojis([]);
   };
 
   const handleUpvote = (id) => {
-    setComments((prev) =>
+    setReviews((prev) =>
       prev.map((c) =>
         c.id === id
           ? {
@@ -170,7 +176,7 @@ export default function AlbumPage({ route, navigation }) {
       </View>
 
       <FlatList
-        data={getSortedComments()}
+        data={getSortedReviews()}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <View style={styles.card}>
@@ -224,8 +230,8 @@ export default function AlbumPage({ route, navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Comment Section */}
-            <KeyboardAvoidingView style={styles.commentInputContainer}>
+            {/* Review Section */}
+            <KeyboardAvoidingView style={styles.reviewInputContainer}>
               <View style={styles.topRow}>
                 {/* Favourite button */}
                 <View style={styles.favouriteContainer}>
@@ -247,11 +253,11 @@ export default function AlbumPage({ route, navigation }) {
                   {[...Array(5)].map((_, index) => (
                     <TouchableOpacity
                       key={index}
-                      onPress={() => setCommentRating(index + 1)}
+                      onPress={() => setReviewRating(index + 1)}
                     >
                       <Image
                         source={
-                          index < commentRating
+                          index < reviewRating
                             ? require("../images/starFullIcon.png")
                             : require("../images/starEmptyIcon.png")
                         }
@@ -289,14 +295,14 @@ export default function AlbumPage({ route, navigation }) {
 
               <View style={{ flexDirection: "row", marginTop: 15 }}>
                 <TextInput
-                  style={styles.commentInput}
-                  placeholder="Add a comment..."
+                  style={styles.reviewInput}
+                  placeholder="Add a review..."
                   placeholderTextColor="#aaa"
-                  value={comment}
-                  onChangeText={setComment}
+                  value={review}
+                  onChangeText={setReview}
                 />
-                <TouchableOpacity style={styles.commentButton} onPress={handleAddComment}>
-                  <Text style={styles.commentButtonText}>Post</Text>
+                <TouchableOpacity style={styles.reviewButton} onPress={handleAddReview}>
+                  <Text style={styles.reviewButtonText}>Post</Text>
                 </TouchableOpacity>
               </View>
 
@@ -316,14 +322,14 @@ export default function AlbumPage({ route, navigation }) {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.commentCard}>
+          <View style={styles.reviewCard}>
             <Image source={require("../images/avatarIcon.png")} style={styles.avatar} />
-            <View style={styles.commentContent}>
-              <View style={styles.commentHeader}>
+            <View style={styles.reviewContent}>
+              <View style={styles.reviewHeader}>
                 <Text style={styles.username}>{item.username}</Text>
               </View>
-              <Text style={styles.commentText}>{item.text}</Text>
-              <View style={styles.commentRating}>
+              <Text style={styles.reviewText}>{item.text}</Text>
+              <View style={styles.reviewRating}>
                 {[...Array(5)].map((_, index) => (
                   <Image
                     key={index}
@@ -332,14 +338,14 @@ export default function AlbumPage({ route, navigation }) {
                         ? require("../images/starFullIcon.png")
                         : require("../images/starEmptyIcon.png")
                     }
-                    style={styles.commentStar}
+                    style={styles.reviewStar}
                   />
                 ))}
               </View>
               {item.userSelectedEmojis && item.userSelectedEmojis.length > 0 && (
-                <View style={styles.commentEmojisContainer}>
+                <View style={styles.reviewEmojisContainer}>
                   {item.userSelectedEmojis.map((emo, i) => (
-                    <Text key={i} style={styles.commentEmoji}>
+                    <Text key={i} style={styles.reviewEmoji}>
                       {emo}
                     </Text>
                   ))}
@@ -362,7 +368,7 @@ export default function AlbumPage({ route, navigation }) {
             </TouchableOpacity>
           </View>
         )}
-        contentContainerStyle={styles.commentsContainer}
+        contentContainerStyle={styles.reviewsContainer}
         showsVerticalScrollIndicator={false}
       />
 
@@ -443,7 +449,7 @@ const styles = StyleSheet.create({
       color: "#fff",
       marginTop: 5,
     },
-    commentInputContainer: {
+    reviewInputContainer: {
       marginTop: 20,
     },
     topRow: {
@@ -492,7 +498,7 @@ const styles = StyleSheet.create({
       fontSize: 20,
       marginHorizontal: 6,
     },
-    commentInput: {
+    reviewInput: {
       flex: 1,
       backgroundColor: "#fff",
       borderRadius: 10,
@@ -500,14 +506,14 @@ const styles = StyleSheet.create({
       fontSize: 16,
       marginRight: 10,
     },
-    commentButton: {
+    reviewButton: {
       backgroundColor: colours.lightblue,
       borderRadius: 10,
       padding: 10,
       justifyContent: "center",
       alignItems: "center",
     },
-    commentButtonText: {
+    reviewButtonText: {
       color: "#fff",
       fontWeight: "bold",
       fontSize: 16,
@@ -529,7 +535,7 @@ const styles = StyleSheet.create({
       fontSize: 20,
       marginHorizontal: 4,
     },
-    commentCard: {
+    reviewCard: {
       flexDirection: "row",
       backgroundColor: colours.darkblue,
       borderRadius: 10,
@@ -544,10 +550,10 @@ const styles = StyleSheet.create({
       borderRadius: 20,
       marginRight: 10,
     },
-    commentContent: {
+    reviewContent: {
       flex: 1,
     },
-    commentHeader: {
+    reviewHeader: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
@@ -558,27 +564,27 @@ const styles = StyleSheet.create({
       color: colours.lightblue,
       marginRight: 10,
     },
-    commentText: {
+    reviewText: {
       fontSize: 14,
       color: "#fff",
       marginVertical: 5,
     },
-    commentRating: {
+    reviewRating: {
       flexDirection: "row",
       marginTop: 5,
     },
-    commentStar: {
+    reviewStar: {
       width: 16,
       height: 16,
       marginRight: 2,
     },
-    commentEmojisContainer: {
+    reviewEmojisContainer: {
       flexDirection: "row",
       position: "absolute",
       bottom: 10,
       right: 10,
     },
-    commentEmoji: {
+    reviewEmoji: {
       fontSize: 16,
       marginLeft: 4,
       color: "#fff",
@@ -599,7 +605,7 @@ const styles = StyleSheet.create({
       fontSize: 14,
       color: "#fff",
     },
-    commentsContainer: {
+    reviewsContainer: {
       paddingHorizontal: 20,
       paddingBottom: 100,
     },

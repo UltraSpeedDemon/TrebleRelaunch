@@ -93,8 +93,18 @@ export async function getFollowing(userId) {
 export async function getFriends(userId) {
   return await serverGet(`users/${userId}/friends`);
 }
-  
 
+// #endregion
+  
+// #region metadata endpoints
+
+export async function populateMetadata(reviewType, id) {
+  // Build the query parameters
+  const params = { reviewType, id };
+  
+  // Call the test_populate endpoint
+  return await serverGet("metadata/populate", params);
+}
   
 
 
