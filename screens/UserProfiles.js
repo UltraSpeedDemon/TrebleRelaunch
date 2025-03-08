@@ -167,7 +167,7 @@ export default function UserProfiles({ navigation }) {
     }
   }
 
-  // 3) Fetch my friend list
+  // 3) fetch my friend list
   async function fetchMyFriends() {
     try {
       const resp = await getFriends(auth.currentUser.uid);
@@ -181,31 +181,47 @@ export default function UserProfiles({ navigation }) {
     }
   }
 
-  // If I'm in their follower list, I'm following them
+  // If I'm in their follower list => I'm following them
   const iAmFollowing = theirFollowers.some(
     (f) => f.userId === auth.currentUser.uid
   );
-
-  // If user is in my friend list => mutual follow
+  // If user is in my friend list => mutual
   const isInMyFriends = myFriends.some((fr) => fr.userId === userId);
 
-  // final button text
-  const finalButtonLabel = iAmFollowing || isInMyFriends ? "Following" : "Follow";
+  // final follow button label
+  // if account is private & we haven't requested => "Follow"
+  // if account is private & we have requested => "Requested"
+  // if account is public => "Follow" or "Following" as normal
+  let finalButtonLabel = "Follow";
+  if (iAmFollowing || isInMyFriends) {
+    finalButtonLabel = "Following";
+  } else if (!isPublic && followRequested) {
+    finalButtonLabel = "Requested";
+  }
 
-  // Show "Friends" label if in my friend list
   const showFriendsLabel = isInMyFriends;
 
-  // Follow/unfollow
+  // 4) handleFollowPress
   async function handleFollowPress() {
-    try {
-      if (finalButtonLabel === "Following") {
+    // If the user is already "Following," do an unfollow
+    if (finalButtonLabel === "Following") {
+      try {
         const resp = await unfollowUser(auth.currentUser.uid, userId);
         if (resp.ok) {
           setFollowersCount((prev) => Math.max(0, prev - 1));
           await fetchTheirFollowers();
           setMyFriends((prev) => prev.filter((f) => f.userId !== userId));
         }
-      } else {
+      } catch (error) {
+        console.error("Error unfollowing user:", error);
+      }
+      return;
+    }
+
+    // If the user is not following yet:
+    if (isPublic) {
+      // normal follow
+      try {
         const resp = await followUser(auth.currentUser.uid, userId);
         if (resp.ok) {
           setFollowersCount((prev) => prev + 1);
@@ -216,13 +232,25 @@ export default function UserProfiles({ navigation }) {
             setMyFriends(updatedFriends);
           }
         }
+      } catch (error) {
+        console.error("Error following user:", error);
       }
-    } catch (error) {
-      console.error("Error follow/unfollow:", error);
+    } else {
+      // If private => "Request to follow"
+      // Instead of normal follow logic, set local "requested" to true
+      setFollowRequested(true);
+
+      // Optionally, you'd make an API call to notify that user:
+      // e.g. createFollowRequest(followerId, followedId)
+      console.log("[DEBUG] Sent 'follow request' to private user");
+      Alert.alert(
+        "Request Sent",
+        "Your request to follow this private account was sent."
+      );
     }
   }
 
-  // Renders
+  // For listing tracks, rated, activity
   const renderTrack = ({ item }) => (
     <View style={styles.trackCard}>
       <Image source={item.image} style={styles.trackImage} />
@@ -263,6 +291,7 @@ export default function UserProfiles({ navigation }) {
     </View>
   );
 
+  // If still loading
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -271,6 +300,7 @@ export default function UserProfiles({ navigation }) {
     );
   }
 
+  // If no username
   if (!username) {
     return (
       <View style={styles.loader}>
@@ -278,6 +308,22 @@ export default function UserProfiles({ navigation }) {
       </View>
     );
   }
+
+  const currentUserId = auth.currentUser.uid;
+  const isSelf = currentUserId === userId;
+
+  // If user isPublic OR I'm them OR I'm following => full content
+  const canViewFullContent =
+    isPublic || isSelf || iAmFollowing || isInMyFriends;
+
+  // Debug
+  console.log("[DEBUG] userId:", userId);
+  console.log("[DEBUG] isPublic:", isPublic);
+  console.log("[DEBUG] iAmFollowing:", iAmFollowing);
+  console.log("[DEBUG] isInMyFriends:", isInMyFriends);
+  console.log("[DEBUG] isSelf:", isSelf);
+  console.log("[DEBUG] canViewFullContent:", canViewFullContent);
+  console.log("[DEBUG] followRequested:", followRequested);
 
   return (
     <View style={styles.container}>
@@ -289,28 +335,34 @@ export default function UserProfiles({ navigation }) {
       <FlatList
         ListHeaderComponent={
           <View style={styles.profileHeader}>
-            {/* Avatar */}
             <Image source={avatar} style={styles.avatar} />
             <View style={styles.headerInfo}>
               <Text style={styles.username}>{formatUsername(username)}</Text>
               <Text style={styles.stats}>Followers: {followersCount}</Text>
               <Text style={styles.stats}>Following: {followingCount}</Text>
 
-              {/* If isSpotifyLinked is true, show the Spotify logo */}
               {isSpotifyLinked && (
                 <View style={styles.spotifyContainer}>
                   <Image
                     source={require("../images/spotifyLogo.png")}
                     style={styles.spotifyLogo}
                   />
-                  <Text style={styles.spotifyText}>Spotify Connected</Text>
                 </View>
               )}
             </View>
 
-            {auth.currentUser.uid !== userId && (
+            {/* Follow button if not me */}
+            {!isSelf && (
               <View style={styles.followContainer}>
-                <TouchableOpacity style={styles.followButton} onPress={handleFollowPress}>
+                <TouchableOpacity
+                  style={
+                    finalButtonLabel === "Requested"
+                      ? styles.requestedButton
+                      : styles.followButton
+                  }
+                  onPress={handleFollowPress}
+                  disabled={finalButtonLabel === "Requested"}
+                >
                   <Text style={styles.followButtonText}>{finalButtonLabel}</Text>
                 </TouchableOpacity>
                 {showFriendsLabel && (
@@ -322,41 +374,47 @@ export default function UserProfiles({ navigation }) {
         }
         data={[]}
         ListFooterComponent={
-          <>
-            {/* Top Tracks Section */}
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Top Tracks</Text>
-              <FlatList
-                data={topTracks}
-                renderItem={renderTrack}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              />
-            </View>
+          canViewFullContent ? (
+            <>
+              {/* Top Tracks */}
+              <View style={styles.cardSection}>
+                <Text style={styles.sectionTitle}>Top Tracks</Text>
+                <FlatList
+                  data={topTracks}
+                  renderItem={renderTrack}
+                  keyExtractor={(item) => item.id}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                />
+              </View>
 
-            {/* Top Rated Section */}
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Top Rated</Text>
-              <FlatList
-                data={topRated}
-                renderItem={renderTopRated}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              />
-            </View>
+              {/* Top Rated */}
+              <View style={styles.cardSection}>
+                <Text style={styles.sectionTitle}>Top Rated</Text>
+                <FlatList
+                  data={topRated}
+                  renderItem={renderTopRated}
+                  keyExtractor={(item) => item.id}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                />
+              </View>
 
-            {/* Activity Section */}
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Activity</Text>
-              <FlatList
-                data={activity}
-                renderItem={renderActivity}
-                keyExtractor={(item) => item.id}
-              />
+              {/* Activity */}
+              <View style={styles.cardSection}>
+                <Text style={styles.sectionTitle}>Activity</Text>
+                <FlatList
+                  data={activity}
+                  renderItem={renderActivity}
+                  keyExtractor={(item) => item.id}
+                />
+              </View>
+            </>
+          ) : (
+            <View style={{ margin: 20 }}>
+              <Text style={styles.privateAccountText}>This Account is Private</Text>
             </View>
-          </>
+          )
         }
       />
 
@@ -368,6 +426,7 @@ export default function UserProfiles({ navigation }) {
   );
 }
 
+// styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -427,20 +486,26 @@ const styles = StyleSheet.create({
     height: 24,
     marginRight: 5,
   },
-  spotifyText: {
-    color: "#fff",
-    fontSize: 14,
-  },
   followContainer: {
     alignItems: "center",
     marginLeft: 10,
   },
+
+  // Normal follow button
   followButton: {
     backgroundColor: colours.lightblue,
     paddingVertical: 10,
     paddingHorizontal: 15,
     borderRadius: 5,
   },
+  // If user is private and "Requested" => grey button
+  requestedButton: {
+    backgroundColor: "#999",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+  },
+
   followButtonText: {
     color: "#fff",
     fontWeight: "bold",
@@ -526,5 +591,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 0,
     width: "100%",
+  },
+  privateAccountText: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: colours.lightblue,
+    textAlign: "center",
+    marginTop: 20,
   },
 });
