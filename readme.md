@@ -1,7 +1,3 @@
-Aleks4920: make a comprehensive readme for this project
-
-GitHub Copilot: Here is a comprehensive README for your project:
-
 # Treble
 
 ## Table of Contents
