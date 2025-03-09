@@ -201,6 +201,19 @@ const Sidebar = () => {
           />
           <Text style={styles.menuText}>Favourites</Text>
         </TouchableOpacity>
+
+
+
+        {/* ##################################################################################################### */}
+
+        <TouchableOpacity
+        style={styles.menuItem2}
+        onPress={() => navigation.navigate("MusicSwiperTest")}
+      >
+        <Text style={styles.menuText}>Test Swipe Game</Text>
+      </TouchableOpacity>
+
+        {/* ##################################################################################################### */}
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() => navigation.navigate("Connections")}

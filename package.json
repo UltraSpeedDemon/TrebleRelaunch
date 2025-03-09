@@ -19,6 +19,7 @@
     "@rneui/themed": "^4.0.0-rc.8",
     "@supabase/supabase-js": "^2.47.12",
     "@testing-library/react-native": "^13.0.0",
+    "autoprefixer": "^10.4.21",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "expo": "^52.0.37",
@@ -26,6 +27,7 @@
     "expo-av": "^15.0.2",
     "expo-font": "~13.0.3",
     "expo-image-picker": "~16.0.4",
+    "expo-linear-gradient": "^14.0.2",
     "expo-linking": "~7.0.4",
     "expo-media-library": "~17.0.5",
     "expo-random": "*",
@@ -35,8 +37,10 @@
     "express": "^4.21.2",
     "firebase": "^11.1.0",
     "install": "^0.13.0",
+    "lucide-react": "^0.479.0",
     "musicadvancedproject": "file:",
     "ngrok": "^5.0.0-beta.2",
+    "postcss": "^8.5.3",
     "react": "18.3.1",
     "react-native": "0.76.6",
     "react-native-async-storage": "^0.0.1",
@@ -48,7 +52,8 @@
     "react-native-vector-icons": "^10.2.0",
     "react-navigation": "^5.0.0",
     "react-test-renderer": "^18.3.1",
-    "realm": "^20.1.0"
+    "realm": "^20.1.0",
+    "tailwindcss": "^4.0.12"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

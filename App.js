@@ -35,6 +35,9 @@ import UserProfiles from './screens/UserProfiles';
 import SongPage from './screens/SongPage';
 import AlbumPage from './screens/AlbumPage';
 import ArtistPage from './screens/ArtistPage';
+import { MusicSwiper } from './screens/MusicSwiper';
+import { SongCardSwipe } from './screens/SongCardSwipe';
+import MusicSwiperTest from './screens/MusicSwiperTest';
 
 // Prepare the splash screen not to auto-hide
 SplashScreen.preventAutoHideAsync();
@@ -54,30 +57,30 @@ function WelcomeScreen({ navigation }) {
     const initializeSession = async () => {
       // Fade in, then fade out
       Animated.sequence([
-      Animated.parallel([
-        // Step 1: Fade In
+        Animated.parallel([
+          // Step 1: Fade In
+          Animated.timing(fadeAnim, {
+            toValue: 1, // Fully visible
+            duration: 1000, // Fade-in duration
+            useNativeDriver: true,
+          }),
+          Animated.timing(scaleAnim, {
+            toValue: 1, // Scale up slightly (20%)
+            duration: 2400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(rotateAnim, {
+            toValue: -1.4, // Rotate counterclockwise by 10 degrees
+            duration: 2600,
+            useNativeDriver: true,
+          }),
+        ]),
+        // Step 2: Fade Out
         Animated.timing(fadeAnim, {
-          toValue: 1, // Fully visible
-          duration: 1000, // Fade-in duration
+          toValue: 0, // Fully invisible
+          duration: 1000, // Fade-out duration
           useNativeDriver: true,
         }),
-        Animated.timing(scaleAnim, {
-          toValue: 1, // Scale up slightly (20%)
-          duration: 2400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(rotateAnim, {
-          toValue: -1.4, // Rotate counterclockwise by 10 degrees
-          duration: 2600,
-          useNativeDriver: true,
-        }),
-      ]),
-      // Step 2: Fade Out
-      Animated.timing(fadeAnim, {
-        toValue: 0, // Fully invisible
-        duration: 1000, // Fade-out duration
-        useNativeDriver: true,
-      }),
       ]).start(async () => {
         try {
           // Check for a saved session in SecureStore
@@ -185,6 +188,9 @@ export default function App() {
         <Stack.Screen name="SongPage" component={SongPage} />
         <Stack.Screen name="AlbumPage" component={AlbumPage} />
         <Stack.Screen name="ArtistPage" component={ArtistPage} />
+        <Stack.Screen name="MusicSwiper" component={MusicSwiper} />
+        <Stack.Screen name="SongCardSwipe" component={SongCardSwipe} />
+        <Stack.Screen name="MusicSwiperTest" component={MusicSwiperTest} />
       </Stack.Navigator>
     </NavigationContainer>
   );
