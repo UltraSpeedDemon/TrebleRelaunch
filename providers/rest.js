@@ -1,47 +1,59 @@
 //#region Local server request handlers
-export async function serverGet(endpoint, params=null) {
-    let url = `${getServerEndpointBase()}/${endpoint}`
+export async function serverGet(endpoint, params = null) {
+    let url = `${await getServerEndpointBase()}/${endpoint}`;
     try {
         if (params) {
-            const urlParams = new URLSearchParams(params).toString()
-            url += `?${urlParams}`
+            const urlParams = new URLSearchParams(params).toString();
+            url += `?${urlParams}`;
         }
-
-        return await fetch(url)
-    }
-    catch (e) {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch data from ${url}: ${response.statusText}`);
+        }
+        return response;
+    } catch (e) {
         console.error(e);
+        throw new Error(`Network request failed: ${e.message}`);
     }
 }
 
 export async function serverPost(endpoint, body) {
     try {
-      return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+        const response = await fetch(`${await getServerEndpointBase()}/${endpoint}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to post data to ${endpoint}: ${response.statusText}`);
+        }
+        return response;
     } catch (e) {
-      console.error(e);
+        console.error(e);
+        throw new Error(`Network request failed: ${e.message}`);
     }
-  }
+}
 
-  export async function serverPut(endpoint, body) {
+export async function serverPut(endpoint, body) {
     try {
-      return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+        const response = await fetch(`${await getServerEndpointBase()}/${endpoint}`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to put data to ${endpoint}: ${response.statusText}`);
+        }
+        return response;
     } catch (e) {
-      console.error(e);
+        console.error(e);
+        throw new Error(`Network request failed: ${e.message}`);
     }
-  }
-  
+}
 //#endregion
 
 //#region Custom request functions
@@ -110,11 +122,13 @@ export async function populateMetadata(reviewType, id) {
 
 // #endregion
 
-export function getServerEndpointBase() {
-    if (process.env.NODE_ENV === "development") {
-        return process.env.API_TUNNEL_URL ? process.env.API_TUNNEL_URL : `https://127.0.0.1:5000`;
+export async function getServerEndpointBase() {
+    
+    // return "https://treble-api-l9qo6.ondigitalocean.app/";
+
+    // if local server available use that, if not query the digital ocean server
+    if (process.env.REACT_APP_LOCAL_SERVER) {
+        return "http://localhost:5000";
     }
-    else {
-        return `https://${process.env.API_URL}`;
-    }
+    return "https://treble-api-l9qo6.ondigitalocean.app/";
 }

@@ -15,7 +15,6 @@ import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { saveSession } from "../utils/session";
 import colours from "../styles/colours";
 
-
 export default function Register({ navigation }) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -23,85 +22,83 @@ export default function Register({ navigation }) {
   const [avatar, setAvatar] = useState(null);
 
   const handlePickAvatar = async () => {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 1,
-      });
-  
-      if (!result.canceled) {
-        setAvatar(result.assets[0].uri);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setAvatar(result.assets[0].uri);
+    }
+  };
+
+  const handleRegister = async () => {
+    try {
+      // Validate input fields
+      if (!username || !email || !password) {
+        throw new Error("Please fill out all fields");
       }
-    };
 
-    const handleRegister = async () => {
-      try {
-        // Validate input fields
-        if (!username || !email || !password) {
-          throw new Error("Please fill out all fields");
-        }
-    
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-          throw new Error("Please enter a valid email");
-        }
-        if (password.length < 6) {
-          throw new Error("Password must be at least 6 characters");
-        }
-        if (username.length < 3) {
-          throw new Error("Username must be at least 3 characters");
-        }
-    
-        // Create user with Firebase Auth
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-    
-        // Save the username as displayName in Firebase Auth
-        await updateProfile(auth.currentUser, { displayName: username.trim().toLowerCase() });
-    
-        const payload = {
-          userId: user.uid,
-          username: username.trim().toLowerCase(),
-          email: email,
-          avatar: avatar, 
-          isPublic: true, // Update this with a checkbox in the UI later
-          spotifyAccessToken: "",
-          spotifyIsLinked: false,
-          spotifyRefreshToken: "",
-          createdAt: new Date().toISOString(),
-        };
-    
-        // Call your Orient endpoint to create the user record
-        const response = await createUser(payload);
-        const data = await response.json();
-        if (!response.ok) {
-          // The server route returns 409 if username is taken
-          if (response.status === 409) {
-            throw new Error(data.error || "Username already exists");
-          }
-          // Otherwise, some other error
-          throw new Error(data.error || "Error creating user in backend");
-        }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        throw new Error("Please enter a valid email");
+      }
+      if (password.length < 6) {
+        throw new Error("Password must be at least 6 characters");
+      }
+      if (username.length < 3) {
+        throw new Error("Username must be at least 3 characters");
+      }
 
-        //duplicate email
+      // Create user with Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Save the username as displayName in Firebase Auth
+      await updateProfile(auth.currentUser, { displayName: username.trim().toLowerCase() });
+
+      const payload = {
+        userId: user.uid,
+        username: username.trim().toLowerCase(),
+        email: email,
+        avatar: avatar,
+        isPublic: true, // Update this with a checkbox in the UI later
+        spotifyAccessToken: "",
+        spotifyIsLinked: false,
+        spotifyRefreshToken: "",
+        createdAt: new Date().toISOString(),
+      };
+
+      // Call your Orient endpoint to create the user record
+      const response = await createUser(payload);
+      const data = await response.json();
+
+      // Log the response for debugging
+      console.log("Server response:", response);
+      console.log("Response data:", data);
+
+      if (!response.ok) {
+        // The server route returns 409 if username is taken
         if (response.status === 409) {
-          throw new Error("Email already exists");
+          throw new Error(data.error || "Username already exists");
         }
-    
-        // Save the user session and navigate to the main screen
-        await saveSession("userUid", user.uid);
-        navigation.replace("Feed");
-      } catch (error) {
-        Alert.alert("Error", error.message);
+        // Otherwise, some other error
+        throw new Error(data.error || "Error creating user in backend");
       }
-    };
-  
+
+      // Save the user session and navigate to the main screen
+      await saveSession("userUid", user.uid);
+      navigation.replace("Feed");
+    } catch (error) {
+      Alert.alert("Error", error.message);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <Text style={styles.largeText}>Register</Text>
-
 
       <Text style={styles.text}>Username</Text>
       <TextInput
