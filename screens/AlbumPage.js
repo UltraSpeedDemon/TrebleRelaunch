@@ -15,7 +15,7 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { getUser, populateMetadata } from "../providers/rest";
+import { getUser, populateMetadata, getLike, unlike, like } from "../providers/rest";
 
 export default function AlbumPage({ route, navigation }) {
   const { album } = route.params; // Expecting "album" passed from navigation
@@ -83,13 +83,63 @@ export default function AlbumPage({ route, navigation }) {
     fetchUserData();
   }, [navigation]);
 
+  useEffect(() => {
+      async function checkLikeStatus() {
+        try {
+          const currentUser = auth.currentUser;
+          if (!currentUser) return;
+          const response = await getLike(currentUser.uid, album.id, album.type);
+          if (!response.ok) {
+            setLiked(false);
+            return;
+          }
+          const data = await response.json();
+          setLiked(data.liked);
+        } catch (error) {
+          console.error("Error checking like status:", error);
+        }
+      }
+      checkLikeStatus();
+    }, [album.id]);
+
   // Sort reviews by upvotes desc
   const getSortedReviews = () => {
     return [...reviews].sort((a, b) => b.upvotes - a.upvotes);
   };
 
   // Handlers
-  const handleLikeAlbum = () => setLiked(!liked);
+    // Handler logic
+    const handleLikeAlbum = async () => {
+      try {
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          Alert.alert("Error", "User not logged in");
+          return;
+        }
+        if (!liked) {
+          // Call the API to like the song
+          const response = await like(currentUser.uid, album.id, album.type);
+          if (!response.ok) {
+            throw new Error("Failed to like the album");
+          }
+          const data = await response.json();
+          console.log("Album liked successfully:", data);
+          setLiked(true);
+        } else {
+          // Call the API to unlike the song
+          const response = await unlike(currentUser.uid, album.id, album.type);
+          if (!response.ok) {
+            throw new Error("Failed to unlike the album");
+          }
+          const data = await response.json();
+          console.log("Album unliked successfully:", data);
+          setLiked(false);
+        }
+      } catch (error) {
+        console.error("Error toggling like status:", error);
+        Alert.alert("Error", "Unable to toggle like status");
+      }
+    };  
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
   const handleToggleFavourite = () => setFavourite(!favourite);
   const handleShare = () => console.log("Album shared!");

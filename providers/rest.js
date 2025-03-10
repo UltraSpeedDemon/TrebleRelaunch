@@ -106,6 +106,19 @@ export async function getFriends(userId) {
   return await serverGet(`users/${userId}/friends`);
 }
 
+export async function like(userId, musicId, type) {
+  return await serverPost("users/like", { user_id: userId, music_id: musicId, type: type });
+}
+
+export async function unlike(userId, musicId, type) {
+  return await serverPost("users/unlike", { user_id: userId, music_id: musicId, type: type });
+}
+
+export async function getLike(userId, musicId, type) {
+  return await serverGet("users/like", { user_id: userId, music_id: musicId, type: type });
+}
+
+
 // #endregion
   
 // #region metadata endpoints
