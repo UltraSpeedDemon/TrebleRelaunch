@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from "react-native";
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { Chip } from "@rneui/base";
@@ -17,38 +18,51 @@ import BottomNavbar from "../components/BottomNavbar";
 import useFetchUserData from "../hooks/useFetchUserData";
 import SectionDivider from "../components/SectionDivider";
 import MusicCard from "../components/MusicCard";
-import { followUser, unfollowUser, postSearchResults } from "../providers/rest";
+import {
+  followUser,
+  unfollowUser,
+  postSearchResults,
+  getFollowRequests,
+  requestFollow,
+  getFollowers,
+  getFriends,
+} from "../providers/rest";
 import colours from "../styles/colours";
 
 export default function Search({ navigation, route }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchResult, setSearchResults] = useState(null);
   const [followingUsers, setFollowingUsers] = useState({});
+  const [notificationsCount, setNotificationsCount] = useState(0);
+  // Dictionary to track follow-request status per user in search results
+  const [followRequests, setFollowRequests] = useState({});
+
   const { searchQuery } = route.params;
 
-  // Custom hook to fetch the current user data
+  // Get current user data
   const {
     username,
-    userId,
+    userId: currentUserId,
     isSpotifyLinked,
     spotifyAccessToken,
     spotifyRefreshToken,
     loading,
+    isPublic: currentUserIsPublic,
   } = useFetchUserData();
 
-  // Fetch search results from backend
+  // Fetch search results from the backend
   async function getSearchResults() {
     try {
       const results = await postSearchResults(searchQuery, auth.currentUser.uid);
       const json = await results.json();
-      console.log("Search results:", json); // Debug: see the entire result array
+      console.log("Search results:", json);
       setSearchResults(json);
     } catch (error) {
       console.error("Error fetching search results:", error);
     }
   }
 
-  // Reducer for toggling filters: songs, albums, artists, users
+  // Reducer for toggling filters: Songs, Albums, Artists, Users
   const [filter, dispatchFilter] = useReducer(
     (state, action) => {
       switch (action.type) {
@@ -96,49 +110,115 @@ export default function Search({ navigation, route }) {
     getSearchResults();
   }, []);
 
-  // Follow/unfollow user
-  const handleFollow = async (user) => {
-    try {
-      console.log("Following user:", user);
-      const response = await followUser(auth.currentUser.uid, user.userId);
-      if (response.ok) {
-        setFollowingUsers((prev) => ({ ...prev, [user.userId]: true }));
-        console.log("Successfully followed user:", user.userId);
-      } else {
-        console.log("Failed to follow user");
+  // Fetch notifications count for the current user (follow requests)
+  useEffect(() => {
+    async function fetchNotificationsCount() {
+      try {
+        const resp = await getFollowRequests(auth.currentUser.uid);
+        if (resp.ok) {
+          const requests = await resp.json();
+          setNotificationsCount(requests.length);
+        }
+      } catch (error) {
+        console.error("Error fetching notifications count:", error);
       }
-    } catch (error) {
-      console.error("Error following user:", error);
     }
-  };
+    fetchNotificationsCount();
+  }, []);
 
-  const handleUnfollow = async (user) => {
+  // For each user search result, check if the current user already requested to follow
+  useEffect(() => {
+    async function checkFollowRequestForUser(userId) {
+      try {
+        const resp = await getFollowRequests(userId);
+        if (resp.ok) {
+          const requests = await resp.json();
+          const alreadyRequested = requests.some(
+            (req) => req.userId === auth.currentUser.uid
+          );
+          setFollowRequests((prev) => ({ ...prev, [userId]: alreadyRequested }));
+        }
+      } catch (error) {
+        console.error("Error fetching follow request status for user", userId, error);
+      }
+    }
+    if (searchResult) {
+      searchResult.forEach((item) => {
+        if (item.type === "user") {
+          checkFollowRequestForUser(item.userId);
+        }
+      });
+    }
+  }, [searchResult]);
+
+  // Handle follow action for a target user
+  async function handleFollow(targetUser) {
+    // Convert isPublic to a boolean if needed
+    const userIsPublic =
+      targetUser.isPublic === true || targetUser.isPublic === "true";
+    if (userIsPublic) {
+      try {
+        const resp = await followUser(auth.currentUser.uid, targetUser.userId);
+        if (resp.ok) {
+          setFollowingUsers((prev) => ({ ...prev, [targetUser.userId]: true }));
+        }
+      } catch (error) {
+        console.error("Error following user:", error);
+      }
+    } else {
+      // For private accounts: send a follow request if one hasn't been made already.
+      if (!followRequests[targetUser.userId]) {
+        try {
+          const resp = await requestFollow(auth.currentUser.uid, targetUser.userId);
+          if (resp.ok) {
+            setFollowRequests((prev) => ({ ...prev, [targetUser.userId]: true }));
+            Alert.alert(
+              "Request Sent",
+              "Your request to follow this private account was sent."
+            );
+          } else {
+            console.error("Failed to request follow");
+          }
+        } catch (error) {
+          console.error("Error requesting follow:", error);
+        }
+      }
+    }
+  }
+
+  async function handleUnfollow(targetUser) {
     try {
-      console.log("Unfollowing user:", user.userId);
-      const response = await unfollowUser(auth.currentUser.uid, user.userId);
+      const response = await unfollowUser(auth.currentUser.uid, targetUser.userId);
       if (response.ok) {
-        setFollowingUsers((prev) => ({ ...prev, [user.userId]: false }));
-        console.log("Successfully unfollowed user:", user.userId);
-      } else {
-        console.log("Failed to unfollow user");
+        setFollowingUsers((prev) => ({ ...prev, [targetUser.userId]: false }));
       }
     } catch (error) {
       console.error("Error unfollowing user:", error);
     }
+  }
+
+  // Helper: Capitalize the first letter of a username
+  const formatUsername = (name) => {
+    if (!name) return "";
+    return name.charAt(0).toUpperCase() + name.slice(1);
   };
 
-  // Which sections to show
-  const shouldShowTrack = !filter.albumOnly && !filter.artistOnly && !filter.userOnly;
-  const shouldShowAlbum = !filter.songOnly && !filter.artistOnly && !filter.userOnly;
-  const shouldShowArtist = !filter.songOnly && !filter.albumOnly && !filter.userOnly;
-  const shouldShowUser = !filter.songOnly && !filter.albumOnly && !filter.artistOnly;
+  // Determine which sections to show
+  const shouldShowTrack =
+    !filter.albumOnly && !filter.artistOnly && !filter.userOnly;
+  const shouldShowAlbum =
+    !filter.songOnly && !filter.artistOnly && !filter.userOnly;
+  const shouldShowArtist =
+    !filter.songOnly && !filter.albumOnly && !filter.userOnly;
+  const shouldShowUser =
+    !filter.songOnly && !filter.albumOnly && !filter.artistOnly;
 
   return (
     <View style={styles.container}>
       {/* Search Bar */}
       <SearchBar />
 
-      {/* Notifications Icon */}
+      {/* Notifications Icon with Badge */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -147,6 +227,13 @@ export default function Search({ navigation, route }) {
           source={require("../images/notificationsIcon2.png")}
           style={styles.notifIcon}
         />
+        {notificationsCount > 0 && (
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>
+              {notificationsCount}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Sidebar */}
@@ -192,27 +279,23 @@ export default function Search({ navigation, route }) {
                     <View key="SongsView">
                       <SectionDivider title="Songs" />
                       {searchResult.map((item) => {
-                      
-                        // Adjust condition if your backend uses "song" instead of "track"
                         if (item.type === "track") {
-                          console.log("Navigating to SongPage with item:", item.id);
                           return (
-                              <MusicCard
+                            <MusicCard
                               key={item.id}
                               id={item.id}
                               image={item.image}
                               name={item.name}
                               artist={item.artist}
                               album={item.album}
-                              // When the card is pressed, go to SongPage
                               onPressCard={() =>
                                 navigation.navigate("SongPage", {
-                                  track: item, // pass the full track object or just an ID
+                                  track: item,
                                 })
                               }
                             />
-                            );
-                          }
+                          );
+                        }
                         return null;
                       })}
                     </View>
@@ -220,85 +303,102 @@ export default function Search({ navigation, route }) {
 
                   {/* Albums Section */}
                   {shouldShowAlbum && (
-                  <View key="AlbumsView">
-                    <SectionDivider title="Albums" />
-                    {searchResult.map((item) => {
-                      if (item.type === "album") {
-                        return (
-                          <MusicCard
-                            key={item.id}
-                            id={item.id}
-                            image={item.image}
-                            name={item.name}
-                            artist={item.artist}
-                            // Press goes to AlbumPage with { album: item }
-                            onPressCard={() =>
-                              navigation.navigate("AlbumPage", {
-                                album: item, // <-- pass it as 'album'
-                              })
-                            }
-                          />
-                        );
-                      }
-                      return null;
-                    })}
-                  </View>
-                )}
+                    <View key="AlbumsView">
+                      <SectionDivider title="Albums" />
+                      {searchResult.map((item) => {
+                        if (item.type === "album") {
+                          return (
+                            <MusicCard
+                              key={item.id}
+                              id={item.id}
+                              image={item.image}
+                              name={item.name}
+                              artist={item.artist}
+                              onPressCard={() =>
+                                navigation.navigate("AlbumPage", {
+                                  album: item,
+                                })
+                              }
+                            />
+                          );
+                        }
+                        return null;
+                      })}
+                    </View>
+                  )}
 
                   {/* Artists Section */}
-                {shouldShowArtist && (
-                <View key="ArtistsView">
-                  <SectionDivider title="Artists" />
-                  {searchResult.map((item) => {
-                    if (item.type === "artist") {
-                      return (
-                        <MusicCard
-                          key={item.id}
-                          id={item.id}
-                          image={item.image}
-                          artist={item.name}
-                          onPressCard={() =>
-                            navigation.navigate("ArtistPage", {
-                              artist: item, // pass the data as 'artist'
-                            })
-                          }
-                        />
-                      );
-                    }
-                    return null;
-                  })}
-                </View>
-              )}
+                  {shouldShowArtist && (
+                    <View key="ArtistsView">
+                      <SectionDivider title="Artists" />
+                      {searchResult.map((item) => {
+                        if (item.type === "artist") {
+                          return (
+                            <MusicCard
+                              key={item.id}
+                              id={item.id}
+                              image={item.image}
+                              artist={item.name}
+                              onPressCard={() =>
+                                navigation.navigate("ArtistPage", {
+                                  artist: item,
+                                })
+                              }
+                            />
+                          );
+                        }
+                        return null;
+                      })}
+                    </View>
+                  )}
+
                   {/* Users Section */}
                   {shouldShowUser && (
                     <View key="UsersView">
                       <SectionDivider title="Users" />
                       {searchResult.map((item) => {
                         if (item.type === "user") {
-                          const isCurrentUser = item.userId === auth.currentUser.uid;
-                          const isFollowing = followingUsers.hasOwnProperty(item.userId)
+                          const isCurrentUser =
+                            item.userId === auth.currentUser.uid;
+                          const isFollowing = followingUsers.hasOwnProperty(
+                            item.userId
+                          )
                             ? followingUsers[item.userId]
                             : item.isFollowing;
+                          const alreadyRequested =
+                            followRequests[item.userId] || false;
 
+                          // Convert the isPublic value to a boolean
+                          const userIsPublic =
+                            item.isPublic === true || item.isPublic === "true";
+                          let finalButtonLabel = "Follow";
+                          if (isFollowing) {
+                            finalButtonLabel = "Following";
+                          } else if (!userIsPublic && alreadyRequested) {
+                            finalButtonLabel = "Requested";
+                          }
                           const onFollow = !isCurrentUser
                             ? () => {
-                                if (isFollowing) handleUnfollow(item);
-                                else handleFollow(item);
+                                if (isFollowing) {
+                                  handleUnfollow(item);
+                                } else {
+                                  handleFollow(item);
+                                }
                               }
                             : undefined;
-
                           const canFollow = !isCurrentUser;
                           return (
                             <MusicCard
                               key={item.userId}
                               id={item.userId}
-                              name={item.username}
-                              image={item.avatar}
+                              name={formatUsername(item.username)}
+                              image={item.avatar2}
+                              isPublic={item.isPublic}
                               onFollow={onFollow}
                               isFollowing={isFollowing}
+                              buttonLabel={finalButtonLabel}
                               userCard={true}
                               canFollow={canFollow}
-                              // Navigate to user profile on card press
                               onPressCard={() =>
                                 navigation.navigate("UserProfiles", {
                                   userId: item.userId,
@@ -345,6 +445,23 @@ const styles = StyleSheet.create({
     left: 10,
     top: 2,
   },
+  notificationBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    backgroundColor: "red",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  notificationBadgeText: {
+    color: "black",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
   sideMenu: {
     position: "absolute",
     top: 40,
@@ -369,10 +486,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: "100%",
   },
+  // Chip container styling as requested.
   chipContainer: {
     flexDirection: "row",
+    justifyContent: "center",
     gap: 10,
-    marginLeft: 18,
     marginVertical: 10,
   },
 });

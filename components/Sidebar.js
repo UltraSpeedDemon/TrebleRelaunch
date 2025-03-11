@@ -97,10 +97,17 @@ const Sidebar = () => {
     },
   });
 
+   // Helper: Capitalize the first letter of the username.
+   const formatUsername = (name) => {
+    if (!name) return "";
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  };
 
   const handleLogout = () => {
     auth.signOut().then(() => navigation.navigate("Home"));
   };
+
+   const avatar2 = auth.currentUser.photoURL;
 
   return (
     <View style={styles.container}>
@@ -129,11 +136,11 @@ const Sidebar = () => {
         <View style={styles.profileSection}>
           <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
             <Image
-              source={avatar ? { uri: avatar } : require('../images/avatarIcon.png')}
+              source={avatar2 ? { uri: avatar } : require('../images/avatarIcon.png')}
               style={styles.avatar}
             />
           </TouchableOpacity>
-          <Text style={styles.profileName}>{username || "Loading..."}</Text>
+          <Text style={styles.profileName}>{formatUsername(username) || "Loading..."}</Text>
           <Text style={styles.profileName2}>{email}</Text>
           <TouchableOpacity onPress={() => navigation.navigate("EditProfile")}>
               <Text style={styles.editAccount}>Edit Account</Text>

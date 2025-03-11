@@ -66,7 +66,7 @@ export default function EditProfile({ navigation }) {
       setUsername(finalUsername);
       setOriginalUsername(finalUsername);
       setEmail(finalEmail);
-      setAvatar(finalAvatar);
+      
 
       // isPublic
       if (typeof orientData.isPublic === "boolean") {

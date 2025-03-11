@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Image,
   StyleSheet,
@@ -11,7 +10,7 @@ import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
 import { auth } from "../utils/firebase";
-import { getUser, updateUser } from "../providers/rest";
+import { getUser, updateUser, getFollowRequests } from "../providers/rest";
 import * as AuthSession from "expo-auth-session";
 import { SPOTIFY_CLIENT_ID, REDIRECT_URI, SPOTIFY_SCOPES } from "@env";
 import { discovery, setAccessToken, setRefreshToken } from "../utils/spotifyAuth";
@@ -19,6 +18,25 @@ import SearchBar from "../components/SearchBar";
 
 export default function Feed({ navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // For testing, set a static count (replace this with your API call as needed)
+  const [notificationsCount, setNotificationsCount] = useState(3);
+
+  // Example: Fetch notifications count based on follow requests
+  useEffect(() => {
+    async function fetchNotificationsCount() {
+      try {
+        const resp = await getFollowRequests(auth.currentUser.uid);
+        if (!resp.ok) {
+          throw new Error("Failed to fetch follow requests");
+        }
+        const requests = await resp.json();
+        setNotificationsCount(requests.length);
+      } catch (error) {
+        console.error("Error fetching notifications count:", error);
+      }
+    }
+    fetchNotificationsCount();
+  }, []);
 
   const handleSpotifyReAuth = async () => {
     const [request, response, promptAsync] = AuthSession.useAuthRequest(
@@ -32,9 +50,8 @@ export default function Feed({ navigation }) {
     );
 
     useEffect(() => {
-      if (response?.type === 'success' && response.params?.code) {
-        // Handle the response and save the new tokens
-        // You can use the same logic as in your Connections.js file
+      if (response?.type === "success" && response.params?.code) {
+        // Handle the response and save the new tokens as needed
       }
     }, [response]);
 
@@ -46,7 +63,6 @@ export default function Feed({ navigation }) {
     if (!currentUser) return;
 
     try {
-      // Retrieve user data from Orient using getUser endpoint
       const userData = await getUser(currentUser.uid);
       const refreshToken = userData.spotifyRefreshToken;
 
@@ -62,15 +78,17 @@ export default function Feed({ navigation }) {
             );
 
             if (refreshResult.accessToken) {
-              // Update the user in Orient with the new tokens using updateUser endpoint
               await updateUser(currentUser.uid, {
                 spotifyAccessToken: refreshResult.accessToken,
-                spotifyRefreshToken: refreshResult.refreshToken ?? refreshToken,
+                spotifyRefreshToken:
+                  refreshResult.refreshToken ?? refreshToken,
               });
               setAccessToken(refreshResult.accessToken);
               setRefreshToken(refreshResult.refreshToken ?? refreshToken);
             } else {
-              console.log("Failed to refresh token, re-authentication required");
+              console.log(
+                "Failed to refresh token, re-authentication required"
+              );
               handleSpotifyReAuth();
             }
           } else {
@@ -79,7 +97,9 @@ export default function Feed({ navigation }) {
         } catch (error) {
           console.log("Error refreshing token", error);
           if (error.message.includes("Refresh token revoked")) {
-            console.log("Refresh token revoked, re-authentication required");
+            console.log(
+              "Refresh token revoked, re-authentication required"
+            );
             handleSpotifyReAuth();
           }
         }
@@ -98,12 +118,22 @@ export default function Feed({ navigation }) {
       {/* Search Bar */}
       <SearchBar />
 
-      {/* Notifications Button */}
-      <TouchableOpacity style={styles.notificationsIcon} onPress={() => navigation.navigate("Notifications")}>
+      {/* Notifications Button with Badge */}
+      <TouchableOpacity
+        style={styles.notificationsIcon}
+        onPress={() => navigation.navigate("Notifications")}
+      >
         <Image
           source={require("../images/notificationsIcon2.png")}
           style={styles.notifIcon}
         />
+        {notificationsCount > 0 && (
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>
+              {notificationsCount}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Sidebar */}
@@ -114,7 +144,9 @@ export default function Feed({ navigation }) {
       {/* Main Content */}
       <View style={styles.content}>
         <Text style={styles.header}>Feed</Text>
-        <Text style={styles.subText}>Catch up with the latest posts and updates!</Text>
+        <Text style={styles.subText}>
+          Catch up with the latest posts and updates!
+        </Text>
       </View>
 
       {/* Bottom Navigation Bar */}
@@ -130,23 +162,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colours.bluegrey,
   },
-  searchBar: {
-    position: "absolute",
-    width: "70%",
-    height: 40,
-    top: 70,
-    left: "15%",
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colours.lightblue,
-    backgroundColor: colours.darkblue,
-  },
-  searchInput: {
-    fontSize: 16,
-    color: "#fff",
-  },
   notificationsIcon: {
     width: 40,
     height: 40,
@@ -154,17 +169,29 @@ const styles = StyleSheet.create({
     top: 70,
     right: 20,
   },
-  icon: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "contain",
-  },
   notifIcon: {
     width: "90%",
     height: "90%",
     resizeMode: "contain",
     left: 10,
     top: 2,
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    backgroundColor: "red",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10, // ensures the badge appears above other elements
+  },
+  notificationBadgeText: {
+    color: "black",
+    fontSize: 12,
+    fontWeight: "bold",
   },
   sideMenu: {
     position: "absolute",

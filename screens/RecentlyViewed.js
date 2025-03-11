@@ -41,38 +41,6 @@ export default function RecentlyViewed({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Search Bar */}
-      <Animated.View
-        style={[
-          styles.searchBar,
-          {
-            transform: [
-              {
-                translateX: searchAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [300, 0],
-                }),
-              },
-            ],
-            width: searchWidth,
-            opacity: searchOpacity,
-          },
-        ]}
-      >
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search recently viewed..."
-          placeholderTextColor="#fff"
-        />
-      </Animated.View>
-
-      {/* Search Icon */}
-      <TouchableOpacity style={styles.searchIcon} onPress={toggleSearch}>
-        <Image
-          source={require("../images/blackSearchIcon.png")}
-          style={styles.icon}
-        />
-      </TouchableOpacity>
 
       {/* Sidebar */}
       <View style={styles.sideMenu}>

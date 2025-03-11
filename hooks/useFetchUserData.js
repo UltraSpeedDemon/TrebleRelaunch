@@ -8,7 +8,9 @@ const useFetchUserData = () => {
   const [isSpotifyLinked, setIsSpotifyLinked] = useState(false);
   const [spotifyAccessToken, setSpotifyAccessToken] = useState('');
   const [spotifyRefreshToken, setSpotifyRefreshToken] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);  
+  // isPublic from DB
+  const [isPublic, setIsPublic] = useState(true);
   
   const navigation = useNavigation();
 
@@ -27,7 +29,8 @@ const useFetchUserData = () => {
         throw new Error('Failed to fetch user data from OrientDB.');
       }
       const userData = await orientRes.json();
-
+      
+      setIsPublic(userData.isPublic);
       setUsername(userData.username || displayName);
       if (userData.spotifyAccessToken && userData.spotifyRefreshToken) {
         setSpotifyAccessToken(userData.spotifyAccessToken);
@@ -45,7 +48,7 @@ const useFetchUserData = () => {
     fetchUserData();
   }, []);
 
-  return { username, isSpotifyLinked, spotifyAccessToken, spotifyRefreshToken, loading };
+  return { username, isSpotifyLinked, spotifyAccessToken, spotifyRefreshToken, loading, isPublic };
 };
 
 export default useFetchUserData;

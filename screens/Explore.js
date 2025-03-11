@@ -1,8 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Image,
   StyleSheet,
@@ -12,11 +11,14 @@ import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-
+import { auth } from "../utils/firebase";
+import { getFollowRequests } from "../providers/rest";
 
 export default function Explore({ navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notificationsCount, setNotificationsCount] = useState(0);
 
+  // Example data for sections
   const topReviewed = [
     { id: "1", name: "I Wonder", artist: "Kanye West", image: require("../images/albumImage.jpg") },
     { id: "2", name: "Stronger", artist: "Kanye West", image: require("../images/albumImage.jpg") },
@@ -31,6 +33,22 @@ export default function Explore({ navigation }) {
     { id: "5", name: "Graduation", artist: "Kanye West", image: require("../images/albumImage.jpg") },
   ];
 
+  // Fetch notifications count (number of follow requests)
+  useEffect(() => {
+    async function fetchNotificationsCount() {
+      try {
+        const resp = await getFollowRequests(auth.currentUser.uid);
+        if (resp.ok) {
+          const requests = await resp.json();
+          setNotificationsCount(requests.length);
+        }
+      } catch (error) {
+        console.error("Error fetching notifications count:", error);
+      }
+    }
+    fetchNotificationsCount();
+  }, []);
+
   const renderTrackCard = ({ item }) => (
     <View style={styles.trackCard}>
       <Image source={item.image} style={styles.trackImage} />
@@ -44,7 +62,7 @@ export default function Explore({ navigation }) {
       {/* Search Bar */}
       <SearchBar />
 
-      {/* Notifications Button */}
+      {/* Notifications Button with Badge */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -53,6 +71,13 @@ export default function Explore({ navigation }) {
           source={require("../images/notificationsIcon2.png")}
           style={styles.notifIcon}
         />
+        {notificationsCount > 0 && (
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>
+              {notificationsCount}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Sidebar */}
@@ -119,10 +144,6 @@ const styles = StyleSheet.create({
     backgroundColor: colours.darkblue,
     zIndex: 1,
   },
-  searchInput: {
-    fontSize: 16,
-    color: "#fff",
-  },
   notificationsIcon: {
     width: 40,
     height: 40,
@@ -138,6 +159,23 @@ const styles = StyleSheet.create({
     left: 10,
     top: 2,
   },
+  notificationBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    backgroundColor: "red",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  notificationBadgeText: {
+    color: "black",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
   sideMenu: {
     position: "absolute",
     top: 40,
@@ -149,7 +187,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-},
+  },
   content: {
     marginTop: 130, // Ensures content starts below the search bar
   },
@@ -185,18 +223,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#aaa",
   },
-  footer: {
-    marginVertical: 20,
-    alignItems: "center",
-  },
-  footerText: {
-    fontSize: 14,
-    color: "#000",
-  },
   bottomNavBar: {
     position: "absolute",
     bottom: 0,
     width: "100%",
   },
 });
-

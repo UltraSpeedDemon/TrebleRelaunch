@@ -253,9 +253,9 @@ export default function Profile({ navigation }) {
             </View>
 
             {/* Activity Section */}
-            <View style={styles.cardSection}>
+            <View style={styles.cardSectionActivity}>
               <Text style={styles.sectionTitle}>Activity</Text>
-              <Text style={styles.stats}>Total Reviews: {reviews}</Text>
+              <Text style={styles.totalActivity}>Total Reviews: {reviews}</Text>
               <FlatList
                 data={activity}
                 renderItem={renderActivity}
@@ -324,6 +324,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#fff",
   },
+  totalActivity: {
+    fontSize: 14,
+    marginBottom: 7,
+    fontWeight: "bold",
+    color: "#fff",
+  },
   spotifyContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -353,6 +359,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginHorizontal: 10,
     marginVertical: 10,
+  },
+  cardSectionActivity: {
+    backgroundColor: colours.darkblue,
+    padding: 10,
+    borderRadius: 10,
+    marginHorizontal: 10,
+    marginVertical: 10,
+    marginBottom: 100,
   },
   sectionTitle: {
     fontSize: 18,

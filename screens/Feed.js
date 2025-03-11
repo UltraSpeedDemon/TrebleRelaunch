@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   Image,
   FlatList,
@@ -13,14 +12,15 @@ import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
 import SearchBar from "../components/SearchBar";
-
-//MusicProject123
+import { auth } from "../utils/firebase";
+import { getFollowRequests } from "../providers/rest";
 
 export default function Feed({ navigation, route }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [feedItems, setFeedItems] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [mockComments, setMockComments] = useState([]);
+  const [notificationsCount, setNotificationsCount] = useState(0);
 
   useEffect(() => {
     const fetchFeedItems = () => {
@@ -174,7 +174,6 @@ export default function Feed({ navigation, route }) {
         },
       ];
       
-
       setMockComments(mockCommentsData);
       setFeedItems([...mockPosts, ...mockCommentsData].sort(() => Math.random() - 0.5));
     };
@@ -212,6 +211,22 @@ export default function Feed({ navigation, route }) {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1000);
   };
+
+  // Fetch notifications count (number of follow requests)
+  useEffect(() => {
+    async function fetchNotificationsCount() {
+      try {
+        const resp = await getFollowRequests(auth.currentUser.uid);
+        if (resp.ok) {
+          const requests = await resp.json();
+          setNotificationsCount(requests.length);
+        }
+      } catch (error) {
+        console.error("Error fetching notifications count:", error);
+      }
+    }
+    fetchNotificationsCount();
+  }, []);
 
   const renderFeedItem = ({ item }) => {
     if (item.type === "post") {
@@ -274,16 +289,15 @@ export default function Feed({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-
       {/* Sidebar */}
       <View style={styles.sideMenu}>
-                 <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
-            </View>
+        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+      </View>
 
       {/* Search Bar */}
       <SearchBar />
 
-      {/* Notifications Button */}
+      {/* Notifications Button with Badge */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -292,6 +306,13 @@ export default function Feed({ navigation, route }) {
           source={require("../images/notificationsIcon2.png")}
           style={styles.notifIcon}
         />
+        {notificationsCount > 0 && (
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>
+              {notificationsCount}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Feed List */}
@@ -322,6 +343,7 @@ export default function Feed({ navigation, route }) {
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
+
     </View>
   );
 }
@@ -342,7 +364,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-},
+  },
   searchBar: {
     position: "absolute",
     width: "70%",
@@ -373,6 +395,23 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
     left: 10,
     top: 2,
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    backgroundColor: "red",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  notificationBadgeText: {
+    color: "black",
+    fontSize: 12,
+    fontWeight: "bold",
   },
   content: {
     flex: 1,
@@ -478,7 +517,7 @@ const styles = StyleSheet.create({
   },
   addPostButton: {
     position: "absolute",
-    bottom: 100,
+    bottom: 120,
     right: 20,
     width: 60,
     height: 60,

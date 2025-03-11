@@ -1,99 +1,93 @@
+// /providers/rest.js
 //#region Local server request handlers
 export async function serverGet(endpoint, params = null) {
-    let url = `${await getServerEndpointBase()}/${endpoint}`;
-    try {
-        if (params) {
-            const urlParams = new URLSearchParams(params).toString();
-            url += `?${urlParams}`;
-        }
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch data from ${url}: ${response.statusText}`);
-        }
-        return response;
-    } catch (e) {
-        console.error(e);
-        throw new Error(`Network request failed: ${e.message}`);
+  let url = `${getServerEndpointBase()}/${endpoint}`;
+  try {
+    if (params) {
+      const urlParams = new URLSearchParams(params).toString();
+      url += `?${urlParams}`;
     }
+    return await fetch(url); // no parse here, let caller .json()
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 export async function serverPost(endpoint, body) {
-    try {
-        const response = await fetch(`${await getServerEndpointBase()}/${endpoint}`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(body),
-        });
-        if (!response.ok) {
-            throw new Error(`Failed to post data to ${endpoint}: ${response.statusText}`);
-        }
-        return response;
-    } catch (e) {
-        console.error(e);
-        throw new Error(`Network request failed: ${e.message}`);
-    }
+  try {
+    return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 export async function serverPut(endpoint, body) {
-    try {
-        const response = await fetch(`${await getServerEndpointBase()}/${endpoint}`, {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(body),
-        });
-        if (!response.ok) {
-            throw new Error(`Failed to put data to ${endpoint}: ${response.statusText}`);
-        }
-        return response;
-    } catch (e) {
-        console.error(e);
-        throw new Error(`Network request failed: ${e.message}`);
-    }
+  try {
+    return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.error(e);
+  }
 }
+
 //#endregion
 
 //#region Custom request functions
 export async function getHelloWorld() {
-    return await serverGet("test");
+  return await serverGet("test");
 }
 
-export async function postSearchResults(input, userId, type="album,track,artist,user", limit="10", strict="on", order="RANKING") {
-    // return await serverGet("test");
-    // return await serverGet("search");
-    return await serverGet("search", {
-        input,
-        type,
-        limit,
-        strict,
-        order,
-        userId
-    });
+export async function postSearchResults(
+  input,
+  userId,
+  type = "album,track,artist,user",
+  limit = "10",
+  strict = "on",
+  order = "RANKING"
+) {
+  return await serverGet("search", {
+    input,
+    type,
+    limit,
+    strict,
+    order,
+    userId,
+  });
 }
 //#endregion
 
 // #region User endpoints
 export async function createUser(userData) {
-    return await serverPost("users/", userData);
+  return await serverPost("users/", userData);
 }
+
 export async function getUser(userId) {
-    return await serverGet(`users/${userId}`);
+  return await serverGet(`users/${userId}`);
 }
+
 export async function getUserByUsername(username) {
-    return await serverGet("users/", { username });
+  return await serverGet("users/", { username });
 }
+
 export async function updateUser(userId, userData) {
-    return await serverPut(`users/${userId}`, userData);
+  return await serverPut(`users/${userId}`, userData);
 }
+
 export async function followUser(follower_id, followed_id) {
   return await serverPost("users/follow", { follower_id, followed_id });
 }
+
 export async function unfollowUser(follower_id, followed_id) {
   return await serverPost("users/unfollow", { follower_id, followed_id });
 }
+
 export async function getFollowers(userId) {
   return await serverGet(`users/${userId}/followers`);
 }
@@ -106,42 +100,39 @@ export async function getFriends(userId) {
   return await serverGet(`users/${userId}/friends`);
 }
 
-export async function like(userId, musicId, type) {
-  return await serverPost("users/like", { user_id: userId, music_id: musicId, type: type });
+// #region Follow Request endpoints
+export async function requestFollow(follower_id, followed_id) {
+  // Notice the POST to /users/requestFollow
+  return await serverPost("users/requestFollow", { follower_id, followed_id });
 }
 
-export async function unlike(userId, musicId, type) {
-  return await serverPost("users/unlike", { user_id: userId, music_id: musicId, type: type });
+export async function getFollowRequests(userId) {
+  return await serverGet(`users/${userId}/followRequests`);
 }
 
-export async function getLike(userId, musicId, type) {
-  return await serverGet("users/like", { user_id: userId, music_id: musicId, type: type });
+export async function respondFollowRequest(followed_id, follower_id, accept) {
+  return await serverPost("users/respondFollowRequest", {
+    followed_id,
+    follower_id,
+    accept,
+  });
 }
-
-
 // #endregion
-  
-// #region metadata endpoints
 
+//#region metadata endpoints
 export async function populateMetadata(reviewType, id) {
-  // Build the query parameters
   const params = { reviewType, id };
-  
-  // Call the test_populate endpoint
   return await serverGet("metadata/populate", params);
 }
-  
+//#endregion
 
-
-// #endregion
-
-export async function getServerEndpointBase() {
-    
-    // return "https://treble-api-l9qo6.ondigitalocean.app/";
-
-    // if local server available use that, if not query the digital ocean server
-    if (process.env.REACT_APP_LOCAL_SERVER) {
-        return "http://localhost:5000";
-    }
-    return "https://treble-api-l9qo6.ondigitalocean.app/";
+export function getServerEndpointBase() {
+  // NOTE: Adjust logic or remove if you'd prefer a simple config
+  if (process.env.NODE_ENV === "development") {
+    return process.env.API_TUNNEL_URL
+      ? process.env.API_TUNNEL_URL
+      : `http://127.0.0.1:5000`;
+  } else {
+    return `https://${process.env.API_URL}`;
+  }
 }

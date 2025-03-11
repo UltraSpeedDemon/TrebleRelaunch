@@ -11,10 +11,14 @@ const MusicCard = ({
   album,
   onFollow,
   isFollowing,
+  buttonLabel,    // New prop to set the button text explicitly.
   userCard,
   canFollow,
-  onPressCard,   // <-- New prop for tapping the card
+  onPressCard,   // New prop for tapping the card.
 }) => {
+  // Determine the label to display:
+  const label = buttonLabel ? buttonLabel : (isFollowing ? "Following" : "Follow");
+
   return (
     <TouchableOpacity
       activeOpacity={0.7}
@@ -37,18 +41,21 @@ const MusicCard = ({
           {album && <Text style={styles.album}>{album}</Text>}
         </View>
 
-        {/* Follow/Unfollow button logic, if needed */}
+        {/* Follow/Unfollow button logic */}
         {canFollow && onFollow && (
           <TouchableOpacity
-            style={[styles.followButton, isFollowing && styles.followingButton]}
+            style={[
+              styles.followButton,
+              isFollowing && styles.followingButton,
+              label === "Requested" && styles.requestedButton,
+            ]}
             onPress={(e) => {
               e.stopPropagation(); // Prevent tapping button from also triggering onPressCard
-              onFollow();
+              if (label !== "Requested") onFollow();
             }}
+            disabled={label === "Requested"}
           >
-            <Text style={styles.followButtonText}>
-              {isFollowing ? "Following" : "Follow"}
-            </Text>
+            <Text style={styles.followButtonText}>{label}</Text>
           </TouchableOpacity>
         )}
       </Card>
@@ -108,6 +115,9 @@ const styles = StyleSheet.create({
   },
   followingButton: {
     backgroundColor: colours.lightblue,
+  },
+  requestedButton: {
+    backgroundColor: "#999",
   },
   followButtonText: {
     color: "#fff",

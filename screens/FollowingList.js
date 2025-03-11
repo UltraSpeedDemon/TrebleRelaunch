@@ -12,7 +12,7 @@ import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { auth } from "../utils/firebase";
 import MusicCard from "../components/MusicCard";
 // NOTE: we import getFollowing instead of getFollowers
-import { getFollowing, followUser, unfollowUser } from "../providers/rest";
+import { getFollowing, followUser, unfollowUser, getFollowRequests } from "../providers/rest";
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
@@ -23,11 +23,12 @@ export default function FollowingList({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [followingUsers, setFollowingUsers] = useState({});
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notificationsCount, setNotificationsCount] = useState(0);
 
   useEffect(() => {
     async function fetchFollowing() {
       try {
-        // Now we fetch the list of users the current user is following
+        // Fetch the list of users the current user is following
         const response = await getFollowing(auth.currentUser.uid);
         const json = await response.json();
         setFollowingList(json);
@@ -38,6 +39,22 @@ export default function FollowingList({ navigation }) {
       }
     }
     fetchFollowing();
+  }, []);
+
+  // Fetch notifications count (number of follow requests)
+  useEffect(() => {
+    async function fetchNotificationsCount() {
+      try {
+        const resp = await getFollowRequests(auth.currentUser.uid);
+        if (resp.ok) {
+          const requests = await resp.json();
+          setNotificationsCount(requests.length);
+        }
+      } catch (error) {
+        console.error("Error fetching notifications count:", error);
+      }
+    }
+    fetchNotificationsCount();
   }, []);
 
   const handleFollow = async (user) => {
@@ -70,6 +87,14 @@ export default function FollowingList({ navigation }) {
     }
   };
 
+  // Helper: Capitalize the first letter of the username.
+  const formatUsername = (name) => {
+    if (!name) return "";
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  };
+
+  const avatar2 = auth.currentUser.photoURL;
+
   return (
     <View style={styles.container}>
       {/* Sidebar */}
@@ -80,7 +105,7 @@ export default function FollowingList({ navigation }) {
       {/* Search Bar */}
       <SearchBar />
 
-      {/* Notifications Button */}
+      {/* Notifications Button with Badge */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -89,6 +114,13 @@ export default function FollowingList({ navigation }) {
           source={require("../images/notificationsIcon2.png")}
           style={styles.notifIcon}
         />
+        {notificationsCount > 0 && (
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>
+              {notificationsCount}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Main Content */}
@@ -104,21 +136,18 @@ export default function FollowingList({ navigation }) {
                   const isFollowing = followingUsers.hasOwnProperty(user.userId)
                     ? followingUsers[user.userId]
                     : user.isFollowing;
-
                   return (
                     <MusicCard
                       key={user.userId}
                       id={user.userId}
-                      name={user.username}
-                      image={user.avatar}
-                      // Follow/Unfollow button
+                      name={formatUsername(user.username)}
+                      image={user.avatar2}
                       onFollow={() =>
                         isFollowing ? handleUnfollow(user) : handleFollow(user)
                       }
                       isFollowing={isFollowing}
                       userCard={true}
                       canFollow={true}
-
                       // Navigate to the "UserProfiles" screen when tapping the card
                       onPressCard={() =>
                         navigation.navigate("UserProfiles", {
@@ -174,6 +203,23 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
     left: 10,
     top: 2,
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    backgroundColor: "red",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  notificationBadgeText: {
+    color: "black",
+    fontSize: 12,
+    fontWeight: "bold",
   },
   content: {
     flex: 1,

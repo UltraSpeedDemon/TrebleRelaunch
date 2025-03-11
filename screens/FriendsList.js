@@ -11,7 +11,7 @@ import {
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { auth } from "../utils/firebase";
 import MusicCard from "../components/MusicCard"; 
-import { getFriends, followUser, unfollowUser } from "../providers/rest"; 
+import { getFriends, followUser, unfollowUser, getFollowRequests } from "../providers/rest"; 
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
@@ -22,6 +22,7 @@ export default function FriendsList({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [followingUsers, setFollowingUsers] = useState({});
+  const [notificationsCount, setNotificationsCount] = useState(0);
 
   useEffect(() => {
     async function fetchFriends() {
@@ -36,6 +37,22 @@ export default function FriendsList({ navigation }) {
       }
     }
     fetchFriends();
+  }, []);
+
+  // Fetch notifications count (number of follow requests)
+  useEffect(() => {
+    async function fetchNotificationsCount() {
+      try {
+        const resp = await getFollowRequests(auth.currentUser.uid);
+        if (resp.ok) {
+          const requests = await resp.json();
+          setNotificationsCount(requests.length);
+        }
+      } catch (error) {
+        console.error("Error fetching notifications count:", error);
+      }
+    }
+    fetchNotificationsCount();
   }, []);
 
   const handleFollow = async (user) => {
@@ -73,7 +90,7 @@ export default function FriendsList({ navigation }) {
       {/* Search Bar */}
       <SearchBar />
 
-      {/* Notifications Button */}
+      {/* Notifications Button with Badge */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -82,6 +99,13 @@ export default function FriendsList({ navigation }) {
           source={require("../images/notificationsIcon2.png")}
           style={styles.notifIcon}
         />
+        {notificationsCount > 0 && (
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>
+              {notificationsCount}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Sidebar */}
@@ -114,7 +138,7 @@ export default function FriendsList({ navigation }) {
                       onFollow={() =>
                         isFollowing ? handleUnfollow(friend) : handleFollow(friend)
                       }
-                      // Tapping the card -> go to that user's profile
+                      // Tapping the card navigates to the user's profile
                       onPressCard={() =>
                         navigation.navigate("UserProfiles", {
                           userId: friend.userId,
@@ -170,6 +194,23 @@ const styles = StyleSheet.create({
     resizeMode: "contain",
     left: 10,
     top: 2,
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    backgroundColor: "red",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  notificationBadgeText: {
+    color: "black",
+    fontSize: 12,
+    fontWeight: "bold",
   },
   content: {
     flex: 1,
