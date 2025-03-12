@@ -100,6 +100,18 @@ export async function getFriends(userId) {
   return await serverGet(`users/${userId}/friends`);
 }
 
+export async function like(userId, musicId, type) {
+  return await serverPost("users/like", { user_id: userId, music_id: musicId, type: type });
+}
+
+export async function unlike(userId, musicId, type) {
+  return await serverPost("users/unlike", { user_id: userId, music_id: musicId, type: type });
+}
+
+export async function getLike(userId, musicId, type) {
+  return await serverGet("users/like", { user_id: userId, music_id: musicId, type: type });
+}
+
 // #region Follow Request endpoints
 export async function requestFollow(follower_id, followed_id) {
   // Notice the POST to /users/requestFollow
@@ -127,12 +139,10 @@ export async function populateMetadata(reviewType, id) {
 //#endregion
 
 export function getServerEndpointBase() {
-  // NOTE: Adjust logic or remove if you'd prefer a simple config
   if (process.env.NODE_ENV === "development") {
-    return process.env.API_TUNNEL_URL
-      ? process.env.API_TUNNEL_URL
-      : `http://127.0.0.1:5000`;
-  } else {
-    return `https://${process.env.API_URL}`;
+      return process.env.API_TUNNEL_URL ? process.env.API_TUNNEL_URL : `https://127.0.0.1:5000`;
+  }
+  else {
+      return `https://${process.env.API_URL}`;
   }
 }
