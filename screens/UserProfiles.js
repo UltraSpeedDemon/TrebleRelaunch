@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  FlatList,
 } from "react-native";
 import { useRoute } from "@react-navigation/native";
 import { auth } from "../utils/firebase";
@@ -17,12 +16,13 @@ import {
   getFriends,
   followUser,
   unfollowUser,
-  requestFollow,  // For private accounts
-  getFollowRequests,  // Already defined: export async function getFollowRequests(userId) { return await serverGet(`users/${userId}/followRequests`); }
+  requestFollow,
+  getFollowRequests,
 } from "../providers/rest";
 import colours from "../styles/colours";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
+import { FlatList } from "react-native-gesture-handler";
 
 export default function UserProfiles({ navigation }) {
   const route = useRoute();
@@ -30,6 +30,7 @@ export default function UserProfiles({ navigation }) {
 
   // Basic user info
   const [username, setUsername] = useState("");
+  // Initially, avatar is set to a default local image
   const [avatar, setAvatar] = useState(require("../images/avatarIcon.png"));
   const noAvatar = require("../images/avatarIcon.png");
 
@@ -41,17 +42,21 @@ export default function UserProfiles({ navigation }) {
   // Account settings
   const [isPublic, setIsPublic] = useState(true);
   const [isSpotifyLinked, setIsSpotifyLinked] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // Persisted follow request status (using getFollowRequests below)
+  // Follow request status
   const [followRequested, setFollowRequested] = useState(false);
 
-  // Demo placeholders
+  // Demo placeholders for tracks, ratings, and activity
   const [topTracks, setTopTracks] = useState([]);
   const [topRated, setTopRated] = useState([]);
   const [activity, setActivity] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Placeholder for total reviews
+  const reviews = 2;
 
   function formatUsername(name) {
     if (!name) return "";
@@ -64,15 +69,12 @@ export default function UserProfiles({ navigation }) {
     fetchMyFriends();
   }, [userId]);
 
-
-  // New effect: Use getFollowRequests to check if current user has already requested to follow
   useEffect(() => {
     async function checkFollowRequest() {
       try {
         const resp = await getFollowRequests(userId);
         if (resp.ok) {
           const requests = await resp.json();
-          // Assuming each request object has a "userId" property for the requester
           const alreadyRequested = requests.some(
             (req) => req.userId === auth.currentUser.uid
           );
@@ -91,24 +93,31 @@ export default function UserProfiles({ navigation }) {
       setLoading(true);
       const resp = await getUser(userId);
       if (!resp.ok) {
-        throw new Error("Failed to fetch user data");
+        throw new Error("Failed to fetch user data from backend.");
       }
       const data = await resp.json();
-
+      console.log("DEBUG: Fetched user data:", data);
       setUsername(data.username || "");
       setFollowersCount(data.followersCount || 0);
       setFollowingCount(data.followingCount || 0);
-
       setIsPublic(data.isPublic !== false);
       setIsSpotifyLinked(data.spotifyIsLinked === true);
+      setIsAdmin(data.isAdmin || false);
 
-      if (data.avatar && data.avatar !== "None") {
+      // Use the new avatar value from the backend (which comes from avatarLong)
+      if (
+        data.avatar &&
+        data.avatar !== "None" &&
+        data.avatar.startsWith("data:")
+      ) {
+        console.log("DEBUG: Using base64 avatar:", data.avatar.substring(0, 50) + "...");
         setAvatar({ uri: data.avatar });
       } else {
+        console.log("DEBUG: No valid avatar returned, using default");
         setAvatar(noAvatar);
       }
 
-      // Example placeholders for tracks, ratings, activity
+      // Example placeholders for tracks, ratings, and activity
       setTopTracks([
         { id: "1", name: "I Wonder", artist: "Kanye West", image: require("../images/albumImage.jpg") },
         { id: "2", name: "Stronger", artist: "Kanye West", image: require("../images/albumImage.jpg") },
@@ -158,23 +167,19 @@ export default function UserProfiles({ navigation }) {
     }
   }
 
-  // Determine if I'm following or if we are friends
   const iAmFollowing = theirFollowers.some(
     (f) => f.userId === auth.currentUser.uid
   );
   const isInMyFriends = myFriends.some((fr) => fr.userId === userId);
 
-  // Compute button label: "Follow", "Following", or "Requested"
   let finalButtonLabel = "Follow";
   if (iAmFollowing || isInMyFriends) {
     finalButtonLabel = "Following";
   } else if (!isPublic && followRequested) {
     finalButtonLabel = "Requested";
   }
-
   const showFriendsLabel = isInMyFriends;
 
-  // 4) Handle follow/unfollow press
   async function handleFollowPress() {
     if (finalButtonLabel === "Following") {
       try {
@@ -189,7 +194,6 @@ export default function UserProfiles({ navigation }) {
       }
       return;
     }
-
     if (isPublic) {
       try {
         const resp = await followUser(auth.currentUser.uid, userId);
@@ -206,7 +210,6 @@ export default function UserProfiles({ navigation }) {
         console.error("Error following user:", error);
       }
     } else {
-      // For private accounts: only send a request if not already requested
       if (!followRequested) {
         try {
           const resp = await requestFollow(auth.currentUser.uid, userId);
@@ -257,14 +260,23 @@ export default function UserProfiles({ navigation }) {
               <Text style={styles.username}>{formatUsername(username)}</Text>
               <Text style={styles.stats}>Followers: {followersCount}</Text>
               <Text style={styles.stats}>Following: {followingCount}</Text>
-              {isSpotifyLinked && (
-                <View style={styles.spotifyContainer}>
-                  <Image source={require("../images/spotifyLogo.png")} style={styles.spotifyLogo} />
+              {(isSpotifyLinked || isAdmin) && (
+                <View style={styles.badgeContainer}>
+                  {isSpotifyLinked ? (
+                    <Image
+                      source={require("../images/spotifyLogo.png")}
+                      style={styles.badgeIcon}
+                    />
+                  ) : null}
+                  {isAdmin ? (
+                    <Image
+                      source={require("../images/adminBadge.png")}
+                      style={[styles.badgeIcon, !isSpotifyLinked && { marginLeft: 0 }]}
+                    />
+                  ) : null}
                 </View>
               )}
             </View>
-
-            {/* Follow/Request Button (only if viewing someone else's profile) */}
             {!isSelf && (
               <View style={styles.followContainer}>
                 <TouchableOpacity
@@ -278,18 +290,15 @@ export default function UserProfiles({ navigation }) {
                 >
                   <Text style={styles.followButtonText}>{finalButtonLabel}</Text>
                 </TouchableOpacity>
-                {showFriendsLabel && (
-                  <Text style={styles.friendText}>Friends</Text>
-                )}
+                {showFriendsLabel && <Text style={styles.friendText}>Friends</Text>}
               </View>
             )}
           </View>
         }
-        data={[]} // Using FlatList only for header and footer
+        data={[]}
         ListFooterComponent={
           canViewFullContent ? (
             <>
-              {/* Top Tracks */}
               <View style={styles.cardSection}>
                 <Text style={styles.sectionTitle}>Top Tracks</Text>
                 <FlatList
@@ -306,8 +315,6 @@ export default function UserProfiles({ navigation }) {
                   showsHorizontalScrollIndicator={false}
                 />
               </View>
-
-              {/* Top Rated */}
               <View style={styles.cardSection}>
                 <Text style={styles.sectionTitle}>Top Rated</Text>
                 <FlatList
@@ -337,10 +344,9 @@ export default function UserProfiles({ navigation }) {
                   showsHorizontalScrollIndicator={false}
                 />
               </View>
-
-              {/* Activity */}
-              <View style={styles.activityCardSection}>
+              <View style={styles.cardSectionActivity}>
                 <Text style={styles.sectionTitle}>Activity</Text>
+                <Text style={styles.totalActivity}>Total Reviews: {reviews}</Text>
                 <FlatList
                   data={activity}
                   renderItem={({ item }) => (
@@ -364,8 +370,6 @@ export default function UserProfiles({ navigation }) {
           )
         }
       />
-
-      {/* Bottom Navigation Bar */}
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
@@ -377,7 +381,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colours.bluegrey },
   sideMenu: { position: "absolute", top: 40, right: 525, bottom: 0, zIndex: 10 },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
-  errorText: { color: "#fff", fontSize: 18 },
   profileHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -391,22 +394,27 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   username: { fontSize: 18, fontWeight: "bold", color: colours.lightblue },
   stats: { fontSize: 14, fontWeight: "bold", color: "#fff" },
+  badgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 5 },
+  badgeIcon: { width: 24, height: 24, marginRight: 5 },
   spotifyContainer: { flexDirection: "row", alignItems: "center", marginTop: 5 },
   spotifyLogo: { width: 24, height: 24, marginRight: 5 },
+  editButton: { padding: 10, borderRadius: 5 },
+  editButtonText: { color: "#fff", fontWeight: "bold" },
   followContainer: { alignItems: "center", marginLeft: 10 },
   followButton: { backgroundColor: colours.lightblue, paddingVertical: 10, paddingHorizontal: 15, borderRadius: 5 },
   requestedButton: { backgroundColor: "#999", paddingVertical: 10, paddingHorizontal: 15, borderRadius: 5 },
   followButtonText: { color: "#fff", fontWeight: "bold" },
   friendText: { marginTop: 8, fontSize: 14, fontWeight: "bold", color: "#fff" },
   cardSection: { backgroundColor: colours.darkblue, padding: 10, borderRadius: 10, marginHorizontal: 10, marginVertical: 10 },
+  cardSectionActivity: { backgroundColor: colours.darkblue, padding: 10, borderRadius: 10, marginHorizontal: 10, marginVertical: 10, marginBottom: 100 },
   sectionTitle: { fontSize: 18, fontWeight: "bold", color: colours.lightblue, marginBottom: 10 },
   trackCard: { marginRight: 10, alignItems: "center" },
+  totalActivity: { fontSize: 14, color: "#fff", marginBottom: 10 },
   trackImage: { width: 100, height: 100, borderRadius: 10, marginBottom: 5 },
   trackName: { fontSize: 14, fontWeight: "bold", color: "#fff" },
   trackArtist: { fontSize: 12, color: "#aaa" },
   ratingContainer: { flexDirection: "row", marginTop: 5 },
   starIcon: { width: 16, height: 16, marginRight: 2 },
-  activityCardSection: { backgroundColor: colours.darkblue, marginBottom: 100, padding: 10, borderRadius: 10, marginHorizontal: 10, marginVertical: 10 },
   activityCard: { backgroundColor: "#1E1E2C", borderRadius: 10, padding: 10, marginBottom: 10 },
   activityUsername: { fontSize: 14, fontWeight: "bold", color: colours.lightblue, marginBottom: 5 },
   activityText: { fontSize: 12, color: "#fff", marginBottom: 5 },
@@ -415,8 +423,4 @@ const styles = StyleSheet.create({
   emojis: { fontSize: 14, color: "#fff", marginLeft: 10 },
   privateAccountText: { fontSize: 18, marginTop: 40, fontWeight: "bold", color: colours.lightblue, textAlign: "center" },
   bottomNavBar: { position: "absolute", bottom: 0, width: "100%" },
-  notificationsIcon: { width: 40, height: 40, position: "absolute", top: 70, right: 20 },
-  notifIcon: { width: "90%", height: "90%", resizeMode: "contain", left: 10, top: 2 },
-  notificationBadge: { position: "absolute", top: -5, right: -5, backgroundColor: "red", width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", zIndex: 10 },
-  notificationBadgeText: { color: "black", fontSize: 12, fontWeight: "bold" },
 });

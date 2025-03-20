@@ -62,51 +62,60 @@ export default function Notifications({ navigation }) {
     }
   }
 
-  // Helper: Capitalize the first letter of the username.
+  // Helper to capitalize the first letter of the username.
   const formatUsername = (name) => {
     if (!name) return "";
     return name.charAt(0).toUpperCase() + name.slice(1);
   };
 
-  const avatar = auth.currentUser.photoURL;
+  const renderRequest = ({ item }) => {
+    // 'item' is the user object that requested to follow. Example:
+    // { userId, username, avatar, isPublic, isRequested, ... }
+    const fallbackAvatar = require("../images/avatarIcon.png");
 
-  const renderRequest = ({ item }) => (
-    <View style={styles.requestCard}>
-      {/* Touchable area for user info to navigate to their profile */}
-      <TouchableOpacity
-        style={styles.userInfoTouchable}
-        onPress={() =>
-          navigation.navigate("UserProfiles", { userId: item.userId })
-        }
-        activeOpacity={0.8}
-      >
-        <Image
-          source={avatar ? { uri: avatar } : require("../images/avatarIcon.png")}
-          style={styles.avatar}
-        />
-        <View style={styles.requestInfo}>
-          <Text style={styles.username}>{formatUsername(item.username)}</Text>
-          <Text style={styles.requestText}>wants to follow you.</Text>
+    // If item.avatar is a valid base64 data URI, use it; else fallback.
+    const avatarSource =
+      item.avatar &&
+      item.avatar.startsWith("data:")
+        ? { uri: item.avatar }
+        : fallbackAvatar;
+
+    return (
+      <View style={styles.requestCard}>
+        {/* Tapping user info navigates to their profile */}
+        <TouchableOpacity
+          style={styles.userInfoTouchable}
+          onPress={() => navigation.navigate("UserProfiles", { userId: item.userId })}
+          activeOpacity={0.8}
+        >
+          <Image
+            source={avatarSource}
+            style={styles.avatar}
+          />
+          <View style={styles.requestInfo}>
+            <Text style={styles.username}>{formatUsername(item.username)}</Text>
+            <Text style={styles.requestText}>wants to follow you.</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Accept / Deny buttons */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={styles.acceptButton}
+            onPress={() => handleResponse(item.userId, true)}
+          >
+            <Text style={styles.buttonText}>Accept</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.denyButton}
+            onPress={() => handleResponse(item.userId, false)}
+          >
+            <Text style={styles.buttonText}>Deny</Text>
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
-
-      {/* Buttons remain separate so tapping them does not trigger navigation */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={styles.acceptButton}
-          onPress={() => handleResponse(item.userId, true)}
-        >
-          <Text style={styles.buttonText}>Accept</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.denyButton}
-          onPress={() => handleResponse(item.userId, false)}
-        >
-          <Text style={styles.buttonText}>Deny</Text>
-        </TouchableOpacity>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -143,10 +152,27 @@ export default function Notifications({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colours.bluegrey, paddingTop: 100 },
-  sideMenu: { position: "absolute", top: 40, right: 525, bottom: 0, zIndex: 10 },
-  headerContainer: { alignItems: "center", marginBottom: 20 },
-  header: { fontSize: 28, fontWeight: "bold", color: colours.lightblue },
+  container: {
+    flex: 1,
+    backgroundColor: colours.bluegrey,
+    paddingTop: 100,
+  },
+  sideMenu: {
+    position: "absolute",
+    top: 40,
+    right: 525,
+    bottom: 0,
+    zIndex: 10,
+  },
+  headerContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  header: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: colours.lightblue,
+  },
   requestCard: {
     flexDirection: "row",
     backgroundColor: colours.darkblue,
@@ -161,11 +187,27 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
   },
-  avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 10 },
-  requestInfo: { flex: 1 },
-  username: { fontSize: 18, fontWeight: "bold", color: "#fff" },
-  requestText: { fontSize: 14, color: "#aaa" },
-  buttonContainer: { flexDirection: "row" },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 10,
+  },
+  requestInfo: {
+    flex: 1,
+  },
+  username: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  requestText: {
+    fontSize: 14,
+    color: "#aaa",
+  },
+  buttonContainer: {
+    flexDirection: "row",
+  },
   acceptButton: {
     backgroundColor: colours.lightblue,
     paddingVertical: 8,
@@ -179,8 +221,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 5,
   },
-  buttonText: { color: "#fff", fontWeight: "bold" },
-  emptyContainer: { alignItems: "center", marginTop: 50 },
-  emptyText: { fontSize: 16, color: "#fff" },
-  bottomNavBar: { position: "absolute", bottom: 0, width: "100%" },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    marginTop: 50,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#fff",
+  },
+  bottomNavBar: {
+    position: "absolute",
+    bottom: 0,
+    width: "100%",
+  },
 });

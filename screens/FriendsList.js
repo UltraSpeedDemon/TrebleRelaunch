@@ -10,8 +10,13 @@ import {
 } from "react-native";
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { auth } from "../utils/firebase";
-import MusicCard from "../components/MusicCard"; 
-import { getFriends, followUser, unfollowUser, getFollowRequests } from "../providers/rest"; 
+import MusicCard from "../components/MusicCard";
+import {
+  getFriends,
+  followUser,
+  unfollowUser,
+  getFollowRequests,
+} from "../providers/rest";
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
@@ -24,10 +29,14 @@ export default function FriendsList({ navigation }) {
   const [followingUsers, setFollowingUsers] = useState({});
   const [notificationsCount, setNotificationsCount] = useState(0);
 
+  // 1) Fetch the user’s friends.
   useEffect(() => {
     async function fetchFriends() {
       try {
         const response = await getFriends(auth.currentUser.uid);
+        if (!response.ok) {
+          throw new Error("Failed to fetch friends list");
+        }
         const json = await response.json();
         setFriendsList(json);
       } catch (error) {
@@ -39,7 +48,7 @@ export default function FriendsList({ navigation }) {
     fetchFriends();
   }, []);
 
-  // Fetch notifications count (number of follow requests)
+  // 2) Fetch the count of pending follow requests (notifications)
   useEffect(() => {
     async function fetchNotificationsCount() {
       try {
@@ -55,34 +64,52 @@ export default function FriendsList({ navigation }) {
     fetchNotificationsCount();
   }, []);
 
+  // Follow a friend
   const handleFollow = async (user) => {
     try {
-      console.log("Following user:", user);
-      const response = await followUser(auth.currentUser.uid, user["userId"]);
+      const response = await followUser(auth.currentUser.uid, user.userId);
       if (response.ok) {
-        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: true }));
-        console.log("Successfully followed user:", user["userId"]);
+        setFollowingUsers((prev) => ({ ...prev, [user.userId]: true }));
+        console.log("Successfully followed user:", user.userId);
       } else {
-        console.log("Failed to follow user");
+        console.error("Failed to follow user");
       }
     } catch (error) {
       console.error("Error following user:", error);
     }
   };
 
+  // Unfollow a friend
   const handleUnfollow = async (user) => {
     try {
-      console.log("Unfollowing user:", user);
-      const response = await unfollowUser(auth.currentUser.uid, user["userId"]);
+      const response = await unfollowUser(auth.currentUser.uid, user.userId);
       if (response.ok) {
-        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: false }));
-        console.log("Successfully unfollowed user:", user["userId"]);
+        setFollowingUsers((prev) => ({ ...prev, [user.userId]: false }));
+        console.log("Successfully unfollowed user:", user.userId);
       } else {
-        console.log("Failed to unfollow user");
+        console.error("Failed to unfollow user");
       }
     } catch (error) {
       console.error("Error unfollowing user:", error);
     }
+  };
+
+  /**
+   * Returns a valid image source for the user's avatar.
+   * If `avatarString` starts with "data:", we treat it as a base64 data URI.
+   * Otherwise, return our local avatarIcon.png fallback.
+   */
+  const getAvatarSource = (avatarString) => {
+    const fallback = require("../images/avatarIcon.png");
+    return avatarString && avatarString.startsWith("data:")
+      ? { uri: avatarString }
+      : fallback;
+  };
+
+  // Optionally capitalize username’s first letter
+  const formatUsername = (name) => {
+    if (!name) return "";
+    return name.charAt(0).toUpperCase() + name.slice(1);
   };
 
   return (
@@ -122,6 +149,7 @@ export default function FriendsList({ navigation }) {
             ) : friendsList.length > 0 ? (
               <ScrollView>
                 {friendsList.map((friend) => {
+                  // If we’ve overridden their follow status, use that, else fallback to friend.isFollowing
                   const isFollowing = followingUsers.hasOwnProperty(friend.userId)
                     ? followingUsers[friend.userId]
                     : friend.isFollowing;
@@ -130,21 +158,21 @@ export default function FriendsList({ navigation }) {
                     <MusicCard
                       key={friend.userId}
                       id={friend.userId}
-                      name={friend.username}
-                      image={friend.avatar}
+                      name={formatUsername(friend.username)}
+                      image={getAvatarSource(friend.avatar)}
                       isFollowing={isFollowing}
                       userCard={true}
-                      // Follow/Unfollow button
+                      canFollow={true}
+                      // If isFollowing => pressing button => handleUnfollow, else => handleFollow
                       onFollow={() =>
                         isFollowing ? handleUnfollow(friend) : handleFollow(friend)
                       }
-                      // Tapping the card navigates to the user's profile
+                      // Tapping the card => navigate to the friend’s UserProfiles
                       onPressCard={() =>
                         navigation.navigate("UserProfiles", {
                           userId: friend.userId,
                         })
                       }
-                      canFollow={true}
                     />
                   );
                 })}
@@ -219,16 +247,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  bottomNavBar: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    flexDirection: "row",
-  },
   noResultsText: {
     color: "#fff",
     fontSize: 18,
     textAlign: "center",
     marginTop: 20,
+  },
+  bottomNavBar: {
+    position: "absolute",
+    bottom: 0,
+    width: "100%",
+    flexDirection: "row",
   },
 });

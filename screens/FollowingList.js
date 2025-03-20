@@ -12,7 +12,12 @@ import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { auth } from "../utils/firebase";
 import MusicCard from "../components/MusicCard";
 // NOTE: we import getFollowing instead of getFollowers
-import { getFollowing, followUser, unfollowUser, getFollowRequests } from "../providers/rest";
+import {
+  getFollowing,
+  followUser,
+  unfollowUser,
+  getFollowRequests,
+} from "../providers/rest";
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
@@ -60,10 +65,10 @@ export default function FollowingList({ navigation }) {
   const handleFollow = async (user) => {
     try {
       console.log("Following user:", user);
-      const response = await followUser(auth.currentUser.uid, user["userId"]);
+      const response = await followUser(auth.currentUser.uid, user.userId);
       if (response.ok) {
-        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: true }));
-        console.log("Successfully followed user:", user["userId"]);
+        setFollowingUsers((prev) => ({ ...prev, [user.userId]: true }));
+        console.log("Successfully followed user:", user.userId);
       } else {
         console.log("Failed to follow user");
       }
@@ -75,10 +80,10 @@ export default function FollowingList({ navigation }) {
   const handleUnfollow = async (user) => {
     try {
       console.log("Unfollowing user:", user);
-      const response = await unfollowUser(auth.currentUser.uid, user["userId"]);
+      const response = await unfollowUser(auth.currentUser.uid, user.userId);
       if (response.ok) {
-        setFollowingUsers((prev) => ({ ...prev, [user["userId"]]: false }));
-        console.log("Successfully unfollowed user:", user["userId"]);
+        setFollowingUsers((prev) => ({ ...prev, [user.userId]: false }));
+        console.log("Successfully unfollowed user:", user.userId);
       } else {
         console.log("Failed to unfollow user");
       }
@@ -92,8 +97,6 @@ export default function FollowingList({ navigation }) {
     if (!name) return "";
     return name.charAt(0).toUpperCase() + name.slice(1);
   };
-
-  const avatar2 = auth.currentUser.photoURL;
 
   return (
     <View style={styles.container}>
@@ -132,23 +135,25 @@ export default function FollowingList({ navigation }) {
                 <ActivityIndicator size="large" color="#4CAF50" />
               ) : followingList.length > 0 ? (
                 followingList.map((user) => {
-                  // We rely on a local override or user.isFollowing from the backend
+                  // If we've locally overridden follow status, use it. Otherwise, use user.isFollowing.
                   const isFollowing = followingUsers.hasOwnProperty(user.userId)
                     ? followingUsers[user.userId]
                     : user.isFollowing;
+
                   return (
                     <MusicCard
                       key={user.userId}
                       id={user.userId}
                       name={formatUsername(user.username)}
-                      image={user.avatar2}
+                      /** Pass the user’s avatar string from DB to MusicCard */
+                      image={user.avatar}
                       onFollow={() =>
                         isFollowing ? handleUnfollow(user) : handleFollow(user)
                       }
                       isFollowing={isFollowing}
                       userCard={true}
                       canFollow={true}
-                      // Navigate to the "UserProfiles" screen when tapping the card
+                      // Navigate to "UserProfiles" when tapping the card
                       onPressCard={() =>
                         navigation.navigate("UserProfiles", {
                           userId: user.userId,

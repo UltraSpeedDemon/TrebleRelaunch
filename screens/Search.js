@@ -24,9 +24,7 @@ import {
   postSearchResults,
   getFollowRequests,
   requestFollow,
-  getFollowers,
-  getFriends,
-} from "../providers/rest";
+} from "../providers/rest"; // REMOVED getFollowers, getFriends
 import colours from "../styles/colours";
 
 export default function Search({ navigation, route }) {
@@ -34,7 +32,7 @@ export default function Search({ navigation, route }) {
   const [searchResult, setSearchResults] = useState(null);
   const [followingUsers, setFollowingUsers] = useState({});
   const [notificationsCount, setNotificationsCount] = useState(0);
-  // Dictionary to track follow-request status per user in search results
+  // Dictionary to track follow-request status per user
   const [followRequests, setFollowRequests] = useState({});
 
   const { searchQuery } = route.params;
@@ -48,9 +46,10 @@ export default function Search({ navigation, route }) {
     spotifyRefreshToken,
     loading,
     isPublic: currentUserIsPublic,
+    avatar: currentUserAvatar,
   } = useFetchUserData();
 
-  // Fetch search results from the backend
+  // Fetch search results
   async function getSearchResults() {
     try {
       const results = await postSearchResults(searchQuery, auth.currentUser.uid);
@@ -106,11 +105,13 @@ export default function Search({ navigation, route }) {
     }
   );
 
+  // 1) Fetch search results on mount
   useEffect(() => {
     getSearchResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch notifications count for the current user (follow requests)
+  // 2) Fetch notifications count
   useEffect(() => {
     async function fetchNotificationsCount() {
       try {
@@ -126,7 +127,7 @@ export default function Search({ navigation, route }) {
     fetchNotificationsCount();
   }, []);
 
-  // For each user search result, check if the current user already requested to follow
+  // 3) Check if the current user already requested to follow each user
   useEffect(() => {
     async function checkFollowRequestForUser(userId) {
       try {
@@ -139,7 +140,11 @@ export default function Search({ navigation, route }) {
           setFollowRequests((prev) => ({ ...prev, [userId]: alreadyRequested }));
         }
       } catch (error) {
-        console.error("Error fetching follow request status for user", userId, error);
+        console.error(
+          "Error fetching follow request status for user",
+          userId,
+          error
+        );
       }
     }
     if (searchResult) {
@@ -151,9 +156,8 @@ export default function Search({ navigation, route }) {
     }
   }, [searchResult]);
 
-  // Handle follow action for a target user
+  // Follow a user (or request to follow if private)
   async function handleFollow(targetUser) {
-    // Convert isPublic to a boolean if needed
     const userIsPublic =
       targetUser.isPublic === true || targetUser.isPublic === "true";
     if (userIsPublic) {
@@ -166,7 +170,7 @@ export default function Search({ navigation, route }) {
         console.error("Error following user:", error);
       }
     } else {
-      // For private accounts: send a follow request if one hasn't been made already.
+      // private => request
       if (!followRequests[targetUser.userId]) {
         try {
           const resp = await requestFollow(auth.currentUser.uid, targetUser.userId);
@@ -186,6 +190,7 @@ export default function Search({ navigation, route }) {
     }
   }
 
+  // Unfollow
   async function handleUnfollow(targetUser) {
     try {
       const response = await unfollowUser(auth.currentUser.uid, targetUser.userId);
@@ -197,13 +202,19 @@ export default function Search({ navigation, route }) {
     }
   }
 
-  // Helper: Capitalize the first letter of a username
+  // Helper: Capitalize the first letter
   const formatUsername = (name) => {
     if (!name) return "";
     return name.charAt(0).toUpperCase() + name.slice(1);
   };
 
-  // Determine which sections to show
+  // Helper: Fallback if no base64
+  const getAvatarSource = (avatar) => {
+    const fallback = require("../images/avatarIcon.png");
+    return avatar && avatar.startsWith("data:") ? { uri: avatar } : fallback;
+  };
+
+  // Decide which sections to show
   const shouldShowTrack =
     !filter.albumOnly && !filter.artistOnly && !filter.userOnly;
   const shouldShowAlbum =
@@ -218,7 +229,7 @@ export default function Search({ navigation, route }) {
       {/* Search Bar */}
       <SearchBar />
 
-      {/* Notifications Icon with Badge */}
+      {/* Notifications Icon + Badge */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -289,9 +300,7 @@ export default function Search({ navigation, route }) {
                               artist={item.artist}
                               album={item.album}
                               onPressCard={() =>
-                                navigation.navigate("SongPage", {
-                                  track: item,
-                                })
+                                navigation.navigate("SongPage", { track: item })
                               }
                             />
                           );
@@ -315,9 +324,7 @@ export default function Search({ navigation, route }) {
                               name={item.name}
                               artist={item.artist}
                               onPressCard={() =>
-                                navigation.navigate("AlbumPage", {
-                                  album: item,
-                                })
+                                navigation.navigate("AlbumPage", { album: item })
                               }
                             />
                           );
@@ -340,9 +347,7 @@ export default function Search({ navigation, route }) {
                               image={item.image}
                               artist={item.name}
                               onPressCard={() =>
-                                navigation.navigate("ArtistPage", {
-                                  artist: item,
-                                })
+                                navigation.navigate("ArtistPage", { artist: item })
                               }
                             />
                           );
@@ -358,17 +363,14 @@ export default function Search({ navigation, route }) {
                       <SectionDivider title="Users" />
                       {searchResult.map((item) => {
                         if (item.type === "user") {
-                          const isCurrentUser =
-                            item.userId === auth.currentUser.uid;
-                          const isFollowing = followingUsers.hasOwnProperty(
-                            item.userId
-                          )
+                          const isCurrentUser = item.userId === auth.currentUser.uid;
+                          const isFollowing = followingUsers.hasOwnProperty(item.userId)
                             ? followingUsers[item.userId]
                             : item.isFollowing;
                           const alreadyRequested =
                             followRequests[item.userId] || false;
 
-                          // Convert the isPublic value to a boolean
+                          // Convert isPublic to boolean
                           const userIsPublic =
                             item.isPublic === true || item.isPublic === "true";
                           let finalButtonLabel = "Follow";
@@ -377,6 +379,10 @@ export default function Search({ navigation, route }) {
                           } else if (!userIsPublic && alreadyRequested) {
                             finalButtonLabel = "Requested";
                           }
+
+                          // Determine the correct avatar
+                          const userAvatar = getAvatarSource(item.avatar);
+
                           const onFollow = !isCurrentUser
                             ? () => {
                                 if (isFollowing) {
@@ -386,19 +392,19 @@ export default function Search({ navigation, route }) {
                                 }
                               }
                             : undefined;
-                          const canFollow = !isCurrentUser;
+
                           return (
                             <MusicCard
                               key={item.userId}
                               id={item.userId}
                               name={formatUsername(item.username)}
-                              image={item.avatar2}
+                              image={item.avatar}
                               isPublic={item.isPublic}
                               onFollow={onFollow}
                               isFollowing={isFollowing}
                               buttonLabel={finalButtonLabel}
                               userCard={true}
-                              canFollow={canFollow}
+                              canFollow={!isCurrentUser}
                               onPressCard={() =>
                                 navigation.navigate("UserProfiles", {
                                   userId: item.userId,
@@ -426,6 +432,7 @@ export default function Search({ navigation, route }) {
   );
 }
 
+// ------------------- Styles -------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -486,7 +493,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: "100%",
   },
-  // Chip container styling as requested.
   chipContainer: {
     flexDirection: "row",
     justifyContent: "center",

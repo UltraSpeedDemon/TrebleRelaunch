@@ -3,6 +3,24 @@ import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Card } from "@rneui/base";
 import colours from "../styles/colours";
 
+/**
+ * Helper to pick an appropriate avatar image.
+ * If `imageString` starts with "data:", we treat it as a base64 data URI.
+ * Otherwise, we use local avatarIcon.png.
+ */
+const getAvatarSource = (imageString) => {
+  const fallback = require("../images/avatarIcon.png");
+  // Return fallback if there's no valid string or it does NOT start with data:
+  if (!imageString || typeof imageString !== "string") {
+    return fallback;
+  }
+  if (imageString.startsWith("data:")) {
+    return { uri: imageString };
+  }
+  // If it’s a normal URL (http/https) you can do more checks, but for now:
+  return { uri: imageString };
+};
+
 const MusicCard = ({
   id,
   image,
@@ -11,13 +29,16 @@ const MusicCard = ({
   album,
   onFollow,
   isFollowing,
-  buttonLabel,    // New prop to set the button text explicitly.
+  buttonLabel,
   userCard,
   canFollow,
-  onPressCard,   // New prop for tapping the card.
+  onPressCard,
 }) => {
-  // Determine the label to display:
-  const label = buttonLabel ? buttonLabel : (isFollowing ? "Following" : "Follow");
+  // Determine the label to display on the follow/unfollow button
+  const label = buttonLabel ? buttonLabel : isFollowing ? "Following" : "Follow";
+
+  // Derive the final image source
+  const imageSource = getAvatarSource(image);
 
   return (
     <TouchableOpacity
@@ -28,20 +49,17 @@ const MusicCard = ({
     >
       <Card containerStyle={styles.cardContainer} wrapperStyle={styles.wrapper}>
         <Card.Image
-          source={
-            image
-              ? { uri: image }
-              : require("../images/avatarIcon.png") // fallback
-          }
+          source={imageSource}
           style={styles.image}
         />
+
         <View style={[styles.musicInfo, userCard && styles.userMusicInfo]}>
           {name && <Text style={styles.title}>{name}</Text>}
           {artist && <Text style={styles.artist}>{artist}</Text>}
           {album && <Text style={styles.album}>{album}</Text>}
         </View>
 
-        {/* Follow/Unfollow button logic */}
+        {/* Follow/Unfollow button */}
         {canFollow && onFollow && (
           <TouchableOpacity
             style={[
@@ -50,7 +68,7 @@ const MusicCard = ({
               label === "Requested" && styles.requestedButton,
             ]}
             onPress={(e) => {
-              e.stopPropagation(); // Prevent tapping button from also triggering onPressCard
+              e.stopPropagation(); // prevent the card press from also firing
               if (label !== "Requested") onFollow();
             }}
             disabled={label === "Requested"}
@@ -92,6 +110,7 @@ const styles = StyleSheet.create({
     width: "80%",
   },
   userMusicInfo: {
+    // For user cards that might show a follow button to the right
     width: "46%",
   },
   title: {

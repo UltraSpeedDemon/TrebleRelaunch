@@ -16,7 +16,9 @@ import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
 import { getUser, populateMetadata, like, getLike, unlike } from "../providers/rest";
-
+import { Audio } from "expo-av";
+import { AnimatedCircularProgress } from "react-native-circular-progress";
+import Icon from "react-native-vector-icons/MaterialIcons";
 
 export default function SongPage({ route, navigation }) {
   const { track } = route.params;
@@ -55,6 +57,10 @@ export default function SongPage({ route, navigation }) {
 
   // For the emoji dropdown
   const [showEmojiDropdown, setShowEmojiDropdown] = useState(false);
+
+  // Add state for progress
+  const [progress, setProgress] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // Fetch current user data
   useEffect(() => {
@@ -209,6 +215,54 @@ export default function SongPage({ route, navigation }) {
     );
   };
 
+  //handles playing the preview
+  const [sound, setSound] = useState(null); // Add state for managing the sound instance
+
+  const handlePlayPreview = async () => {
+    if (track.preview) {
+      try {
+        if (sound) {
+          await sound.unloadAsync();
+          setSound(null);
+          setProgress(0);
+          setIsPlaying(false);
+          return;
+        }
+
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: track.preview },
+          { shouldPlay: true }
+        );
+        setSound(newSound);
+        setIsPlaying(true);
+
+        newSound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.isPlaying) {
+            setProgress((status.positionMillis / status.durationMillis) * 100);
+          }
+          if (status.didJustFinish) {
+            setProgress(0);
+            setIsPlaying(false);
+          }
+        });
+      } catch (error) {
+        console.error("Error playing preview:", error);
+        Alert.alert("Error", "Unable to play the song preview.");
+      }
+    } else {
+      Alert.alert("No Preview", "This song does not have a preview available.");
+    }
+  };
+
+  useEffect(() => {
+    // Cleanup the sound instance when the component unmounts
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
+
   // If no track
   if (!track) {
     return (
@@ -287,6 +341,25 @@ export default function SongPage({ route, navigation }) {
                 <Text style={styles.actionText}>Share</Text>
               </TouchableOpacity>
             </View>
+
+            <TouchableOpacity onPress={handlePlayPreview} style={styles.previewButton}>
+              <AnimatedCircularProgress
+                size={50}
+                width={5}
+                fill={progress}
+                tintColor={colours.lightblue}
+                backgroundColor={colours.bluegrey}
+                rotation={0}
+              >
+                {() => (
+                  <Icon
+                    name={isPlaying ? "stop" : "play-arrow"}
+                    size={30}
+                    color="#fff"
+                  />
+                )}
+              </AnimatedCircularProgress>
+            </TouchableOpacity>
 
             {/* Add Review Section */}
             <KeyboardAvoidingView style={styles.reviewInputContainer}>
@@ -686,5 +759,18 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 0,
     width: "100%",
+  },
+  previewButton: {
+    backgroundColor: colours.lightblue,
+    borderRadius: 10,
+    padding: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  previewButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });

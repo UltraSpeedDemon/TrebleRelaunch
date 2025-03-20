@@ -1,11 +1,21 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, Image, Text, TouchableOpacity, StyleSheet, Animated, Dimensions } from "react-native";
+import { 
+  View, 
+  Image, 
+  Text, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Animated, 
+  Dimensions 
+} from "react-native";
 import { FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
 export function MusicSwiper({ songs }) {
+  const navigation = useNavigation();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const translateX = useRef(new Animated.Value(0)).current;
@@ -37,7 +47,9 @@ export function MusicSwiper({ songs }) {
       useNativeDriver: true,
     }).start(() => {
       setCurrentIndex((prevIndex) => {
-        const newIndex = direction === "left" ? (prevIndex + 1) % songs.length : (prevIndex - 1 + songs.length) % songs.length;
+        const newIndex = direction === "left" 
+          ? (prevIndex + 1) % songs.length 
+          : (prevIndex - 1 + songs.length) % songs.length;
         translateX.setValue(0);
         return newIndex;
       });
@@ -120,6 +132,13 @@ export function MusicSwiper({ songs }) {
           <FontAwesome name="thumbs-up" size={32} color="green" />
         </TouchableOpacity>
       </View>
+      {/* Back button at the bottom */}
+      <View style={styles.backButtonContainer}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <FontAwesome name="arrow-left" size={24} color="#fff" />
+          <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -176,4 +195,23 @@ const styles = StyleSheet.create({
   button: {
     padding: 10,
   },
+  backButtonContainer: {
+    position: "absolute",
+    bottom: 20,
+    alignSelf: "center",
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#4CAF50",
+    padding: 10,
+    borderRadius: 5,
+  },
+  backButtonText: {
+    color: "#fff",
+    marginLeft: 8,
+    fontWeight: "bold",
+  },
 });
+
+export default MusicSwiper;

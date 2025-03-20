@@ -22,11 +22,12 @@ export default function Profile({ navigation }) {
   const [following, setFollowing] = useState(51);
   const [reviews, setReviews] = useState(3);
   const [isSpotifyLinked, setIsSpotifyLinked] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  // Store the avatar as an object: either { uri: ... } or a local image
+  // Initially set avatar to default local image
   const [avatar, setAvatar] = useState(require('../images/avatarIcon.png'));
-
   const noAvatar = require('../images/avatarIcon.png');
+
   const [topTracks, setTopTracks] = useState([
     {
       id: "1",
@@ -89,7 +90,7 @@ export default function Profile({ navigation }) {
     },
   ]);
 
-  // Helper: Capitalize the first letter of the username.
+  // Capitalize the first letter of the username
   const formatUsername = (name) => {
     if (!name) return "";
     return name.charAt(0).toUpperCase() + name.slice(1);
@@ -106,24 +107,27 @@ export default function Profile({ navigation }) {
             throw new Error('Failed to fetch user data from backend.');
           }
           const userData = await response.json();
+          console.log("DEBUG: Fetched user data:", userData);
           setUsername(userData.username || '');
           setEmail(userData.email || '');
-          // Use the backend avatar if present (and not "None")
-          if (userData.avatar && userData.avatar !== "None") {
+          // Check if the avatar field is a valid base64 data URI
+          if (
+            userData.avatar &&
+            userData.avatar !== "None" &&
+            userData.avatar.startsWith("data:")
+          ) {
+            console.log("DEBUG: Using base64 avatar:", userData.avatar.substring(0, 50) + "...");
             setAvatar({ uri: userData.avatar });
           } else {
+            console.log("DEBUG: No valid avatar returned, using default");
             setAvatar(noAvatar);
           }
-          // Check for Spotify token
-          if (userData.spotifyAccessToken && userData.spotifyAccessToken !== "") {
-            setIsSpotifyLinked(true);
-          } else {
-            setIsSpotifyLinked(false);
-          }
-
+          setIsSpotifyLinked(
+            userData.spotifyAccessToken && userData.spotifyAccessToken !== ""
+          );
+          setIsAdmin(userData.isAdmin || false);
           setFollowers(userData.followersCount || 0);
           setFollowing(userData.followingCount || 0);
-
         } else {
           navigation.navigate('Home');
         }
@@ -197,6 +201,7 @@ export default function Profile({ navigation }) {
         ListHeaderComponent={
           <View style={styles.profileHeader}>
             <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
+              {/* Display the avatar image */}
               <Image source={avatar} style={styles.avatar} />
             </TouchableOpacity>
             <View style={styles.headerInfo}>
@@ -207,13 +212,20 @@ export default function Profile({ navigation }) {
               <TouchableOpacity onPress={() => navigation.navigate("FollowingList")}>
                 <Text style={styles.stats}>Following: {following}</Text>
               </TouchableOpacity>
-              {/* Show Spotify logo below following if linked */}
-              {isSpotifyLinked && (
-                <View style={styles.spotifyContainer}>
-                  <Image
-                    source={require("../images/spotifyLogo.png")}
-                    style={styles.spotifyLogo}
-                  />
+              {(isSpotifyLinked || isAdmin) && (
+                <View style={styles.badgeContainer}>
+                  {isSpotifyLinked && (
+                    <Image
+                      source={require("../images/spotifyLogo.png")}
+                      style={styles.badgeIcon}
+                    />
+                  )}
+                  {isAdmin && (
+                    <Image
+                      source={require("../images/adminBadge.png")}
+                      style={styles.badgeIcon}
+                    />
+                  )}
                 </View>
               )}
             </View>
@@ -228,7 +240,6 @@ export default function Profile({ navigation }) {
         data={[]}
         ListFooterComponent={
           <>
-            {/* Top Tracks Section */}
             <View style={styles.cardSection}>
               <Text style={styles.sectionTitle}>Top Tracks</Text>
               <FlatList
@@ -239,8 +250,6 @@ export default function Profile({ navigation }) {
                 showsHorizontalScrollIndicator={false}
               />
             </View>
-
-            {/* Top Rated Section */}
             <View style={styles.cardSection}>
               <Text style={styles.sectionTitle}>Top Rated</Text>
               <FlatList
@@ -251,8 +260,6 @@ export default function Profile({ navigation }) {
                 showsHorizontalScrollIndicator={false}
               />
             </View>
-
-            {/* Activity Section */}
             <View style={styles.cardSectionActivity}>
               <Text style={styles.sectionTitle}>Activity</Text>
               <Text style={styles.totalActivity}>Total Reviews: {reviews}</Text>
@@ -330,20 +337,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#fff",
   },
-  spotifyContainer: {
+  badgeContainer: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 5,
   },
-  spotifyLogo: {
+  badgeIcon: {
     width: 24,
     height: 24,
     marginRight: 5,
-    // Ensure no tintColor is applied
-  },
-  spotifyText: {
-    color: "#fff",
-    fontSize: 14,
   },
   editButton: {
     padding: 10,

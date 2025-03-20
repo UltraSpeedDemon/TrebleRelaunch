@@ -28,16 +28,18 @@ export default function FollowersList({ navigation }) {
   const [followersList, setFollowersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [followingUsers, setFollowingUsers] = useState({});
-  // Dictionary to track follow-request status for each follower.
   const [followRequests, setFollowRequests] = useState({});
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsCount, setNotificationsCount] = useState(0);
 
-  // Fetch the followers list.
+  // 1) Fetch the followers list for the current user
   useEffect(() => {
     async function fetchFollowers() {
       try {
         const response = await getFollowers(auth.currentUser.uid);
+        if (!response.ok) {
+          throw new Error("Failed to fetch followers");
+        }
         const json = await response.json();
         setFollowersList(json);
       } catch (error) {
@@ -49,7 +51,7 @@ export default function FollowersList({ navigation }) {
     fetchFollowers();
   }, []);
 
-  // Fetch notifications count (number of follow requests) for the current user.
+  // 2) Fetch how many follow requests the current user has (for notifications badge)
   useEffect(() => {
     async function fetchNotificationsCount() {
       try {
@@ -65,22 +67,24 @@ export default function FollowersList({ navigation }) {
     fetchNotificationsCount();
   }, []);
 
-  // For each follower, check if the current user has already requested to follow.
+  // 3) For each follower, check if the *current user* has already requested to follow them (for private accounts).
   useEffect(() => {
     async function checkFollowRequestForUser(userId) {
       try {
         const resp = await getFollowRequests(userId);
         if (resp.ok) {
           const requests = await resp.json();
+          // If there's a request from currentUser to that userId
           const alreadyRequested = requests.some(
             (req) => req.userId === auth.currentUser.uid
           );
           setFollowRequests((prev) => ({ ...prev, [userId]: alreadyRequested }));
         }
       } catch (error) {
-        console.error("Error fetching follow request status for user", userId, error);
+        console.error("Error fetching follow request status for user:", userId, error);
       }
     }
+
     if (followersList.length > 0) {
       followersList.forEach((user) => {
         checkFollowRequestForUser(user.userId);
@@ -88,13 +92,19 @@ export default function FollowersList({ navigation }) {
     }
   }, [followersList]);
 
-  // Handle follow action.
+  // Helper: Capitalize first letter of username
+  const formatUsername = (name) => {
+    if (!name) return "";
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  };
+
+  // Attempt to follow the user
   const handleFollow = async (user) => {
-    // Convert isPublic to a boolean.
     const userIsPublic = user.isPublic === true || user.isPublic === "true";
+
     if (userIsPublic) {
+      // They are public => direct follow
       try {
-        console.log("Following user:", user);
         const response = await followUser(auth.currentUser.uid, user.userId);
         if (response.ok) {
           setFollowingUsers((prev) => ({ ...prev, [user.userId]: true }));
@@ -106,7 +116,7 @@ export default function FollowersList({ navigation }) {
         console.error("Error following user:", error);
       }
     } else {
-      // For private accounts, send a follow request if not already done.
+      // They are private => we send a request if we haven't already
       if (!followRequests[user.userId]) {
         try {
           const response = await requestFollow(auth.currentUser.uid, user.userId);
@@ -126,10 +136,9 @@ export default function FollowersList({ navigation }) {
     }
   };
 
-  // Handle unfollow action.
+  // Attempt to unfollow the user
   const handleUnfollow = async (user) => {
     try {
-      console.log("Unfollowing user:", user);
       const response = await unfollowUser(auth.currentUser.uid, user.userId);
       if (response.ok) {
         setFollowingUsers((prev) => ({ ...prev, [user.userId]: false }));
@@ -142,12 +151,6 @@ export default function FollowersList({ navigation }) {
     }
   };
 
-  // Helper: Capitalize the first letter of the username.
-  const formatUsername = (name) => {
-    if (!name) return "";
-    return name.charAt(0).toUpperCase() + name.slice(1);
-  };
-
   return (
     <View style={styles.container}>
       {/* Sidebar */}
@@ -158,7 +161,7 @@ export default function FollowersList({ navigation }) {
       {/* Search Bar */}
       <SearchBar />
 
-      {/* Notifications Button with Badge */}
+      {/* Notifications Button + Badge */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -185,24 +188,36 @@ export default function FollowersList({ navigation }) {
                 <ActivityIndicator size="large" color="#4CAF50" />
               ) : followersList.length > 0 ? (
                 followersList.map((user) => {
+                  // If we manually toggled follow status, use that; else use user.isFollowing
                   const isFollowing = followingUsers.hasOwnProperty(user.userId)
                     ? followingUsers[user.userId]
                     : user.isFollowing;
+
+                  // Check if we've already requested this private user
                   const alreadyRequested = followRequests[user.userId] || false;
-                  const userIsPublic =
-                    user.isPublic === true || user.isPublic === "true";
+                  const userIsPublic = user.isPublic === true || user.isPublic === "true";
+
+                  // Decide button label
                   let finalButtonLabel = "Follow";
                   if (isFollowing) {
                     finalButtonLabel = "Following";
                   } else if (!userIsPublic && alreadyRequested) {
                     finalButtonLabel = "Requested";
                   }
+
+                  // If user.avatar is a valid base64 or URL, we pass it in. Otherwise default
+                  const fallbackAvatar = require("../images/avatarIcon.png");
+                  const userAvatar =
+                    user.avatar && user.avatar.startsWith("data:")
+                      ? { uri: user.avatar }
+                      : fallbackAvatar;
+
                   return (
                     <MusicCard
                       key={user.userId}
                       id={user.userId}
                       name={formatUsername(user.username)}
-                      image={user.avatar2}
+                      image={userAvatar}
                       onFollow={() =>
                         isFollowing ? handleUnfollow(user) : handleFollow(user)
                       }
@@ -210,6 +225,7 @@ export default function FollowersList({ navigation }) {
                       buttonLabel={finalButtonLabel}
                       userCard={true}
                       canFollow={true}
+                      // Tapping card => navigate to user profile
                       onPressCard={() =>
                         navigation.navigate("UserProfiles", {
                           userId: user.userId,
