@@ -15,7 +15,10 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { getUser, populateMetadata, like, getLike, unlike } from "../providers/rest";
+import { createReview, getReviews, getUser, populateMetadata, like, getLike, unlike, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
+import ReviewCard from "../components/Review";
+import { useIsFocused } from "@react-navigation/native";
+
 import { Audio } from "expo-av";
 import { AnimatedCircularProgress } from "react-native-circular-progress";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -29,26 +32,28 @@ export default function SongPage({ route, navigation }) {
   const [review, setReview] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
   const [selectedEmojis, setSelectedEmojis] = useState([]);
-  const [reviews, setReviews] = useState([
-    {
-      id: "1",
-      username: "User1",
-      text: "This song is so catchy!",
-      upvotes: 3,
-      upvoted: false,
-      rating: 5,
-      userSelectedEmojis: [],
-    },
-    {
-      id: "2",
-      username: "User2",
-      text: "I love the beat on this track.",
-      upvotes: 5,
-      upvoted: false,
-      rating: 4,
-      userSelectedEmojis: ["🔥"],
-    },
-  ]);
+  const [reviews, setReviews] = useState(
+    [
+      // {
+      //   id: "1",
+      //   username: "User1",
+      //   text: "This song is so catchy!",
+      //   upvotes: 3,
+      //   upvoted: false,
+      //   rating: 5,
+      //   userSelectedEmojis: [],
+      // },
+      // {
+      //   id: "2",
+      //   username: "User2",
+      //   text: "I love the beat on this track.",
+      //   upvotes: 5,
+      //   upvoted: false,
+      //   rating: 4,
+      //   userSelectedEmojis: ["🔥"],
+      // },
+    ]
+  );
 
   // Like, Save, Favourite states
   const [liked, setLiked] = useState(false);
@@ -57,6 +62,7 @@ export default function SongPage({ route, navigation }) {
 
   // For the emoji dropdown
   const [showEmojiDropdown, setShowEmojiDropdown] = useState(false);
+  const isFocused = useIsFocused();
 
   // Add state for progress
   const [progress, setProgress] = useState(0);
@@ -87,8 +93,14 @@ export default function SongPage({ route, navigation }) {
         setLoadingUser(false);
       }
     }
+    populateReviews();
     fetchUserData();
-  }, [navigation]);
+  }, [navigation, isFocused]);
+
+  async function populateReviews() {
+    let reqReviews = await (await getReviews(track.id)).json()
+    setReviews(reqReviews)
+  }
 
   useEffect(() => {
     async function checkLikeStatus() {
@@ -108,7 +120,7 @@ export default function SongPage({ route, navigation }) {
     }
     checkLikeStatus();
   }, [track.id]);
-  
+
 
   // Sort reviews by upvotes desc
   const getSortedReviews = () => {
@@ -123,7 +135,7 @@ export default function SongPage({ route, navigation }) {
         Alert.alert("Error", "User not logged in");
         return;
       }
-      
+
       if (!liked) {
         // Call the API to like the song
         const response = await like(currentUser.uid, track.id, track.type);
@@ -147,7 +159,7 @@ export default function SongPage({ route, navigation }) {
       console.error("Error toggling like status:", error);
       Alert.alert("Error", "Unable to toggle like status");
     }
-  };  
+  };
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
   const handleToggleFavourite = () => setFavourite(!favourite);
   const handleShare = () => console.log("Song shared!");
@@ -159,7 +171,9 @@ export default function SongPage({ route, navigation }) {
 
   // Add tapped emoji to selectedEmojis
   const handleSelectEmoji = (emoji) => {
-    setSelectedEmojis((prev) => [...prev, emoji]);
+    setSelectedEmojis((prev) =>
+      prev.includes(emoji) ? prev.filter((e) => e !== emoji) : [...prev, emoji]
+    );
   };
 
   // Confirmation alert on post
@@ -184,37 +198,54 @@ export default function SongPage({ route, navigation }) {
   };
 
   // Actually add the review
-  const actuallyAddReview = () => {
-
+  async function actuallyAddReview() {
     const newReview = {
       id: Date.now().toString(),
-      username: username || "Anonymous",
-      text: review.trim(),
-      upvotes: 0,
-      upvoted: false,
+      listenable_id: track.id,
+      hearted: favourite,
+      message: review.trim(),
       rating: reviewRating,
-      userSelectedEmojis: [...selectedEmojis],
+      emoji: [...selectedEmojis],
     };
-    setReviews((prev) => [...prev, newReview]);
+
+    await createReview(newReview)
+    await populateReviews();
+
     setReview("");
     setReviewRating(0);
     setSelectedEmojis([]);
+
   };
 
-  const handleUpvote = (id) => {
+  const handleUpvote = async (id) => {
+    let rev = reviews.find(r => r.id === id)
+    if (!rev.upvoted) {
+      await upvoteReview(id)
+    } else {
+      await removeUpvoteFromReview(id)
+    }
     setReviews((prev) =>
       prev.map((c) =>
         c.id === id
           ? {
-              ...c,
-              upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1,
-              upvoted: !c.upvoted,
-            }
+            ...c,
+            upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1,
+            upvoted: !c.upvoted,
+          }
           : c
       )
     );
   };
 
+  const handleDelete = async (id) => {
+    let rev = reviews.find(r => r.id === id)
+    if (rev.isUser) {
+      await deleteReview(id)
+    }
+    setReviews((prev) =>
+      prev.filter((r) => r.id !== id)
+    );
+  }
   //handles playing the preview
   const [sound, setSound] = useState(null); // Add state for managing the sound instance
 
@@ -282,7 +313,7 @@ export default function SongPage({ route, navigation }) {
     <View style={styles.container}>
       {/* Sidebar */}
       <View style={styles.sideMenu}>
-        <Sidebar menuOpen={false} setMenuOpen={() => {}} />
+        <Sidebar menuOpen={false} setMenuOpen={() => { }} />
       </View>
 
       <FlatList
@@ -456,52 +487,7 @@ export default function SongPage({ route, navigation }) {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.reviewCard}>
-            <Image source={require("../images/avatarIcon.png")} style={styles.avatar} />
-            <View style={styles.reviewContent}>
-              <View style={styles.reviewHeader}>
-                <Text style={styles.username}>{item.username}</Text>
-              </View>
-              <Text style={styles.reviewText}>{item.text}</Text>
-              <View style={styles.reviewRating}>
-                {[...Array(5)].map((_, index) => (
-                  <Image
-                    key={index}
-                    source={
-                      index < item.rating
-                        ? require("../images/starFullIcon.png")
-                        : require("../images/starEmptyIcon.png")
-                    }
-                    style={styles.reviewStar}
-                  />
-                ))}
-              </View>
-              {/* Show chosen emojis in bottom-right */}
-              {item.userSelectedEmojis && item.userSelectedEmojis.length > 0 && (
-                <View style={styles.reviewEmojisContainer}>
-                  {item.userSelectedEmojis.map((emo, i) => (
-                    <Text key={i} style={styles.reviewEmoji}>
-                      {emo}
-                    </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-            <TouchableOpacity
-              onPress={() => handleUpvote(item.id)}
-              style={styles.upvoteButton}
-            >
-              <Image
-                source={
-                  item.upvoted
-                    ? require("../images/upvoteIconBlack.png")
-                    : require("../images/upvoteIconWhite.png")
-                }
-                style={styles.upvoteIcon}
-              />
-              <Text style={styles.upvoteCount}>{item.upvotes}</Text>
-            </TouchableOpacity>
-          </View>
+          <ReviewCard item={item} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />
         )}
         contentContainerStyle={styles.reviewsContainer}
         showsVerticalScrollIndicator={false}

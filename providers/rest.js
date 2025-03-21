@@ -1,4 +1,6 @@
 // /providers/rest.js
+import { auth } from '../utils/firebase';
+
 //#region Local server request handlers
 export async function serverGet(endpoint, params = null) {
   let url = `${getServerEndpointBase()}/${endpoint}`;
@@ -37,6 +39,17 @@ export async function serverPut(endpoint, body) {
   }
 }
 
+export async function serverDelete(endpoint, body) {
+  try {
+    return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
 //#endregion
 
 //#region Custom request functions
@@ -137,6 +150,55 @@ export async function populateMetadata(reviewType, id) {
   return await serverGet("metadata/populate", params);
 }
 //#endregion
+
+
+// #endregion
+
+// #region Review endpoints
+export async function createReview(review) {
+  // decoded_token = auth.verify_id_token(request['id_token'])
+  // listenable_id = request['track_id']
+  // emoji = request['emoji'] or None
+  // hearted = request['hearted'] or False
+  // message = request['message']
+  // rating = request['rating']
+  id_token = await auth.currentUser.getIdToken()
+  return await serverPost("review", {...review, id_token })
+}
+
+export async function getReviews(listenable_id) {
+  id_token = await auth.currentUser.getIdToken()
+  return await serverPost("review/reviews", { listenable_id, id_token })
+}
+
+export async function getUserReview(user_id) {
+  return await serverGet("review/user", { user_id })
+}
+
+export async function upvoteReview(rid) {
+  id_token = await auth.currentUser.getIdToken()
+  return await serverPost("review/upvote", { rid, id_token })
+}
+
+export async function removeUpvoteFromReview(rid) {
+  id_token = await auth.currentUser.getIdToken()
+  return await serverPost("review/removeUpvote", { rid, id_token })
+}
+
+export async function deleteReview(rid) {
+  id_token = await auth.currentUser.getIdToken()
+  return await serverDelete("review", { rid, id_token })
+}
+
+export async function updateReview(rid, emoji, hearted, message, rating) {
+  id_token = await auth.currentUser.getIdToken()
+  return await serverPut("review/update", { rid, id_token, emoji, hearted, message, rating })
+}
+
+export async function getReviewById(rid) {
+  return await serverGet("review/getReview", { rid })
+}
+// #endregion
 
 export function getServerEndpointBase() {
   if (process.env.NODE_ENV === "development") {

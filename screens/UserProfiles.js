@@ -16,12 +16,17 @@ import {
   getFriends,
   followUser,
   unfollowUser,
-  requestFollow,
+  requestFollow,  // For private accounts
   getFollowRequests,
+  getUserReview,
+  upvoteReview,
+  removeUpvoteFromReview,
+  deleteReview,  // Already defined: export async function getFollowRequests(userId) { return await serverGet(`users/${userId}/followRequests`); }
 } from "../providers/rest";
 import colours from "../styles/colours";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
+import ReviewCard from "../components/Review";
 import { FlatList } from "react-native-gesture-handler";
 
 export default function UserProfiles({ navigation }) {
@@ -127,10 +132,9 @@ export default function UserProfiles({ navigation }) {
         { id: "1", name: "Stronger", artist: "Kanye West", rating: 5, image: require("../images/albumImage.jpg") },
         { id: "2", name: "Gold Digger", artist: "Kanye West", rating: 4, image: require("../images/albumImage.jpg") },
       ]);
-      setActivity([
-        { id: "1", username: data.username || "User", text: "Sample review text #1", upvotes: 2000 },
-        { id: "2", username: data.username || "User", text: "Sample review text #2", upvotes: 1000 },
-      ]);
+
+      let userReviews = await (await getUserReview(userId)).json()
+      setActivity(userReviews);
     } catch (error) {
       console.error("Error fetching user data:", error);
       Alert.alert("Error", "Unable to fetch user data.");
@@ -167,6 +171,39 @@ export default function UserProfiles({ navigation }) {
     }
   }
 
+  const handleUpvote = async (id) => {
+    let rev = activity.find(r => r.id === id)
+    if (!rev.upvoted) {
+      await upvoteReview(id)
+    } else {
+      await removeUpvoteFromReview(id)
+    }
+    setActivity((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? {
+            ...c,
+            upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1,
+            upvoted: !c.upvoted,
+          }
+          : c
+      )
+    );
+  };
+
+  const handleDelete = async (id) => {
+    let rev = activity.find(r => r.id === id)
+    if (rev.isUser) {
+      await deleteReview(id)
+    }
+    setActivity((prev) =>
+      prev.filter((r) => r.id !== id)
+    );
+  }
+
+
+
+  // Determine if I'm following or if we are friends
   const iAmFollowing = theirFollowers.some(
     (f) => f.userId === auth.currentUser.uid
   );
@@ -350,14 +387,7 @@ export default function UserProfiles({ navigation }) {
                 <FlatList
                   data={activity}
                   renderItem={({ item }) => (
-                    <View style={styles.activityCard}>
-                      <Text style={styles.activityUsername}>{item.username}</Text>
-                      <Text style={styles.activityText}>{item.text}</Text>
-                      <View style={styles.activityFooter}>
-                        <Text style={styles.upvotes}>{item.upvotes} Upvotes</Text>
-                        <Text style={styles.emojis}>❤️ 😢</Text>
-                      </View>
-                    </View>
+                    <ReviewCard item={item} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />
                   )}
                   keyExtractor={(item) => item.id}
                 />
@@ -415,6 +445,7 @@ const styles = StyleSheet.create({
   trackArtist: { fontSize: 12, color: "#aaa" },
   ratingContainer: { flexDirection: "row", marginTop: 5 },
   starIcon: { width: 16, height: 16, marginRight: 2 },
+  activityCardSection: { backgroundColor: colours.bluegrey, marginBottom: 100, padding: 10, borderRadius: 10, marginHorizontal: 10, marginVertical: 10 },
   activityCard: { backgroundColor: "#1E1E2C", borderRadius: 10, padding: 10, marginBottom: 10 },
   activityUsername: { fontSize: 14, fontWeight: "bold", color: colours.lightblue, marginBottom: 5 },
   activityText: { fontSize: 12, color: "#fff", marginBottom: 5 },

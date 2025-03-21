@@ -15,7 +15,9 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { getUser, populateMetadata, getLike, unlike, like } from "../providers/rest";
+import { createReview, getReviews, getUser, populateMetadata, like, getLike, unlike, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
+import ReviewCard from "../components/Review";
+import { useIsFocused } from "@react-navigation/native";
 
 export default function ArtistPage({ route, navigation }) {
   const { artist } = route.params; // Expecting "artist" from navigation
@@ -26,26 +28,7 @@ export default function ArtistPage({ route, navigation }) {
   const [review, setReview] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
   const [selectedEmojis, setSelectedEmojis] = useState([]);
-  const [reviews, setReviews] = useState([
-    {
-      id: "1",
-      username: "User1",
-      text: "I love this artist’s vibe!",
-      upvotes: 3,
-      upvoted: false,
-      rating: 5,
-      userSelectedEmojis: [],
-    },
-    {
-      id: "2",
-      username: "User2",
-      text: "They have such a unique style.",
-      upvotes: 5,
-      upvoted: false,
-      rating: 4,
-      userSelectedEmojis: ["🔥"],
-    },
-  ]);
+  const [reviews, setReviews] = useState([]);
 
   // Like, Save, Favourite states
   const [liked, setLiked] = useState(false);
@@ -54,6 +37,7 @@ export default function ArtistPage({ route, navigation }) {
 
   // For the emoji dropdown
   const [showEmojiDropdown, setShowEmojiDropdown] = useState(false);
+  const isFocused = useIsFocused();
 
   // 1) Fetch user data
   useEffect(() => {
@@ -80,27 +64,33 @@ export default function ArtistPage({ route, navigation }) {
         setLoadingUser(false);
       }
     }
+    populateReviews();
     fetchUserData();
-  }, [navigation]);
+  }, [navigation, isFocused]);
+
+  async function populateReviews() {
+    let reqReviews = await (await getReviews(artist.id)).json()
+    setReviews(reqReviews)
+  }
 
   useEffect(() => {
-      async function checkLikeStatus() {
-        try {
-          const currentUser = auth.currentUser;
-          if (!currentUser) return;
-          const response = await getLike(currentUser.uid, artist.id, artist.type);
-          if (!response.ok) {
-            setLiked(false);
-            return;
-          }
-          const data = await response.json();
-          setLiked(data.liked);
-        } catch (error) {
-          console.error("Error checking like status:", error);
+    async function checkLikeStatus() {
+      try {
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        const response = await getLike(currentUser.uid, artist.id, artist.type);
+        if (!response.ok) {
+          setLiked(false);
+          return;
         }
+        const data = await response.json();
+        setLiked(data.liked);
+      } catch (error) {
+        console.error("Error checking like status:", error);
       }
-      checkLikeStatus();
-    }, [artist.id]);
+    }
+    checkLikeStatus();
+  }, [artist.id]);
 
   // Sort reviews by upvotes desc
   const getSortedReviews = () => {
@@ -108,38 +98,38 @@ export default function ArtistPage({ route, navigation }) {
   };
 
   // Handlers
-    // Handler logic
-    const handleLikeArtist = async () => {
-      try {
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-          Alert.alert("Error", "User not logged in");
-          return;
-        }
-        if (!liked) {
-          // Call the API to like the song
-          const response = await like(currentUser.uid, artist.id, artist.type);
-          if (!response.ok) {
-            throw new Error("Failed to like the artist");
-          }
-          const data = await response.json();
-          console.log("Artist liked successfully:", data);
-          setLiked(true);
-        } else {
-          // Call the API to unlike the song
-          const response = await unlike(currentUser.uid, artist.id, artist.type);
-          if (!response.ok) {
-            throw new Error("Failed to unlike the artist");
-          }
-          const data = await response.json();
-          console.log("Artist unliked successfully:", data);
-          setLiked(false);
-        }
-      } catch (error) {
-        console.error("Error toggling like status:", error);
-        Alert.alert("Error", "Unable to toggle like status");
+  // Handler logic
+  const handleLikeArtist = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        Alert.alert("Error", "User not logged in");
+        return;
       }
-    };  
+      if (!liked) {
+        // Call the API to like the song
+        const response = await like(currentUser.uid, artist.id, artist.type);
+        if (!response.ok) {
+          throw new Error("Failed to like the artist");
+        }
+        const data = await response.json();
+        console.log("Artist liked successfully:", data);
+        setLiked(true);
+      } else {
+        // Call the API to unlike the song
+        const response = await unlike(currentUser.uid, artist.id, artist.type);
+        if (!response.ok) {
+          throw new Error("Failed to unlike the artist");
+        }
+        const data = await response.json();
+        console.log("Artist unliked successfully:", data);
+        setLiked(false);
+      }
+    } catch (error) {
+      console.error("Error toggling like status:", error);
+      Alert.alert("Error", "Unable to toggle like status");
+    }
+  };
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
   const handleToggleFavourite = () => setFavourite(!favourite);
   const handleShare = () => console.log("Artist shared!");
@@ -149,7 +139,9 @@ export default function ArtistPage({ route, navigation }) {
   };
 
   const handleSelectEmoji = (emoji) => {
-    setSelectedEmojis((prev) => [...prev, emoji]);
+    setSelectedEmojis((prev) =>
+      prev.includes(emoji) ? prev.filter((e) => e !== emoji) : [...prev, emoji]
+    );
   };
 
   const handleAddReview = () => {
@@ -172,36 +164,53 @@ export default function ArtistPage({ route, navigation }) {
     );
   };
 
-  const actuallyAddReview = () => {
-
+  const actuallyAddReview = async () => {
     const newReview = {
       id: Date.now().toString(),
-      username: username || "Anonymous",
-      text: review.trim(),
-      upvotes: 0,
-      upvoted: false,
+      listenable_id: artist.id,
+      hearted: favourite,
+      message: review.trim(),
       rating: reviewRating,
-      userSelectedEmojis: [...selectedEmojis],
+      emoji: [...selectedEmojis],
     };
-    setReviews((prev) => [...prev, newReview]);
+
+    await createReview(newReview)
+    await populateReviews();
+
     setReview("");
     setReviewRating(0);
     setSelectedEmojis([]);
   };
 
-  const handleUpvote = (id) => {
+  const handleUpvote = async (id) => {
+    let rev = reviews.find(r => r.id === id)
+    if (!rev.upvoted) {
+      await upvoteReview(id)
+    } else {
+      await removeUpvoteFromReview(id)
+    }
     setReviews((prev) =>
       prev.map((c) =>
         c.id === id
           ? {
-              ...c,
-              upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1,
-              upvoted: !c.upvoted,
-            }
+            ...c,
+            upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1,
+            upvoted: !c.upvoted,
+          }
           : c
       )
     );
   };
+
+  const handleDelete = async (id) => {
+    let rev = reviews.find(r => r.id === id)
+    if (rev.isUser) {
+      await deleteReview(id)
+    }
+    setReviews((prev) =>
+      prev.filter((r) => r.id !== id)
+    );
+  }
 
   // If no artist data
   if (!artist) {
@@ -222,7 +231,7 @@ export default function ArtistPage({ route, navigation }) {
     <View style={styles.container}>
       {/* Sidebar */}
       <View style={styles.sideMenu}>
-        <Sidebar menuOpen={false} setMenuOpen={() => {}} />
+        <Sidebar menuOpen={false} setMenuOpen={() => { }} />
       </View>
 
       <FlatList
@@ -368,51 +377,7 @@ export default function ArtistPage({ route, navigation }) {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.reviewCard}>
-            <Image source={require("../images/avatarIcon.png")} style={styles.avatar} />
-            <View style={styles.reviewContent}>
-              <View style={styles.reviewHeader}>
-                <Text style={styles.username}>{item.username}</Text>
-              </View>
-              <Text style={styles.reviewText}>{item.text}</Text>
-              <View style={styles.reviewRating}>
-                {[...Array(5)].map((_, index) => (
-                  <Image
-                    key={index}
-                    source={
-                      index < item.rating
-                        ? require("../images/starFullIcon.png")
-                        : require("../images/starEmptyIcon.png")
-                    }
-                    style={styles.reviewStar}
-                  />
-                ))}
-              </View>
-              {item.userSelectedEmojis && item.userSelectedEmojis.length > 0 && (
-                <View style={styles.reviewEmojisContainer}>
-                  {item.userSelectedEmojis.map((emo, i) => (
-                    <Text key={i} style={styles.reviewEmoji}>
-                      {emo}
-                    </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-            <TouchableOpacity
-              onPress={() => handleUpvote(item.id)}
-              style={styles.upvoteButton}
-            >
-              <Image
-                source={
-                  item.upvoted
-                    ? require("../images/upvoteIconBlack.png")
-                    : require("../images/upvoteIconWhite.png")
-                }
-                style={styles.upvoteIcon}
-              />
-              <Text style={styles.upvoteCount}>{item.upvotes}</Text>
-            </TouchableOpacity>
-          </View>
+          <ReviewCard item={item} handleDelete={handleDelete} handleUpvote={handleUpvote} navigation={navigation}/>
         )}
         contentContainerStyle={styles.reviewsContainer}
         showsVerticalScrollIndicator={false}
