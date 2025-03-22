@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -13,251 +13,114 @@ import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
 import SearchBar from "../components/SearchBar";
 import { auth } from "../utils/firebase";
-import { getFollowRequests } from "../providers/rest";
+import { getRecommendations } from "../providers/rest";
 
 export default function Feed({ navigation, route }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [feedItems, setFeedItems] = useState([]);
+  // Core feed items (e.g., static comments or posts) that load immediately
+  const [feedItems, setFeedItems] = useState([
+    // Example static feed content (you can replace this with your actual feed data)
+    {
+      type: "comment",
+      username: "Static User",
+      text: "This is a static comment that loads instantly!",
+      rating: 4,
+      upvotes: 10,
+      post: {
+        album: { images: [{ url: require("../images/albumImage.jpg") }] },
+      },
+    },
+  ]);
+  
+  // Recommendations state – will be appended to feedItems when loaded
+  const [recommendations, setRecommendations] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [mockComments, setMockComments] = useState([]);
   const [notificationsCount, setNotificationsCount] = useState(0);
-
-  useEffect(() => {
-    const fetchFeedItems = () => {
-      const mockPosts = [
-        {
-          id: "1",
-          type: "post",
-          name: "Graduation",
-          album: { images: [{ url: require("../images/albumImage.jpg") }] },
-          artists: [{ name: "Kanye" }],
-          rating: 4,
-        },
-        {
-          id: "2",
-          type: "post",
-          name: "Certified Lover Boy",
-          album: { images: [{ url: require("../images/albumImage.jpg") }] },
-          artists: [{ name: "Drake" }],
-          rating: 5,
-        },
-        {
-          id: "3",
-          type: "post",
-          name: "Midnights",
-          album: { images: [{ url: require("../images/albumImage.jpg") }] },
-          artists: [{ name: "Taylor Swift" }],
-          rating: 4,
-        },
-        {
-          id: "4",
-          type: "post",
-          name: "DAMN.",
-          album: { images: [{ url: require("../images/albumImage.jpg") }] },
-          artists: [{ name: "Kendrick Lamar" }],
-          rating: 5,
-        },
-        {
-          id: "5",
-          type: "post",
-          name: "Astroworld",
-          album: { images: [{ url: require("../images/albumImage.jpg") }] },
-          artists: [{ name: "Travis Scott" }],
-          rating: 5,
-        },
-      ];
-      
-      const mockCommentsData = [
-        {
-          id: "101",
-          type: "comment",
-          username: "User1",
-          text: "This song is so catchy!",
-          rating: 5,
-          post: mockPosts[0],
-        },
-        {
-          id: "102",
-          type: "comment",
-          username: "User2",
-          text: "Drake's new album is amazing!",
-          rating: 4,
-          post: mockPosts[1],
-        },
-        {
-          id: "103",
-          type: "comment",
-          username: "User3",
-          text: "The beats on Graduation are incredible!",
-          rating: 5,
-          post: mockPosts[0],
-        },
-        {
-          id: "104",
-          type: "comment",
-          username: "User4",
-          text: "Taylor's storytelling is unmatched!",
-          rating: 5,
-          post: mockPosts[2],
-        },
-        {
-          id: "105",
-          type: "comment",
-          username: "User5",
-          text: "Kendrick's flow is amazing on this one.",
-          rating: 4,
-          post: mockPosts[3],
-        },
-        {
-          id: "106",
-          type: "comment",
-          username: "User6",
-          text: "Astroworld takes me to another planet.",
-          rating: 5,
-          post: mockPosts[4],
-        },
-        {
-          id: "107",
-          type: "comment",
-          username: "User7",
-          text: "Kanye's production on this is genius.",
-          rating: 5,
-          post: mockPosts[0],
-        },
-        {
-          id: "108",
-          type: "comment",
-          username: "User8",
-          text: "This album is all I listen to these days!",
-          rating: 5,
-          post: mockPosts[4],
-        },
-        {
-          id: "109",
-          type: "comment",
-          username: "User9",
-          text: "Midnights hits so differently late at night.",
-          rating: 4,
-          post: mockPosts[2],
-        },
-        {
-          id: "110",
-          type: "comment",
-          username: "User10",
-          text: "Certified Lover Boy is the perfect vibe.",
-          rating: 4,
-          post: mockPosts[1],
-        },
-        {
-          id: "111",
-          type: "comment",
-          username: "User11",
-          text: "DAMN. is a lyrical masterpiece.",
-          rating: 5,
-          post: mockPosts[3],
-        },
-        {
-          id: "112",
-          type: "comment",
-          username: "User12",
-          text: "Kendrick is in his own league with this.",
-          rating: 5,
-          post: mockPosts[3],
-        },
-        {
-          id: "113",
-          type: "comment",
-          username: "User13",
-          text: "Astroworld's energy is unmatched.",
-          rating: 5,
-          post: mockPosts[4],
-        },
-      ];
-      
-      setMockComments(mockCommentsData);
-      setFeedItems([...mockPosts, ...mockCommentsData].sort(() => Math.random() - 0.5));
-    };
-
-    fetchFeedItems();
-  }, []);
-
-  // Handle new post/comment from CreatePost
-  useEffect(() => {
-    if (route?.params?.newPost) {
-      const newPost = route.params.newPost;
-      const newComment = {
-        id: Date.now().toString(),
-        type: "comment",
-        username: newPost.username,
-        text: newPost.comment,
-        rating: newPost.rating,
-        post: {
-          id: newPost.id,
-          type: "post",
-          name: newPost.name,
-          album: { images: [{ url: newPost.albumCover }] },
-          artists: [{ name: newPost.artist }],
-          rating: newPost.rating,
-        },
-      };
-
-      setMockComments((prevComments) => [newComment, ...prevComments]);
-      setFeedItems((prevFeedItems) => [newComment, ...prevFeedItems]);
+  const [onEndReachedCalledDuringMomentum, setOnEndReachedCalledDuringMomentum] = useState(true);
+  
+  // Pagination state for recommendations
+  const [offset, setOffset] = useState(0);
+  const [limit] = useState(5);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  
+  const fetchedInitial = useRef(false);
+  const dummyPost = {
+    album: { images: [{ url: require("../images/albumImage.jpg") }] },
+  };
+  const dummyReview = {
+    username: "Top Reviewer",
+    text: "Amazing track! A must-listen.",
+    rating: 5,
+    upvotes: 42,
+    post: dummyPost,
+  };
+  // Function to fetch recommendations from the backend with pagination.
+  const fetchRecommendations = async (currentOffset) => {
+    try {
+      const uid = auth.currentUser.uid;
+      const response = await getRecommendations(uid, { limit, offset: currentOffset });
+      if (response && response.ok) {
+        const data = await response.json();
+        return data.recommendations || [];
+      } else {
+        return [];
+      }
+    } catch (error) {
+      console.error("Error fetching recommendations:", error);
+      return [];
     }
-  }, [route?.params?.newPost]);
-
-  const onRefresh = () => {
-    setFeedItems([...feedItems].sort(() => Math.random() - 0.5));
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
   };
 
-  // Fetch notifications count (number of follow requests)
-  useEffect(() => {
-    async function fetchNotificationsCount() {
-      try {
-        const resp = await getFollowRequests(auth.currentUser.uid);
-        if (resp.ok) {
-          const requests = await resp.json();
-          setNotificationsCount(requests.length);
-        }
-      } catch (error) {
-        console.error("Error fetching notifications count:", error);
-      }
+  // Load initial recommendations in the background.
+  const fetchInitialRecommendations = async () => {
+    const recs = await fetchRecommendations(0);
+    // If you want to shuffle the recommendations, do so here:
+    recs.sort(() => Math.random() - 0.5);
+    if (recs.length < limit) {
+      setHasMore(false);
     }
-    fetchNotificationsCount();
+    setOffset(limit);
+    setRecommendations(recs);
+  };
+
+  // Load more recommendations on scroll.
+  const loadMoreRecommendations = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const newRecs = await fetchRecommendations(offset);
+    if (newRecs.length < limit) {
+      setHasMore(false);
+    }
+    // If you want to keep the randomized order consistent, you may
+    // decide not to reshuffle additional pages.
+    setRecommendations((prev) => [...prev, ...newRecs]);
+    setOffset((prev) => prev + limit);
+    setLoadingMore(false);
+  };
+
+  // On component mount, fetch recommendations asynchronously.
+  useEffect(() => {
+    if (!fetchedInitial.current) {
+      fetchedInitial.current = true;
+      fetchInitialRecommendations();
+    }
   }, []);
 
+  // When refreshing, re-fetch recommendations (and optionally your feed).
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // You can choose to refresh both core feed and recommendations if needed.
+    await fetchInitialRecommendations();
+    setRefreshing(false);
+  };
+
+  // Combine feed items and recommendations (you can also render them in separate sections).
+  const combinedFeed = [...feedItems, ...recommendations];
+
+  // Render feed items.
   const renderFeedItem = ({ item }) => {
-    if (item.type === "post") {
-      return (
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => navigation.navigate("Posts", { post: item })}
-        >
-          <Image source={item.album.images[0].url} style={styles.postImage} />
-          <View style={styles.cardContent}>
-            <Text style={styles.postTitle}>
-              {item.name} <Text style={styles.songTag}>[Song]</Text>
-            </Text>
-            <Text style={styles.postArtist}>{item.artists[0].name}</Text>
-            <View style={styles.ratingContainer}>
-              {[...Array(5)].map((_, index) => (
-                <Image
-                  key={index}
-                  source={
-                    index < item.rating
-                      ? require("../images/starFullIcon.png")
-                      : require("../images/starEmptyIcon.png")
-                  }
-                  style={styles.starIcon}
-                />
-              ))}
-            </View>
-          </View>
-        </TouchableOpacity>
-      );
-    } else if (item.type === "comment") {
+    if (item.type === "comment") {
       return (
         <TouchableOpacity
           style={styles.commentCard}
@@ -280,11 +143,80 @@ export default function Feed({ navigation, route }) {
                 />
               ))}
             </View>
-            <Text style={styles.upvotes}>{item.upvotes} Upvotes</Text>
+            <Text style={styles.upvotes}>{item.upvotes || 0} Upvotes</Text>
           </View>
         </TouchableOpacity>
       );
     }
+
+    // For recommendations (Song or Artist)
+    let isSong = false;
+    let isArtist = false;
+    if (item.title) {
+      isSong = true;
+    } else if (item.name) {
+      isArtist = true;
+    }
+
+    let displayName = isArtist ? item.name : item.title;
+    let subText = isArtist
+      ? item.artistId
+        ? `ID: ${item.artistId}`
+        : ""
+      : item.artist && item.artist.name
+      ? item.artist.name
+      : "Unknown Artist";
+
+    const imageUri = item.coverArt || "https://via.placeholder.com/250";
+
+    let postContext = "";
+    if (item.origin && typeof item.origin === "object") {
+      if (isSong) {
+        postContext = `Because you like "${item.origin.title}" by ${item.origin.artist}`;
+      } else if (isArtist) {
+        postContext = `Because you like ${item.origin.name}`;
+      }
+    } else if (typeof item.origin === "string") {
+      postContext = item.origin;
+    }
+
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => navigation.navigate("Posts", { post: item })}
+      >
+        {postContext ? <Text style={styles.postContext}>{postContext}</Text> : null}
+        <Image source={{ uri: imageUri }} style={styles.postImage} />
+        <View style={styles.cardContent}>
+          <Text style={styles.postTitle}>{displayName}</Text>
+          {subText ? <Text style={styles.postArtist}>{subText}</Text> : null}
+          <View style={styles.reviewContainer}>
+              <Image
+                source={dummyReview.post.album.images[0].url}
+                style={styles.albumImage}
+              />
+              <View style={styles.commentContent}>
+                <Text style={styles.username}>{dummyReview.username}</Text>
+                <Text style={styles.commentText}>{dummyReview.text}</Text>
+                <View style={styles.ratingContainer}>
+                  {[...Array(5)].map((_, index) => (
+                    <Image
+                      key={index}
+                      source={
+                        index < dummyReview.rating
+                          ? require("../images/starFullIcon.png")
+                          : require("../images/starEmptyIcon.png")
+                      }
+                      style={styles.starIcon}
+                    />
+                  ))}
+                </View>
+                <Text style={styles.upvotes}>{dummyReview.upvotes} Upvotes</Text>
+              </View>
+            </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -297,7 +229,7 @@ export default function Feed({ navigation, route }) {
       {/* Search Bar */}
       <SearchBar />
 
-      {/* Notifications Button with Badge */}
+      {/* Notifications Button */}
       <TouchableOpacity
         style={styles.notificationsIcon}
         onPress={() => navigation.navigate("Notifications")}
@@ -306,7 +238,7 @@ export default function Feed({ navigation, route }) {
           source={require("../images/notificationsIcon2.png")}
           style={styles.notifIcon}
         />
-        {notificationsCount > 0 && (
+      {notificationsCount > 0 && (
           <View style={styles.notificationBadge}>
             <Text style={styles.notificationBadgeText}>
               {notificationsCount}
@@ -319,11 +251,23 @@ export default function Feed({ navigation, route }) {
       <View style={styles.content}>
         <Text style={styles.header}>Recent Feed</Text>
         <FlatList
-          data={feedItems}
+          data={combinedFeed}
           renderItem={renderFeedItem}
-          keyExtractor={(item) => item.id + Math.random().toString()}
+          keyExtractor={(item, index) => index.toString()}
           contentContainerStyle={styles.feedList}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          onMomentumScrollBegin={() => {
+            setOnEndReachedCalledDuringMomentum(false);
+          }}
+          onEndReached={() => {
+            if (!onEndReachedCalledDuringMomentum) {
+              loadMoreRecommendations();
+              setOnEndReachedCalledDuringMomentum(true);
+            }
+          }}
+          onEndReachedThreshold={2}
           showsVerticalScrollIndicator={false}
         />
       </View>
@@ -343,7 +287,6 @@ export default function Feed({ navigation, route }) {
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
-
     </View>
   );
 }
@@ -364,23 +307,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     zIndex: 10,
-  },
-  searchBar: {
-    position: "absolute",
-    width: "70%",
-    height: 40,
-    top: 70,
-    left: "15%",
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colours.lightblue,
-    backgroundColor: colours.darkblue,
-  },
-  searchInput: {
-    fontSize: 16,
-    color: "#fff",
   },
   notificationsIcon: {
     width: 40,
@@ -437,15 +363,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    alignItems: "center",
+    textAlign: "center",
   },
   postImage: {
-    width: "50%",
-    height: 150,
+    width: 250,
+    height: 250,
     borderRadius: 10,
     marginBottom: 10,
   },
   cardContent: {
     flex: 1,
+    textAlign: "center",
+    alignItems: "center",
   },
   postTitle: {
     fontSize: 20,
@@ -453,27 +383,33 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginBottom: 5,
   },
-  songTag: {
-    fontSize: 14,
-    color: colours.lightblue,
-  },
   postArtist: {
     fontSize: 16,
     color: "#aaa",
     marginBottom: 10,
   },
-  commentCard: {
+  postContext: {
+    fontSize: 12,
+    color: "#fff",
+    marginBottom: 10,
+    alignSelf: "center",
+  },
+  reviewContainer: {
+    marginTop: 10,
+    padding: 8,
+    backgroundColor: "#333",
+    borderRadius: 5,
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
+  },
+  commentCard: {
     backgroundColor: colours.darkblue,
+    flexDirection: "row",
+    marginBottom: 20,
     borderRadius: 10,
     padding: 15,
-    marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    alignItems: "center",
   },
   albumImage: {
     width: 60,

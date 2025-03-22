@@ -15,7 +15,7 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { createReview, getReviews, getUser, populateMetadata, like, getLike, unlike, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
+import { getUser, populateMetadata, getLike, unlike, like, postRecommendations, createReview, getReviews, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 
@@ -115,6 +115,25 @@ export default function ArtistPage({ route, navigation }) {
         const data = await response.json();
         console.log("Artist liked successfully:", data);
         setLiked(true);
+        // After liking, call the recommendations endpoint
+        try {
+          const recResponse = await postRecommendations(
+            currentUser.uid,    // user_id
+            artist.id,           // music_id
+            artist.type,         // type 
+            "",       
+            artist.name,         // name
+          );
+          if (recResponse.ok) {
+            const recData = await recResponse.json();
+            console.log("Recommendations result:", recData);
+            // Optionally handle/display recData.recommendations in your UI
+          } else {
+            console.error("Failed to create recommendations:", recResponse.status);
+          }
+        } catch (err) {
+          console.error("Error calling postRecommendations:", err);
+        }
       } else {
         // Call the API to unlike the song
         const response = await unlike(currentUser.uid, artist.id, artist.type);
@@ -130,6 +149,7 @@ export default function ArtistPage({ route, navigation }) {
       Alert.alert("Error", "Unable to toggle like status");
     }
   };
+
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
   const handleToggleFavourite = () => setFavourite(!favourite);
   const handleShare = () => console.log("Artist shared!");

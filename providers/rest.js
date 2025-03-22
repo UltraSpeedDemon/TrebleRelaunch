@@ -125,6 +125,34 @@ export async function getLike(userId, musicId, type) {
   return await serverGet("users/like", { user_id: userId, music_id: musicId, type: type });
 }
 
+export async function postRecommendations(userId, musicId, type, name, artistName) {
+  try {
+    const response = await serverPost("users/recommendations", {
+      user_id: userId,
+      music_id: musicId,
+      type: type,
+      name: name,
+      artist_name: artistName
+    });
+    return response;
+  } catch (error) {
+    console.error("postRecommendations error:", error);
+    throw error;
+  }
+}
+
+export async function getRecommendations(userId, { limit = 20, offset = 0 } = {}) {
+  try {
+    return await serverGet("users/recommendations", { 
+      user_id: userId, 
+      offset, 
+      limit 
+    });
+  } catch (error) {
+    console.error("Error fetching my recommendations:", error);
+  }
+}
+
 // #region Follow Request endpoints
 export async function requestFollow(follower_id, followed_id) {
   // Notice the POST to /users/requestFollow

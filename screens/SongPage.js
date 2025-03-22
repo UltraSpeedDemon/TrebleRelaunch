@@ -15,7 +15,7 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { createReview, getReviews, getUser, populateMetadata, like, getLike, unlike, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
+import { getUser, populateMetadata, like, getLike, unlike, postRecommendations, createReview, getReviews, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 
@@ -145,6 +145,26 @@ export default function SongPage({ route, navigation }) {
         const data = await response.json();
         console.log("Song liked successfully:", data);
         setLiked(true);
+
+        // After liking, call the recommendations endpoint
+        try {
+          const recResponse = await postRecommendations(
+            currentUser.uid,    // user_id
+            track.id,           // music_id
+            track.type,         // type 
+            track.name,         // name
+            track.artist        // artist_name
+          );
+          if (recResponse.ok) {
+            const recData = await recResponse.json();
+            console.log("Recommendations result:", recData);
+            // Optionally handle/display recData.recommendations in your UI
+          } else {
+            console.error("Failed to create recommendations:", recResponse.status);
+          }
+        } catch (err) {
+          console.error("Error calling postRecommendations:", err);
+        }
       } else {
         // Call the API to unlike the song
         const response = await unlike(currentUser.uid, track.id, track.type);
