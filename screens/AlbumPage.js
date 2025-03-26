@@ -10,14 +10,16 @@ import {
   KeyboardAvoidingView,
   Alert,
   ActivityIndicator,
+  TouchableHighlight,
 } from "react-native";
 import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { createReview, getReviews, getUser, populateMetadata, getLike, unlike, like, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
+import { createReview, getReviews, getUser, populateMetadata, getLike, unlike, like, upvoteReview, removeUpvoteFromReview, deleteReview, getAlbumSongs, getAlbumSummary } from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
+import { Avatar, Icon, ListItem } from "@rneui/base";
 
 export default function AlbumPage({ route, navigation }) {
   const { album } = route.params; // Expecting "album" passed from navigation
@@ -58,6 +60,9 @@ export default function AlbumPage({ route, navigation }) {
 
   // For the emoji dropdown
   const [showEmojiDropdown, setShowEmojiDropdown] = useState(false);
+  const [albumSongs, setAlbumSongs] = useState([]);
+  const [songExpanded, setSongExpanded] = useState(false);
+  const [summary, setSummary] = useState("");
   const isFocused = useIsFocused();
 
   // 1) Fetch user data
@@ -85,13 +90,22 @@ export default function AlbumPage({ route, navigation }) {
         setLoadingUser(false);
       }
     }
-    populateReviews();
+    populateReviewsAndSongs();
     fetchUserData();
   }, [navigation, isFocused]);
   
-  async function populateReviews() {
-    let reqReviews = await (await getReviews(album.id)).json()
+  async function populateReviewsAndSongs() {
+    let promises = await Promise.all([
+      (await getReviews(album.id)).json(),
+      (await getAlbumSongs(album.id)).json(),
+      (await getAlbumSummary(album.id)).json()
+    ])
+    const reqReviews = promises[0]
+    const albumSongs = promises[1]
+    const summary = promises[2].summary
     setReviews(reqReviews)
+    setAlbumSongs(albumSongs)
+    setSummary(summary)
   }
 
   useEffect(() => {
@@ -197,7 +211,7 @@ export default function AlbumPage({ route, navigation }) {
     };
 
     await createReview(newReview)
-    await populateReviews();
+    await populateReviewsAndSongs();
 
     setReview("");
     setReviewRating(0);
@@ -225,16 +239,27 @@ export default function AlbumPage({ route, navigation }) {
     );
   };
 
-   const handleDelete = async (id) => {
-      let rev = reviews.find(r => r.id === id)
-      if (rev.isUser) {
-        await deleteReview(id)
-      }
-      setReviews((prev) =>
-        prev.filter((r) => r.id !== id)
-      );
+  const handleDelete = async (id) => {
+    let rev = reviews.find(r => r.id === id)
+    if (rev.isUser) {
+      await deleteReview(id)
     }
+    setReviews((prev) =>
+      prev.filter((r) => r.id !== id)
+    );
+  }
   
+  const navigateToSong = (song) => { 
+    navigation.navigate("SongPage", { 
+      track: {
+        id: song.listenableId,
+        image: song.coverArt,
+        name: song.title,
+        artist: album.artist,
+        album: album.name,
+      }
+    })
+  }
 
   // If no album data
   if (!album) {
@@ -276,6 +301,10 @@ export default function AlbumPage({ route, navigation }) {
               Artist: {album.artist || "Unknown"}
             </Text>
 
+            {summary &&
+              <Text style={styles.summaryText}>{summary}</Text>
+            }
+
             {/* Like, Save, Share */}
             <View style={styles.actionButtons}>
               <TouchableOpacity onPress={handleLikeAlbum} style={styles.actionButton}>
@@ -311,6 +340,40 @@ export default function AlbumPage({ route, navigation }) {
                 />
                 <Text style={styles.actionText}>Share</Text>
               </TouchableOpacity>
+            </View>
+
+            <View style={styles.songAccordion}>
+                <ListItem.Accordion
+                  content={
+                    <>
+                      <Icon name="audiotrack" size={20} style={{ marginRight: 10}} />
+                      <ListItem.Content>
+                        <ListItem.Title>Songs</ListItem.Title>
+                      </ListItem.Content>
+                    </>
+                  }
+                  isExpanded={songExpanded}
+                  onPress={() => {
+                    setSongExpanded(!songExpanded);
+                  }}
+                >
+                  {albumSongs.map((song, i) => {
+                    return (
+                        <ListItem 
+                          id={i.toString()} 
+                          bottomDivider 
+                          onPress={() => { navigateToSong(song) }}
+                          Component={TouchableHighlight}
+                        >
+                          <Text>{i.toString()}</Text>
+                          <ListItem.Content>
+                            <ListItem.Title>{song.title}</ListItem.Title>
+                          </ListItem.Content>
+                          {/* <Avatar source={{ uri: song['coverArt']}}></Avatar> */}
+                        </ListItem>
+                    )
+                  })}
+                </ListItem.Accordion>
             </View>
 
             {/* Review Section */}
@@ -627,6 +690,13 @@ const styles = StyleSheet.create({
       fontSize: 16,
       marginLeft: 4,
       color: "#fff",
+    },
+    summaryText: {
+      marginBottom: 7.5,
+      color: "#ddd"
+    },
+    songAccordion: {
+      marginTop: 20
     },
     upvoteButton: {
       position: "absolute",

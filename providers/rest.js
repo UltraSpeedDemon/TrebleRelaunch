@@ -76,7 +76,7 @@ export async function postSearchResults(
 }
 //#endregion
 
-// #region User endpoints
+//#region User endpoints
 export async function createUser(userData) {
   return await serverPost("users/", userData);
 }
@@ -182,7 +182,7 @@ export async function populateMetadata(reviewType, id) {
 
 // #endregion
 
-// #region Review endpoints
+//#region Review endpoints
 export async function createReview(review) {
   // decoded_token = auth.verify_id_token(request['id_token'])
   // listenable_id = request['track_id']
@@ -227,6 +227,16 @@ export async function getReviewById(rid) {
   return await serverGet("review/getReview", { rid })
 }
 // #endregion
+
+//#region Album endpoints
+export async function getAlbumSongs(listenable_id) {
+  return await serverGet("album/songs", { listenable_id })
+}
+
+export async function getAlbumSummary(listenable_id) {
+  return await serverGet("album/summary", { listenable_id })
+}
+//#endregion
 
 export function getServerEndpointBase() {
   if (process.env.NODE_ENV === "development") {
