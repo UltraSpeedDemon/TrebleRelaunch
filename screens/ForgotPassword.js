@@ -34,14 +34,15 @@ export default function ForgotPassword({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Enter your email"
-        placeholderTextColor={colours.darkgrey}
+        placeholderTextColor={colours.lightgrey}
+        color={colours.lightgrey}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleResetPassword}>
+      <TouchableOpacity style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]} onPress={handleResetPassword}>
         <Text style={styles.buttonText}>Send Reset Link</Text>
       </TouchableOpacity>
 
@@ -66,7 +67,7 @@ const styles = StyleSheet.create({
   largeText: {
     fontSize: 50,
     fontFamily: 'Lobster',
-    color: "#000",
+    color: "#fff",
     marginBottom: 40,
   },
   input: {

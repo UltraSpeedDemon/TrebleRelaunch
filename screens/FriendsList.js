@@ -13,6 +13,7 @@ import { auth } from "../utils/firebase";
 import MusicCard from "../components/MusicCard";
 import {
   getFriends,
+  getUser, 
   followUser,
   unfollowUser,
   getFollowRequests,
@@ -29,7 +30,6 @@ export default function FriendsList({ navigation }) {
   const [followingUsers, setFollowingUsers] = useState({});
   const [notificationsCount, setNotificationsCount] = useState(0);
 
-  // 1) Fetch the user’s friends.
   useEffect(() => {
     async function fetchFriends() {
       try {
@@ -38,7 +38,28 @@ export default function FriendsList({ navigation }) {
           throw new Error("Failed to fetch friends list");
         }
         const json = await response.json();
-        setFriendsList(json);
+  
+        // For each friend, if friend.avatar is missing, fetch the user data to get the avatar.
+        const updatedFriends = await Promise.all(
+          json.map(async (friend) => {
+            if (!friend.avatar) {
+              try {
+                const userResp = await getUser(friend.userId);
+                if (userResp.ok) {
+                  const userData = await userResp.json();
+                  return { ...friend, avatar: userData.avatar };
+                }
+                return friend;
+              } catch (err) {
+                console.error("Error fetching avatar for friend", friend.userId, err);
+                return friend;
+              }
+            } else {
+              return friend;
+            }
+          })
+        );
+        setFriendsList(updatedFriends);
       } catch (error) {
         console.error("Error fetching friends:", error);
       } finally {
@@ -96,17 +117,21 @@ export default function FriendsList({ navigation }) {
 
   /**
    * Returns a valid image source for the user's avatar.
-   * If `avatarString` starts with "data:", we treat it as a base64 data URI.
-   * Otherwise, return our local avatarIcon.png fallback.
+   * If avatarString starts with "data:" or "http", we treat it as a valid URI.
+   * Otherwise, return our local fallback image.
    */
   const getAvatarSource = (avatarString) => {
     const fallback = require("../images/avatarIcon.png");
-    return avatarString && avatarString.startsWith("data:")
-      ? { uri: avatarString }
-      : fallback;
+    if (
+      avatarString &&
+      (avatarString.startsWith("data:") || avatarString.startsWith("http"))
+    ) {
+      return { uri: avatarString };
+    }
+    return fallback;
   };
 
-  // Optionally capitalize username’s first letter
+  // Optionally capitalize the first letter of the username.
   const formatUsername = (name) => {
     if (!name) return "";
     return name.charAt(0).toUpperCase() + name.slice(1);
@@ -149,7 +174,7 @@ export default function FriendsList({ navigation }) {
             ) : friendsList.length > 0 ? (
               <ScrollView>
                 {friendsList.map((friend) => {
-                  // If we’ve overridden their follow status, use that, else fallback to friend.isFollowing
+                  // If we've overridden their follow status, use that; else fallback to friend.isFollowing.
                   const isFollowing = followingUsers.hasOwnProperty(friend.userId)
                     ? followingUsers[friend.userId]
                     : friend.isFollowing;
@@ -159,15 +184,13 @@ export default function FriendsList({ navigation }) {
                       key={friend.userId}
                       id={friend.userId}
                       name={formatUsername(friend.username)}
-                      image={getAvatarSource(friend.avatar)}
+                      image={friend.avatar}
                       isFollowing={isFollowing}
                       userCard={true}
                       canFollow={true}
-                      // If isFollowing => pressing button => handleUnfollow, else => handleFollow
                       onFollow={() =>
                         isFollowing ? handleUnfollow(friend) : handleFollow(friend)
                       }
-                      // Tapping the card => navigate to the friend’s UserProfiles
                       onPressCard={() =>
                         navigation.navigate("UserProfiles", {
                           userId: friend.userId,

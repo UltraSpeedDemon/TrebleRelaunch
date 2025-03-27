@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 0,
     width: "100%",
-    flexDirection: "row",
+    flexDirection: "row", 
   },
   noResultsText: {
     color: "#fff",

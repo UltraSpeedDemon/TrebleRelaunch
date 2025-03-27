@@ -11,7 +11,7 @@ import {
   PanResponder,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { getUser } from "../providers/rest";
+import { getUser, getFollowRequests } from "../providers/rest";
 import { auth } from "../utils/firebase";
 import colours from "../styles/colours";
 import fontFamily from "../styles/fontFamily";
@@ -23,6 +23,7 @@ const Sidebar = () => {
   const [avatar, setAvatar] = useState(null);
   const [username, setUsername] = useState("User");
   const [email, setEmail] = useState("email@example.com");
+  const [notificationsCount, setNotificationsCount] = useState(0); // Notifications state
   const noAvatar = require("../images/avatarIcon.png");
 
   // Toggle side menu
@@ -49,14 +50,14 @@ const Sidebar = () => {
           }
           const userData = await orientRes.json();
           setUsername(userData.username || displayName);
-          // Use the new avatar value from backend (should be a valid base64 data URI)
+          // Use the avatar from backend if valid (either base64 data URI or an http URL)
           if (
             userData.avatar &&
             userData.avatar !== "None" &&
-            userData.avatar.startsWith("data:")
+            (userData.avatar.startsWith("data:") || userData.avatar.startsWith("http"))
           ) {
             console.log(
-              "[DEBUG] Using base64 avatar (first 50 chars):",
+              "[DEBUG] Using avatar from backend:",
               userData.avatar.substring(0, 50) + "..."
             );
             setAvatar({ uri: userData.avatar });
@@ -75,6 +76,22 @@ const Sidebar = () => {
 
     fetchUserData();
   }, [navigation]);
+
+  // Fetch notifications count (follow requests)
+  useEffect(() => {
+    async function fetchNotificationsCount() {
+      try {
+        const resp = await getFollowRequests(auth.currentUser.uid);
+        if (resp.ok) {
+          const requests = await resp.json();
+          setNotificationsCount(requests.length);
+        }
+      } catch (error) {
+        console.error("Error fetching notifications count:", error);
+      }
+    }
+    fetchNotificationsCount();
+  }, []);
 
   // PanResponder for swipe-to-close functionality
   const panResponder = PanResponder.create({
@@ -188,7 +205,7 @@ const Sidebar = () => {
             source={require("../images/messagesIcon.png")}
             style={styles.messagesIcon}
           />
-          <Text style={styles.menuText}>Messages</Text>
+          <Text style={styles.menuText}>Shared</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.menuItem}
@@ -199,6 +216,13 @@ const Sidebar = () => {
             style={styles.notificationsIcon}
           />
           <Text style={styles.menuText}>Notifications</Text>
+          {notificationsCount > 0 && (
+            <View style={styles.sidebarNotificationBadge}>
+              <Text style={styles.sidebarNotificationBadgeText}>
+                {notificationsCount}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.menuItem2}
@@ -210,17 +234,13 @@ const Sidebar = () => {
           />
           <Text style={styles.menuText}>Favourites</Text>
         </TouchableOpacity>
-        {/* ##################################################################################################### */}
-
-        <TouchableOpacity
-        style={styles.menuItem2}
-        onPress={() => navigation.navigate("MusicSwiperTest")}
-      >
-        <Text style={styles.menuText}>Test Swipe Game</Text>
-      </TouchableOpacity>
-
-        {/* ##################################################################################################### */}
         {/* Additional Menu Items */}
+        <TouchableOpacity
+          style={styles.menuItem2}
+          onPress={() => navigation.navigate("MusicSwiperTest")}
+        >
+          <Text style={styles.menuText}>Test Swipe Game</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() => navigation.navigate("Connections")}
@@ -274,7 +294,7 @@ const styles = StyleSheet.create({
   editAccount: {
     top: 5,
     left: 110,
-    color: "#333",
+    color: colours.lightblue,
     fontSize: 10,
     fontFamily: "Domine",
     alignContent: "right",
@@ -291,7 +311,7 @@ const styles = StyleSheet.create({
   },
   sideMenu: {
     position: "absolute",
-    backgroundColor: colours.bluegrey,
+    backgroundColor: colours.darkblue,
     top: -40,
     bottom: 0,
     width: 300,
@@ -307,7 +327,7 @@ const styles = StyleSheet.create({
     padding: 50,
     height: 200,
     borderBottomWidth: 2,
-    borderBottomColor: colours.darkgrey,
+    borderBottomColor: colours.secondaryblue,
   },
   avatar: {
     width: 80,
@@ -318,11 +338,11 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#333",
+    color: colours.lightblue,
   },
   profileName2: {
     fontSize: 12,
-    color: "#333",
+    color: colours.lightblue,
   },
   menuItem: {
     padding: 19,
@@ -332,7 +352,7 @@ const styles = StyleSheet.create({
   menuItem2: {
     padding: 19,
     borderBottomWidth: 2,
-    borderBottomColor: colours.darkgrey,
+    borderBottomColor: colours.secondaryblue,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -378,7 +398,21 @@ const styles = StyleSheet.create({
   },
   menuText: {
     fontSize: 16,
-    color: "#555",
+    color: colours.lightblue,
+  },
+  sidebarNotificationBadge: {
+    backgroundColor: "red",
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+  sidebarNotificationBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
   },
 });
 

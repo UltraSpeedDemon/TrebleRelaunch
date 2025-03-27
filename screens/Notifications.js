@@ -69,14 +69,15 @@ export default function Notifications({ navigation }) {
   };
 
   const renderRequest = ({ item }) => {
-    // 'item' is the user object that requested to follow. Example:
-    // { userId, username, avatar, isPublic, isRequested, ... }
+    // Fallback default avatar.
     const fallbackAvatar = require("../images/avatarIcon.png");
 
-    // If item.avatar is a valid base64 data URI, use it; else fallback.
+    // If item.avatar exists and is valid (base64 data URI or http URL), use it;
+    // otherwise, fallback to the default.
     const avatarSource =
       item.avatar &&
-      item.avatar.startsWith("data:")
+      item.avatar !== "None" &&
+      (item.avatar.startsWith("data:") || item.avatar.startsWith("http"))
         ? { uri: item.avatar }
         : fallbackAvatar;
 
@@ -85,13 +86,12 @@ export default function Notifications({ navigation }) {
         {/* Tapping user info navigates to their profile */}
         <TouchableOpacity
           style={styles.userInfoTouchable}
-          onPress={() => navigation.navigate("UserProfiles", { userId: item.userId })}
+          onPress={() =>
+            navigation.navigate("UserProfiles", { userId: item.userId })
+          }
           activeOpacity={0.8}
         >
-          <Image
-            source={avatarSource}
-            style={styles.avatar}
-          />
+          <Image source={avatarSource} style={styles.avatar} />
           <View style={styles.requestInfo}>
             <Text style={styles.username}>{formatUsername(item.username)}</Text>
             <Text style={styles.requestText}>wants to follow you.</Text>

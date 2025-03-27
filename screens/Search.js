@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
   chipContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 10,
+    gap: 20,
     marginVertical: 10,
   },
 });

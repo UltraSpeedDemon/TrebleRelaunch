@@ -111,7 +111,8 @@ export default function Register({ navigation }) {
           },
         ]}
         placeholder="Enter your username"
-        placeholderTextColor={colours.darkgrey}
+        placeholderTextColor={colours.lightgrey}
+        color={colours.lightgrey}
         value={username}
         onChangeText={(text) => setUsername(text)}
       />
@@ -127,7 +128,8 @@ export default function Register({ navigation }) {
           },
         ]}
         placeholder="Enter your email"
-        placeholderTextColor={colours.darkgrey}
+        placeholderTextColor={colours.lightgrey}
+        color={colours.lightgrey}
         value={email}
         onChangeText={(text) => setEmail(text)}
         keyboardType="email-address"
@@ -145,14 +147,15 @@ export default function Register({ navigation }) {
           },
         ]}
         placeholder="Enter your password"
-        placeholderTextColor={colours.darkgrey}
+        placeholderTextColor={colours.lightgrey}
+        color={colours.lightgrey}
         secureTextEntry
         value={password}
         onChangeText={(text) => setPassword(text)}
       />
       <Text style={styles.text}></Text>
 
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
+      <TouchableOpacity style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]} onPress={handleRegister}>
         <Text style={styles.buttonText}>Register</Text>
       </TouchableOpacity>
 
@@ -179,13 +182,13 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: "sans-serif",
     fontSize: 20,
-    color: "#000",
+    color: "#fff",
     marginVertical: 5,
   },
   largeText: {
     fontSize: 80,
     fontFamily: 'Lobster',
-    color: "#000",
+    color: "#fff",
     marginBottom: 20,
   },
   input: {

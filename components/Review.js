@@ -1,23 +1,67 @@
-import React from "react";
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+} from "react-native";
+import { getUserByUsername } from "../providers/rest"; // <--- Your function that calls serverGet("users/", { username })
 import colours from "../styles/colours";
 
-const ReviewCard = ({ item, handleUpvote, handleDelete, navigation }) => {  
-  // Confirmation alert on post
+// Helper to capitalize the first letter.
+const capitalize = (str) => {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
+const ReviewCard = ({ item, handleUpvote, handleDelete, navigation }) => {
+  // Local avatar state (default is the fallback image).
+  const [avatar, setAvatar] = useState(require("../images/avatarIcon.png"));
+
+  // On mount / username change: fetch user data by username, then set the avatar.
+  useEffect(() => {
+    if (item.username) {
+      getUserByUsername(item.username)
+        .then((resp) => {
+          if (!resp.ok) {
+            throw new Error("Failed to fetch user data");
+          }
+          return resp.json();
+        })
+        .then((userData) => {
+          // If the user’s avatar is valid (data URI or http URL), set it.
+          if (
+            userData.avatar &&
+            userData.avatar !== "None" &&
+            (userData.avatar.startsWith("data:") ||
+              userData.avatar.startsWith("http"))
+          ) {
+            setAvatar({ uri: userData.avatar });
+          } else {
+            // Otherwise, keep the fallback avatar.
+            setAvatar(require("../images/avatarIcon.png"));
+          }
+        })
+        .catch((error) => {
+          console.error(
+            "Error fetching avatar for username:",
+            item.username,
+            error
+          );
+          setAvatar(require("../images/avatarIcon.png"));
+        });
+    }
+  }, [item.username]);
+
+  // Handle delete confirmation
   const handleDeleteReview = (itemId) => {
     Alert.alert(
       "Confirm",
       "Are you sure you want to delete this post?",
       [
-        {
-          text: "No",
-          style: "cancel",
-        },
-        {
-          text: "Yes",
-          style: "default",
-          onPress: () => handleDelete(itemId),
-        },
+        { text: "No", style: "cancel" },
+        { text: "Yes", style: "default", onPress: () => handleDelete(itemId) },
       ],
       { cancelable: true }
     );
@@ -25,13 +69,18 @@ const ReviewCard = ({ item, handleUpvote, handleDelete, navigation }) => {
 
   return (
     <View style={styles.reviewCard}>
-      <Image source={require("../images/avatarIcon.png")} style={styles.avatar} />
+      <Image source={avatar} style={styles.avatar} />
       <View style={styles.reviewContent}>
-        <Text style={styles.username}>{item.username}</Text>
+        <Text style={styles.username}>{capitalize(item.username)}</Text>
         <Text style={styles.reviewText}>{item.text}</Text>
         <View>
           <View style={styles.reviewRating}>
-            {item.hearted && <Image source={require("../images/whiteFullHeart.png")} style={styles.heartEmoji} />}
+            {item.hearted && (
+              <Image
+                source={require("../images/whiteFullHeart.png")}
+                style={styles.heartEmoji}
+              />
+            )}
             {[...Array(5)].map((_, index) => (
               <Image
                 key={index}
@@ -47,12 +96,16 @@ const ReviewCard = ({ item, handleUpvote, handleDelete, navigation }) => {
           {item.userSelectedEmojis?.length > 0 && (
             <View style={styles.reviewEmojisContainer}>
               {item.userSelectedEmojis.map((emo, i) => (
-                <Text key={i} style={styles.reviewEmoji}>{emo.replaceAll("'", "")}</Text>
+                <Text key={i} style={styles.reviewEmoji}>
+                  {emo.replaceAll("'", "")}
+                </Text>
               ))}
             </View>
           )}
         </View>
       </View>
+
+      {/* Upvote Button */}
       <TouchableOpacity onPress={() => handleUpvote(item.id)} style={styles.upvoteButton}>
         <Image
           source={
@@ -64,22 +117,30 @@ const ReviewCard = ({ item, handleUpvote, handleDelete, navigation }) => {
         />
         <Text style={styles.upvoteCount}>{item.upvotes}</Text>
       </TouchableOpacity>
-      {item.isUser &&
+
+      {/* If the review belongs to the current user, show delete/edit */}
+      {item.isUser && (
         <>
-          <TouchableOpacity onPress={() => handleDeleteReview(item.id)} style={styles.trashButton}>
+          <TouchableOpacity
+            onPress={() => handleDeleteReview(item.id)}
+            style={styles.trashButton}
+          >
             <Image
               source={require("../images/trash.png")}
               style={styles.upvoteIcon}
             />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate("UpdateReview", { review: item })} style={styles.editPencil}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("UpdateReview", { review: item })}
+            style={styles.editPencil}
+          >
             <Image
               source={require("../images/editPencil.png")}
               style={styles.upvoteIcon}
             />
           </TouchableOpacity>
         </>
-      }
+      )}
     </View>
   );
 };
@@ -103,7 +164,7 @@ const styles = StyleSheet.create({
   heartEmoji: {
     width: 16,
     height: 16,
-    marginRight: 7.5
+    marginRight: 7.5,
   },
   reviewContent: {
     flex: 1,

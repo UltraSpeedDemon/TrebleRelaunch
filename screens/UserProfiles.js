@@ -16,12 +16,12 @@ import {
   getFriends,
   followUser,
   unfollowUser,
-  requestFollow,  // For private accounts
+  requestFollow,
   getFollowRequests,
   getUserReview,
   upvoteReview,
   removeUpvoteFromReview,
-  deleteReview,  // Already defined: export async function getFollowRequests(userId) { return await serverGet(`users/${userId}/followRequests`); }
+  deleteReview,
 } from "../providers/rest";
 import colours from "../styles/colours";
 import Sidebar from "../components/Sidebar";
@@ -35,7 +35,6 @@ export default function UserProfiles({ navigation }) {
 
   // Basic user info
   const [username, setUsername] = useState("");
-  // Initially, avatar is set to a default local image
   const [avatar, setAvatar] = useState(require("../images/avatarIcon.png"));
   const noAvatar = require("../images/avatarIcon.png");
 
@@ -52,28 +51,31 @@ export default function UserProfiles({ navigation }) {
   // Follow request status
   const [followRequested, setFollowRequested] = useState(false);
 
-  // Demo placeholders for tracks, ratings, and activity
+  // Demo placeholders for topTracks & topRated
   const [topTracks, setTopTracks] = useState([]);
   const [topRated, setTopRated] = useState([]);
+
+  // Activity feed
   const [activity, setActivity] = useState([]);
+  const [totalReviews, setTotalReviews] = useState(0); // track the number of reviews
 
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Placeholder for total reviews
-  const reviews = 2;
-
+  // For naming
   function formatUsername(name) {
     if (!name) return "";
     return name.charAt(0).toUpperCase() + name.slice(1);
   }
 
+  // On mount or userId change, fetch user data / followers / friend list
   useEffect(() => {
     fetchUserData();
     fetchTheirFollowers();
     fetchMyFriends();
   }, [userId]);
 
+  // Check if we already requested follow
   useEffect(() => {
     async function checkFollowRequest() {
       try {
@@ -98,10 +100,13 @@ export default function UserProfiles({ navigation }) {
       setLoading(true);
       const resp = await getUser(userId);
       if (!resp.ok) {
+        const errText = await resp.text();
+        console.log("DEBUG: getUser error response:", errText);
         throw new Error("Failed to fetch user data from backend.");
       }
       const data = await resp.json();
       console.log("DEBUG: Fetched user data:", data);
+
       setUsername(data.username || "");
       setFollowersCount(data.followersCount || 0);
       setFollowingCount(data.followingCount || 0);
@@ -109,32 +114,68 @@ export default function UserProfiles({ navigation }) {
       setIsSpotifyLinked(data.spotifyIsLinked === true);
       setIsAdmin(data.isAdmin || false);
 
-      // Use the new avatar value from the backend (which comes from avatarLong)
+      // If avatar is valid, set it. Otherwise, fallback.
       if (
         data.avatar &&
         data.avatar !== "None" &&
-        data.avatar.startsWith("data:")
+        (data.avatar.startsWith("data:") || data.avatar.startsWith("http"))
       ) {
-        console.log("DEBUG: Using base64 avatar:", data.avatar.substring(0, 50) + "...");
         setAvatar({ uri: data.avatar });
       } else {
-        console.log("DEBUG: No valid avatar returned, using default");
         setAvatar(noAvatar);
       }
 
-      // Example placeholders for tracks, ratings, and activity
+      // Example placeholders
       setTopTracks([
-        { id: "1", name: "I Wonder", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-        { id: "2", name: "Stronger", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-        { id: "3", name: "Gold Digger", artist: "Kanye West", image: require("../images/albumImage.jpg") },
+        {
+          id: "1",
+          name: "I Wonder",
+          artist: "Kanye West",
+          image: require("../images/albumImage.jpg"),
+        },
+        {
+          id: "2",
+          name: "Stronger",
+          artist: "Kanye West",
+          image: require("../images/albumImage.jpg"),
+        },
+        {
+          id: "3",
+          name: "Gold Digger",
+          artist: "Kanye West",
+          image: require("../images/albumImage.jpg"),
+        },
       ]);
       setTopRated([
-        { id: "1", name: "Stronger", artist: "Kanye West", rating: 5, image: require("../images/albumImage.jpg") },
-        { id: "2", name: "Gold Digger", artist: "Kanye West", rating: 4, image: require("../images/albumImage.jpg") },
+        {
+          id: "1",
+          name: "Stronger",
+          artist: "Kanye West",
+          rating: 5,
+          image: require("../images/albumImage.jpg"),
+        },
+        {
+          id: "2",
+          name: "Gold Digger",
+          artist: "Kanye West",
+          rating: 4,
+          image: require("../images/albumImage.jpg"),
+        },
       ]);
 
-      let userReviews = await (await getUserReview(userId)).json()
-      setActivity(userReviews);
+      // Now fetch user reviews
+      const reviewResp = await getUserReview(userId);
+      if (reviewResp.ok) {
+        const userReviews = await reviewResp.json();
+        setActivity(userReviews);
+
+        // Update totalReviews to length of userReviews
+        setTotalReviews(userReviews.length);
+      } else {
+        console.error("Failed to fetch user reviews. Status:", reviewResp.status);
+        setActivity([]); // or leave existing
+        setTotalReviews(0);
+      }
     } catch (error) {
       console.error("Error fetching user data:", error);
       Alert.alert("Error", "Unable to fetch user data.");
@@ -172,36 +213,43 @@ export default function UserProfiles({ navigation }) {
   }
 
   const handleUpvote = async (id) => {
-    let rev = activity.find(r => r.id === id)
-    if (!rev.upvoted) {
-      await upvoteReview(id)
-    } else {
-      await removeUpvoteFromReview(id)
+    let rev = activity.find((r) => r.id === id);
+    if (!rev) return;
+
+    try {
+      if (!rev.upvoted) {
+        await upvoteReview(id);
+      } else {
+        await removeUpvoteFromReview(id);
+      }
+      setActivity((prev) =>
+        prev.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                upvotes: rev.upvoted ? c.upvotes - 1 : c.upvotes + 1,
+                upvoted: !c.upvoted,
+              }
+            : c
+        )
+      );
+    } catch (err) {
+      console.error("Error upvoting review:", err);
     }
-    setActivity((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-            ...c,
-            upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1,
-            upvoted: !c.upvoted,
-          }
-          : c
-      )
-    );
   };
 
   const handleDelete = async (id) => {
-    let rev = activity.find(r => r.id === id)
-    if (rev.isUser) {
-      await deleteReview(id)
+    let rev = activity.find((r) => r.id === id);
+    if (rev?.isUser) {
+      try {
+        await deleteReview(id);
+        setActivity((prev) => prev.filter((r) => r.id !== id));
+        setTotalReviews((prevCount) => Math.max(prevCount - 1, 0)); // Decrement total
+      } catch (err) {
+        console.error("Error deleting review:", err);
+      }
     }
-    setActivity((prev) =>
-      prev.filter((r) => r.id !== id)
-    );
-  }
-
-
+  };
 
   // Determine if I'm following or if we are friends
   const iAmFollowing = theirFollowers.some(
@@ -252,7 +300,10 @@ export default function UserProfiles({ navigation }) {
           const resp = await requestFollow(auth.currentUser.uid, userId);
           if (resp.ok) {
             setFollowRequested(true);
-            Alert.alert("Request Sent", "Your request to follow this private account was sent.");
+            Alert.alert(
+              "Request Sent",
+              "Your request to follow this private account was sent."
+            );
           } else {
             console.error("Failed to request follow");
           }
@@ -308,7 +359,10 @@ export default function UserProfiles({ navigation }) {
                   {isAdmin ? (
                     <Image
                       source={require("../images/adminBadge.png")}
-                      style={[styles.badgeIcon, !isSpotifyLinked && { marginLeft: 0 }]}
+                      style={[
+                        styles.badgeIcon,
+                        !isSpotifyLinked && { marginLeft: 0 },
+                      ]}
                     />
                   ) : null}
                 </View>
@@ -327,7 +381,9 @@ export default function UserProfiles({ navigation }) {
                 >
                   <Text style={styles.followButtonText}>{finalButtonLabel}</Text>
                 </TouchableOpacity>
-                {showFriendsLabel && <Text style={styles.friendText}>Friends</Text>}
+                {showFriendsLabel && (
+                  <Text style={styles.friendText}>Friends</Text>
+                )}
               </View>
             )}
           </View>
@@ -336,6 +392,7 @@ export default function UserProfiles({ navigation }) {
         ListFooterComponent={
           canViewFullContent ? (
             <>
+              {/* Top Tracks */}
               <View style={styles.cardSection}>
                 <Text style={styles.sectionTitle}>Top Tracks</Text>
                 <FlatList
@@ -352,6 +409,8 @@ export default function UserProfiles({ navigation }) {
                   showsHorizontalScrollIndicator={false}
                 />
               </View>
+
+              {/* Top Rated */}
               <View style={styles.cardSection}>
                 <Text style={styles.sectionTitle}>Top Rated</Text>
                 <FlatList
@@ -381,25 +440,44 @@ export default function UserProfiles({ navigation }) {
                   showsHorizontalScrollIndicator={false}
                 />
               </View>
+
+              {/* Activity / Reviews */}
               <View style={styles.cardSectionActivity}>
                 <Text style={styles.sectionTitle}>Activity</Text>
-                <Text style={styles.totalActivity}>Total Reviews: {reviews}</Text>
-                <FlatList
-                  data={activity}
-                  renderItem={({ item }) => (
-                    <ReviewCard item={item} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />
-                  )}
-                  keyExtractor={(item) => item.id}
-                />
+                {/* Show total number of reviews */}
+                <Text style={styles.totalActivity}>
+                  Total Reviews: {totalReviews}
+                </Text>
+
+                {/* If user has no reviews, show "No Reviews" */}
+                {activity.length === 0 ? (
+                  <Text style={styles.noReviewsText}>No Reviews</Text>
+                ) : (
+                  <FlatList
+                    data={activity}
+                    renderItem={({ item }) => (
+                      <ReviewCard
+                        item={item}
+                        handleUpvote={handleUpvote}
+                        handleDelete={handleDelete}
+                        navigation={navigation}
+                      />
+                    )}
+                    keyExtractor={(item) => item.id}
+                  />
+                )}
               </View>
             </>
           ) : (
             <View style={{ margin: 20 }}>
-              <Text style={styles.privateAccountText}>This Account is Private</Text>
+              <Text style={styles.privateAccountText}>
+                This Account is Private
+              </Text>
             </View>
           )
         }
       />
+      <Text></Text>
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
@@ -431,27 +509,84 @@ const styles = StyleSheet.create({
   editButton: { padding: 10, borderRadius: 5 },
   editButtonText: { color: "#fff", fontWeight: "bold" },
   followContainer: { alignItems: "center", marginLeft: 10 },
-  followButton: { backgroundColor: colours.lightblue, paddingVertical: 10, paddingHorizontal: 15, borderRadius: 5 },
-  requestedButton: { backgroundColor: "#999", paddingVertical: 10, paddingHorizontal: 15, borderRadius: 5 },
+  followButton: {
+    backgroundColor: colours.lightblue,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+  },
+  requestedButton: {
+    backgroundColor: "#999",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+  },
   followButtonText: { color: "#fff", fontWeight: "bold" },
   friendText: { marginTop: 8, fontSize: 14, fontWeight: "bold", color: "#fff" },
-  cardSection: { backgroundColor: colours.darkblue, padding: 10, borderRadius: 10, marginHorizontal: 10, marginVertical: 10 },
-  cardSectionActivity: { backgroundColor: colours.darkblue, padding: 10, borderRadius: 10, marginHorizontal: 10, marginVertical: 10, marginBottom: 100 },
-  sectionTitle: { fontSize: 18, fontWeight: "bold", color: colours.lightblue, marginBottom: 10 },
+  cardSection: {
+    backgroundColor: colours.darkblue,
+    padding: 10,
+    borderRadius: 10,
+    marginHorizontal: 10,
+    marginVertical: 10,
+  },
+  cardSectionActivity: {
+    backgroundColor: colours.darkblue,
+    padding: 10,
+    borderRadius: 10,
+    marginHorizontal: 10,
+    marginVertical: 10,
+    marginBottom: 100,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: colours.lightblue,
+    marginBottom: 10,
+  },
   trackCard: { marginRight: 10, alignItems: "center" },
   totalActivity: { fontSize: 14, color: "#fff", marginBottom: 10 },
+  noReviewsText: {
+    fontSize: 14,
+    color: "#fff",
+    textAlign: "center",
+    marginTop: 5,
+  },
   trackImage: { width: 100, height: 100, borderRadius: 10, marginBottom: 5 },
   trackName: { fontSize: 14, fontWeight: "bold", color: "#fff" },
   trackArtist: { fontSize: 12, color: "#aaa" },
   ratingContainer: { flexDirection: "row", marginTop: 5 },
   starIcon: { width: 16, height: 16, marginRight: 2 },
-  activityCardSection: { backgroundColor: colours.bluegrey, marginBottom: 100, padding: 10, borderRadius: 10, marginHorizontal: 10, marginVertical: 10 },
-  activityCard: { backgroundColor: "#1E1E2C", borderRadius: 10, padding: 10, marginBottom: 10 },
-  activityUsername: { fontSize: 14, fontWeight: "bold", color: colours.lightblue, marginBottom: 5 },
+  activityCardSection: {
+    backgroundColor: colours.bluegrey,
+    marginBottom: 100,
+    padding: 10,
+    borderRadius: 10,
+    marginHorizontal: 10,
+    marginVertical: 10,
+  },
+  activityCard: {
+    backgroundColor: "#1E1E2C",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  activityUsername: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: colours.lightblue,
+    marginBottom: 5,
+  },
   activityText: { fontSize: 12, color: "#fff", marginBottom: 5 },
   activityFooter: { flexDirection: "row", justifyContent: "space-between" },
   upvotes: { fontSize: 12, color: "#fff" },
   emojis: { fontSize: 14, color: "#fff", marginLeft: 10 },
-  privateAccountText: { fontSize: 18, marginTop: 40, fontWeight: "bold", color: colours.lightblue, textAlign: "center" },
+  privateAccountText: {
+    fontSize: 18,
+    marginTop: 40,
+    fontWeight: "bold",
+    color: colours.lightblue,
+    textAlign: "center",
+  },
   bottomNavBar: { position: "absolute", bottom: 0, width: "100%" },
 });

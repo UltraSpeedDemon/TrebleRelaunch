@@ -52,14 +52,14 @@ export default function Home({ navigation }) {
          style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("Login")}
       >
-        <Text style={styles.buttonText}>Login</Text>
+        <Text style={[styles.buttonText, {color: '#fff'}]}>Login</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("Register")}
       >
-        <Text style={styles.buttonText}>Register</Text>
+        <Text style={[styles.buttonText, {color: '#fff'}]}>Register</Text>
       </TouchableOpacity>
 
       <Text style={styles.mediumText}></Text>
@@ -86,14 +86,14 @@ const styles = StyleSheet.create({
   largeText: {
     fontSize: 120,
     fontFamily: 'Pacifico',
-    color: "#000",
+    color: '#fff',
     marginBottom: 20,
   },
   mediumText: {
     fontSize: 25,
     fontWeight: "bold",
     fontFamily: 'Domine',
-    color: "#000",
+    color: '#fff',
     marginBottom: 20,
   },
   input: {
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    backgroundColor: "#007BFF",
+    backgroundColor: colours.lightblue,
     fontSize: 20,
     borderRadius: 25,
     width: 200,

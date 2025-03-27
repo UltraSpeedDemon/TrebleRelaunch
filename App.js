@@ -213,10 +213,10 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 55,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#fff',
   },
   largeText: {
     fontSize: 105,
-    color: '#000',
+    color: '#fff',
   },
 });

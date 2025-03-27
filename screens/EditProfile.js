@@ -13,33 +13,29 @@ import {
   Button,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { auth } from "../utils/firebase";
+import { auth, storage } from "../utils/firebase";  // <-- import storage from your config
 import { updateProfile } from "firebase/auth";
-import { getUser, updateUser } from "../providers/rest";
+import { ref, uploadString, uploadBytes, getDownloadURL } from "firebase/storage"; // <-- for uploading to Firebase Storage
+import { getUser, updateUser } from "../providers/rest"; // <-- your OrientDB REST calls
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import colours from "../styles/colours";
 
-const LAST_NAME_CHANGE_KEY = "lastNameChange";
-
 export default function EditProfile({ navigation }) {
   const [username, setUsername] = useState("");
   const [originalUsername, setOriginalUsername] = useState("");
   const [email, setEmail] = useState("");
-  // We'll store the avatar as a base64 data URI (string)
-  const [avatar, setAvatar] = useState(null);
+  const [avatar, setAvatar] = useState(null);   // We'll store the download URL from Firebase
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
-  const isNameChangeDisabled = false;
 
-  // State for the crop modal
   const [showCropModal, setShowCropModal] = useState(false);
   const [imageToCrop, setImageToCrop] = useState(null);
 
-  // Fetch user data from Orient
+  // 1. Fetch user data from OrientDB
   const fetchUserData = async () => {
     try {
       const currentUser = auth.currentUser;
@@ -49,6 +45,7 @@ export default function EditProfile({ navigation }) {
       }
       setLoading(true);
       console.log("[DEBUG] Fetching user data for UID:", currentUser.uid);
+
       const orientRes = await getUser(currentUser.uid);
       if (!orientRes.ok) {
         throw new Error("Failed to fetch user data from OrientDB.");
@@ -67,10 +64,7 @@ export default function EditProfile({ navigation }) {
       setOriginalUsername(finalUsername);
       setEmail(finalEmail);
       if (finalAvatar) {
-        console.log(
-          "[DEBUG] Found avatar in DB (first 50 chars):",
-          finalAvatar.substring(0, 50) + "..."
-        );
+        console.log("[DEBUG] Found avatar in DB:", finalAvatar);
         setAvatar(finalAvatar);
       }
       if (typeof orientData.isPublic === "boolean") {
@@ -92,7 +86,7 @@ export default function EditProfile({ navigation }) {
     }, [navigation])
   );
 
-  // Pick a new avatar image
+  // 2. Pick a new avatar image
   const handlePickAvatar = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -100,32 +94,99 @@ export default function EditProfile({ navigation }) {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 1,
-        base64: true,
+        base64: true, // needed for uploadString base64
       });
+
       if (!result.canceled) {
         const asset = result.assets[0];
-        if (asset.width !== 512 || asset.height !== 512) {
-          setImageToCrop(asset);
-          setShowCropModal(true);
-        } else {
-          let mimeType = "image/jpeg";
-          if (asset.uri && asset.uri.endsWith(".png")) {
-            mimeType = "image/png";
-          }
-          const base64Avatar = `data:${mimeType};base64,${asset.base64}`;
-          console.log(
-            "[DEBUG] Picked avatar (first 50 chars):",
-            base64Avatar.substring(0, 50) + "..."
-          );
-          setAvatar(base64Avatar);
-        }
+        await uploadAvatarToFirebase(asset);
+        // If it's not 512x512, ask user to crop
+        // if (asset.width !== 512 || asset.height !== 512) {
+        //   setImageToCrop(asset);
+        //   setShowCropModal(true);
+        // } else {
+        //   // If it's already 512x512, go ahead and upload
+        //   await uploadAvatarToFirebase(asset);
+        // }
       }
     } catch (error) {
       console.error("Error picking avatar:", error);
     }
   };
 
-  // Save profile changes including the new avatar to OrientDB
+const uploadAvatarToFirebase = async (asset) => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error("No user is logged in.");
+    }
+
+    let mimeType = "image/jpeg";
+    if (asset.uri && asset.uri.endsWith(".png")) {
+      mimeType = "image/png";
+    }
+
+    // Convert the data URL to a Blob using fetch.
+    const response = await fetch(asset.uri);
+    const blob = await response.blob();
+
+    // Create a storage reference for the avatar (e.g., avatars/USER_ID.jpg).
+    const storageRef = ref(storage, `avatars/${currentUser.uid}.jpg`);
+
+    // Upload the Blob to Firebase Storage.
+    await uploadBytes(storageRef, blob, { contentType: mimeType });
+
+    // Retrieve the download URL.
+    const downloadURL = await getDownloadURL(storageRef);
+    console.log("[DEBUG] Firebase Storage download URL:", downloadURL);
+
+    // Update the user's record in OrientDB with the avatar URL.
+    const orientPayload = { avatar: downloadURL };
+    const orientResponse = await updateUser(currentUser.uid, orientPayload);
+    if (!orientResponse.ok) {
+      const data = await orientResponse.json();
+      throw new Error(data.error || "Failed to update avatar in OrientDB.");
+    }
+    console.log("[DEBUG] OrientDB avatar update successful.");
+
+    // Optionally update local state with the new URL.
+    setAvatar(downloadURL);
+    Alert.alert("Success", "Avatar updated successfully!");
+  } catch (error) {
+    console.error("Error uploading avatar:", error);
+    Alert.alert("Error", error.message);
+  }
+};
+
+
+  // 4. Crop if needed, then upload
+  const handleCropAndUpload = async () => {
+    try {
+      const { uri, width, height } = imageToCrop;
+      const cropWidth = 512;
+      const cropHeight = 512;
+      const originX = Math.max((width - cropWidth) / 2, 0);
+      const originY = Math.max((height - cropHeight) / 2, 0);
+      const actions = [
+        { crop: { originX, originY, width: cropWidth, height: cropHeight } },
+      ];
+
+      const result = await ImageManipulator.manipulateAsync(uri, actions, {
+        base64: true,
+      });
+      console.log("[DEBUG] Cropped base64 (first 50 chars):", result.base64.substring(0, 50));
+
+      // Upload the cropped image
+      await uploadAvatarToFirebase({ uri: result.uri });
+
+      setShowCropModal(false);
+    } catch (cropError) {
+      console.error("Error cropping image:", cropError);
+      Alert.alert("Error", "Failed to crop image. Please try again.");
+    }
+  };
+
+  // 5. Save other profile data (username, isPublic)
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -134,21 +195,14 @@ export default function EditProfile({ navigation }) {
         Alert.alert("Error", "No user is logged in.");
         return;
       }
-      const newUsername = username.trim();
 
-      console.log(
-        "[DEBUG] Avatar payload on save:",
-        avatar ? avatar.substring(0, 50) + "..." : "null"
-      );
+      const newUsername = username.trim().toLowerCase();
 
-      // Construct payload only if avatar is nonempty
       const orientPayload = {
-        username: newUsername.toLowerCase(),
-        avatar: avatar && avatar.length > 0 ? avatar : null,
-        isPublic: isPublic,
+        username: newUsername,
+        avatar: avatar || null,
+        isPublic,
       };
-
-      console.log("[DEBUG] Update payload:", orientPayload);
 
       const orientResponse = await updateUser(currentUser.uid, orientPayload);
       if (!orientResponse.ok) {
@@ -160,8 +214,9 @@ export default function EditProfile({ navigation }) {
         }
       }
 
+      // Update Firebase Auth displayName if needed
       if (currentUser.displayName !== newUsername) {
-        await updateProfile(currentUser, { displayName: newUsername.toLowerCase() });
+        await updateProfile(currentUser, { displayName: newUsername });
       }
 
       Alert.alert("Success", "Profile updated successfully!", [
@@ -206,51 +261,7 @@ export default function EditProfile({ navigation }) {
               Your selected image is not 512x512. Please crop it to 512x512.
             </Text>
             <View style={styles.modalButtons}>
-              <Button
-                title="Crop to 512x512"
-                onPress={async () => {
-                  try {
-                    const { uri, width, height } = imageToCrop;
-                    const cropWidth = 512;
-                    const cropHeight = 512;
-                    const originX = Math.max((width - cropWidth) / 2, 0);
-                    const originY = Math.max((height - cropHeight) / 2, 0);
-                    const actions = [
-                      { crop: { originX, originY, width: cropWidth, height: cropHeight } },
-                    ];
-                    const result = await ImageManipulator.manipulateAsync(uri, actions, {
-                      base64: true,
-                    });
-                    let mimeType = "image/jpeg";
-                    if (uri && uri.endsWith(".png")) {
-                      mimeType = "image/png";
-                    }
-                    const base64Avatar = `data:${mimeType};base64,${result.base64}`;
-                    console.log(
-                      "[DEBUG] Cropped avatar (first 50 chars):",
-                      base64Avatar.substring(0, 50) + "..."
-                    );
-                    setAvatar(base64Avatar);
-
-                    // Immediately update the DB with the new avatar
-                    const currentUser = auth.currentUser;
-                    if (currentUser) {
-                      const orientPayload = { avatar: base64Avatar };
-                      const orientResponse = await updateUser(currentUser.uid, orientPayload);
-                      if (!orientResponse.ok) {
-                        const data = await orientResponse.json();
-                        throw new Error(data.error || "Failed to update avatar in OrientDB.");
-                      }
-                      console.log("[DEBUG] Avatar update response OK.");
-                    }
-                    setShowCropModal(false);
-                    Alert.alert("Success", "Avatar updated successfully!");
-                  } catch (cropError) {
-                    console.error("Error cropping image:", cropError);
-                    Alert.alert("Error", "Failed to crop image. Please try again.");
-                  }
-                }}
-              />
+              <Button title="Crop to 512x512" onPress={handleCropAndUpload} />
               <Button title="Cancel" onPress={() => setShowCropModal(false)} />
             </View>
           </View>
@@ -280,12 +291,11 @@ export default function EditProfile({ navigation }) {
       <View style={styles.inputSection}>
         <Text style={styles.label}>Username</Text>
         <TextInput
-          style={[styles.input, isNameChangeDisabled && styles.disabledInput]}
+          style={styles.input}
           value={username}
           onChangeText={setUsername}
           placeholder="Enter your username"
           placeholderTextColor="#aaa"
-          editable={!isNameChangeDisabled}
         />
       </View>
 
@@ -309,7 +319,6 @@ export default function EditProfile({ navigation }) {
         <View style={styles.privacyRow}>
           <Text style={styles.privacyLabel}>{isPublic ? "Public" : "Private"}</Text>
           <Switch
-            style={styles.privacySwitch}
             trackColor={{ false: "#767577", true: "#767577" }}
             thumbColor={isPublic ? colours.lightblue : "#f4f3f4"}
             ios_backgroundColor="#3e3e3e"

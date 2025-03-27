@@ -118,28 +118,6 @@ export default function Settings({ navigation }) {
       <Text style={styles.header}>Settings</Text>
       <Text style={styles.subHeader}>Manage your preferences</Text>
 
-      {/* Username Section */}
-      <View style={styles.settingCard}>
-        <Text style={styles.settingLabel}>Username</Text>
-        <TextInput
-          style={styles.input}
-          value={username}
-          onChangeText={setUsername}
-          placeholder="Enter your username"
-        />
-      </View>
-
-      {/* Email Section */}
-      <View style={styles.settingCard}>
-        <Text style={styles.settingLabel}>Email</Text>
-        <TextInput
-          style={[styles.input, styles.disabledInput]}
-          value={email}
-          editable={false}
-          selectTextOnFocus={false}
-        />
-      </View>
-
       {/* Dark Mode Section */}
       <View style={styles.settingCard}>
         <Text style={styles.settingLabel}>Dark Mode</Text>
@@ -152,7 +130,7 @@ export default function Settings({ navigation }) {
           />
         </View>
       </View>
-
+      <Text style={styles.buttonText}></Text>
       {/* Save Button */}
       <TouchableOpacity style={styles.saveButton} onPress={handleSaveSettings}>
         <Text style={styles.buttonText}>Save Settings</Text>

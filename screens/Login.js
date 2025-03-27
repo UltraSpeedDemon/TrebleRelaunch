@@ -77,7 +77,8 @@ export default function Login({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Username or Email"
-        placeholderTextColor={colours.darkgrey}
+        placeholderTextColor={colours.lightgrey}
+        color={colours.lightgrey}
         value={identifier}
         onChangeText={setIdentifier}
         autoCapitalize="none"
@@ -85,19 +86,20 @@ export default function Login({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Password"
-        placeholderTextColor={colours.darkgrey}
+        placeholderTextColor={colours.lightgrey}
+        color={colours.lightgrey}
         value={password}
         secureTextEntry
         onChangeText={setPassword}
       />
 
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
+      <TouchableOpacity style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]} onPress={handleLogin}>
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: colours.secondaryblue, opacity: 0.7 }]}
+        style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("Register")}
       >
         <Text style={styles.buttonText}>Register</Text>
@@ -125,13 +127,13 @@ const styles = StyleSheet.create({
   },
   mediumText: {
     fontSize: 25,
-    color: "#000",
+    color: "#fff",
     marginBottom: 20,
   },
   largeText: {
     fontSize: 80,
     fontFamily: 'Lobster',
-    color: "#000",
+    color: "#fff",
     marginBottom: 20,
   },
   input: {

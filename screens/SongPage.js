@@ -102,6 +102,11 @@ export default function SongPage({ route, navigation }) {
     setReviews(reqReviews)
   }
 
+  async function populateReviews() {
+    let reqReviews = await (await getReviews(track.id)).json()
+    setReviews(reqReviews)
+  }
+
   useEffect(() => {
     async function checkLikeStatus() {
       try {
@@ -256,16 +261,7 @@ export default function SongPage({ route, navigation }) {
       )
     );
   };
-
-  const handleDelete = async (id) => {
-    let rev = reviews.find(r => r.id === id)
-    if (rev.isUser) {
-      await deleteReview(id)
-    }
-    setReviews((prev) =>
-      prev.filter((r) => r.id !== id)
-    );
-  }
+  
   //handles playing the preview
   const [sound, setSound] = useState(null); // Add state for managing the sound instance
 
@@ -313,6 +309,16 @@ export default function SongPage({ route, navigation }) {
       }
     };
   }, [sound]);
+
+  const handleDelete = async (id) => {
+    let rev = reviews.find(r => r.id === id)
+    if (rev.isUser) {
+      await deleteReview(id)
+    }
+    setReviews((prev) =>
+      prev.filter((r) => r.id !== id)
+    );
+  }
 
   // If no track
   if (!track) {
@@ -398,7 +404,7 @@ export default function SongPage({ route, navigation }) {
                 size={50}
                 width={5}
                 fill={progress}
-                tintColor={colours.lightblue}
+                tintColor={colours.secondaryblue}
                 backgroundColor={colours.bluegrey}
                 rotation={0}
               >
