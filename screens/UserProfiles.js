@@ -120,9 +120,9 @@ export default function UserProfiles({ navigation }) {
         data.avatar !== "None" &&
         (data.avatar.startsWith("data:") || data.avatar.startsWith("http"))
       ) {
-        setAvatar({ uri: data.avatar });
+        setAvatar(data.avatar);
       } else {
-        setAvatar(noAvatar);
+        setAvatar(null);
       }
 
       // Example placeholders
@@ -343,7 +343,7 @@ export default function UserProfiles({ navigation }) {
       <FlatList
         ListHeaderComponent={
           <View style={styles.profileHeader}>
-            <Image source={avatar} style={styles.avatar} />
+            <Image source={avatar ? { uri: avatar } : noAvatar} style={styles.avatar} />
             <View style={styles.headerInfo}>
               <Text style={styles.username}>{formatUsername(username)}</Text>
               <Text style={styles.stats}>Followers: {followersCount}</Text>
@@ -458,6 +458,7 @@ export default function UserProfiles({ navigation }) {
                     renderItem={({ item }) => (
                       <ReviewCard
                         item={item}
+                        avatar={avatar}
                         handleUpvote={handleUpvote}
                         handleDelete={handleDelete}
                         navigation={navigation}

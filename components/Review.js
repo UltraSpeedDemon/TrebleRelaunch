@@ -15,45 +15,7 @@ const capitalize = (str) => {
   return str.charAt(0).toUpperCase() + str.slice(1);
 };
 
-const ReviewCard = ({ item, handleUpvote, handleDelete, navigation }) => {
-  // Local avatar state (default is the fallback image).
-  const [avatar, setAvatar] = useState(require("../images/avatarIcon.png"));
-
-  // On mount / username change: fetch user data by username, then set the avatar.
-  useEffect(() => {
-    if (item.username) {
-      getUserByUsername(item.username)
-        .then((resp) => {
-          if (!resp.ok) {
-            throw new Error("Failed to fetch user data");
-          }
-          return resp.json();
-        })
-        .then((userData) => {
-          // If the user’s avatar is valid (data URI or http URL), set it.
-          if (
-            userData.avatar &&
-            userData.avatar !== "None" &&
-            (userData.avatar.startsWith("data:") ||
-              userData.avatar.startsWith("http"))
-          ) {
-            setAvatar({ uri: userData.avatar });
-          } else {
-            // Otherwise, keep the fallback avatar.
-            setAvatar(require("../images/avatarIcon.png"));
-          }
-        })
-        .catch((error) => {
-          console.error(
-            "Error fetching avatar for username:",
-            item.username,
-            error
-          );
-          setAvatar(require("../images/avatarIcon.png"));
-        });
-    }
-  }, [item.username]);
-
+const ReviewCard = ({ item, avatar=null, handleUpvote, handleDelete, navigation }) => {
   // Handle delete confirmation
   const handleDeleteReview = (itemId) => {
     Alert.alert(
@@ -69,7 +31,7 @@ const ReviewCard = ({ item, handleUpvote, handleDelete, navigation }) => {
 
   return (
     <View style={styles.reviewCard}>
-      <Image source={avatar} style={styles.avatar} />
+      <Image source={avatar ? { uri: avatar } : require("../images/avatarIcon.png")} style={styles.avatar} />
       <View style={styles.reviewContent}>
         <Text style={styles.username}>{capitalize(item.username)}</Text>
         <Text style={styles.reviewText}>{item.text}</Text>

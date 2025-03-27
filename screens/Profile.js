@@ -112,9 +112,9 @@ export default function Profile({ navigation }) {
           userData.avatar !== 'None' &&
           (userData.avatar.startsWith('data:') || userData.avatar.startsWith('http'))
         ) {
-          setAvatar({ uri: userData.avatar });
+          setAvatar(userData.avatar);
         } else {
-          setAvatar(noAvatar);
+          setAvatar(null);
         }
 
         // Now fetch the user's reviews to populate the activity feed
@@ -232,7 +232,7 @@ export default function Profile({ navigation }) {
         ListHeaderComponent={
           <View style={styles.profileHeader}>
             <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-              <Image source={avatar} style={styles.avatar} />
+              <Image source={avatar ? { uri: avatar } : noAvatar} style={styles.avatar} />
             </TouchableOpacity>
             <View style={styles.headerInfo}>
               <Text style={styles.username}>{formatUsername(username)}</Text>
@@ -303,6 +303,7 @@ export default function Profile({ navigation }) {
                 renderItem={({ item }) => (
                   <ReviewCard
                     item={item}
+                    avatar={avatar}
                     handleUpvote={handleUpvote}
                     handleDelete={handleDelete}
                     navigation={navigation}

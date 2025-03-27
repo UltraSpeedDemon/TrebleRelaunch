@@ -52,6 +52,7 @@ export default function AlbumPage({ route, navigation }) {
       // },
     ]
   );
+  const [users, setUsers] = useState([]);
 
   // Like, Save, Favourite states
   const [liked, setLiked] = useState(false);
@@ -103,7 +104,8 @@ export default function AlbumPage({ route, navigation }) {
     const reqReviews = promises[0]
     const albumSongs = promises[1]
     const summary = promises[2].summary
-    setReviews(reqReviews)
+    setReviews(reqReviews.reviews)
+    setUsers(reqReviews.users)
     setAlbumSongs(albumSongs)
     setSummary(summary)
   }
@@ -360,7 +362,8 @@ export default function AlbumPage({ route, navigation }) {
                   {albumSongs.map((song, i) => {
                     return (
                         <ListItem 
-                          id={i.toString()} 
+                          id={song.listenableId} 
+                          key={song.listenableId}
                           bottomDivider 
                           onPress={() => { navigateToSong(song) }}
                           Component={TouchableHighlight}
@@ -467,9 +470,10 @@ export default function AlbumPage({ route, navigation }) {
             </KeyboardAvoidingView>
           </View>
         }
-        renderItem={({ item }) => (
-          <ReviewCard item={item} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />
-        )}
+        renderItem={({ item }) => {
+          let avatar = users.filter(u => u.userId == item.userId)[0].avatarLong
+          return (<ReviewCard item={item} avatar={avatar} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />)
+        }}
         contentContainerStyle={styles.reviewsContainer}
         showsVerticalScrollIndicator={false}
       />

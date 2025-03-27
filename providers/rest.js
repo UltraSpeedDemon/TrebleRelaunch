@@ -200,7 +200,8 @@ export async function getReviews(listenable_id) {
 }
 
 export async function getUserReview(user_id) {
-  return await serverGet("review/user", { user_id })
+  id_token = await auth.currentUser.getIdToken()
+  return await serverPost("review/user", { user_id, id_token })
 }
 
 export async function upvoteReview(rid) {

@@ -29,6 +29,7 @@ export default function ArtistPage({ route, navigation }) {
   const [reviewRating, setReviewRating] = useState(0);
   const [selectedEmojis, setSelectedEmojis] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [users, setUsers] = useState([]);
 
   // Like, Save, Favourite states
   const [liked, setLiked] = useState(false);
@@ -70,7 +71,8 @@ export default function ArtistPage({ route, navigation }) {
 
   async function populateReviews() {
     let reqReviews = await (await getReviews(artist.id)).json()
-    setReviews(reqReviews)
+    setReviews(reqReviews.reviews)
+    setUsers(reqReviews.users)
   }
 
   useEffect(() => {
@@ -121,7 +123,7 @@ export default function ArtistPage({ route, navigation }) {
             currentUser.uid,    // user_id
             artist.id,           // music_id
             artist.type,         // type 
-            "",       
+            "",
             artist.name,         // name
           );
           if (recResponse.ok) {
@@ -396,9 +398,10 @@ export default function ArtistPage({ route, navigation }) {
             </KeyboardAvoidingView>
           </View>
         }
-        renderItem={({ item }) => (
-          <ReviewCard item={item} handleDelete={handleDelete} handleUpvote={handleUpvote} navigation={navigation}/>
-        )}
+        renderItem={({ item }) => {
+          let avatar = users.filter(u => u.userId == item.userId)[0].avatarLong
+          return (<ReviewCard item={item} avatar={avatar} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />)
+        }}
         contentContainerStyle={styles.reviewsContainer}
         showsVerticalScrollIndicator={false}
       />

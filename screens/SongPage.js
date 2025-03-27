@@ -54,6 +54,7 @@ export default function SongPage({ route, navigation }) {
       // },
     ]
   );
+  const [users, setUsers] = useState([]);
 
   // Like, Save, Favourite states
   const [liked, setLiked] = useState(false);
@@ -104,7 +105,8 @@ export default function SongPage({ route, navigation }) {
 
   async function populateReviews() {
     let reqReviews = await (await getReviews(track.id)).json()
-    setReviews(reqReviews)
+    setReviews(reqReviews.reviews)
+    setUsers(reqReviews.users)
   }
 
   useEffect(() => {
@@ -512,9 +514,10 @@ export default function SongPage({ route, navigation }) {
             </KeyboardAvoidingView>
           </View>
         }
-        renderItem={({ item }) => (
-          <ReviewCard item={item} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />
-        )}
+        renderItem={({ item }) => {
+          let avatar = users.filter(u => u.userId == item.userId)[0].avatarLong
+          return (<ReviewCard item={item} avatar={avatar} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />)
+        }}
         contentContainerStyle={styles.reviewsContainer}
         showsVerticalScrollIndicator={false}
       />
