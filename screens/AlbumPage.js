@@ -68,34 +68,35 @@ export default function AlbumPage({ route, navigation }) {
 
   // 1) Fetch user data
   useEffect(() => {
-    try {
-      if (isFocused) {
-        console.log("Fetching album metadata on mount...");
-        populateMetadata(album.type, album.id);
-      }
-    } catch (error) {
-      console.error("Error populating metadata:", error);
-    }
-    async function fetchUserData() {
-      try {
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-          navigation.navigate("Home");
-          return;
+    if (isFocused) {
+      try {  
+          console.log("Fetching album metadata on mount...");
+          populateMetadata(album.type, album.id);
         }
-        const resp = await getUser(currentUser.uid);
-        if (!resp.ok) throw new Error("Failed to fetch user data");
-        const userData = await resp.json();
-        setUsername(userData.username || currentUser.displayName || "Anonymous");
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-        Alert.alert("Error", "Unable to fetch user data.");
-      } finally {
-        setLoadingUser(false);
+        catch (error) {
+        console.error("Error populating metadata:", error);
+        }
+      async function fetchUserData() {
+        try {
+          const currentUser = auth.currentUser;
+          if (!currentUser) {
+            navigation.navigate("Home");
+            return;
+          }
+          const resp = await getUser(currentUser.uid);
+          if (!resp.ok) throw new Error("Failed to fetch user data");
+          const userData = await resp.json();
+          setUsername(userData.username || currentUser.displayName || "Anonymous");
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          Alert.alert("Error", "Unable to fetch user data.");
+        } finally {
+          setLoadingUser(false);
+        }
       }
+      populateReviewsAndSongs();
+      fetchUserData();
     }
-    populateReviewsAndSongs();
-    fetchUserData();
   }, [navigation, isFocused]);
   
   async function populateReviewsAndSongs() {
