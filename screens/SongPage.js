@@ -15,7 +15,7 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { getUser, populateMetadata, like, getLike, unlike, postRecommendations, createReview, getReviews, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
+import { getUser, populateMetadata, like, getLike, unlike, postRecommendations, createReview, getReviews, upvoteReview, removeUpvoteFromReview, deleteReview, getSongFromDeezer } from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 
@@ -24,7 +24,6 @@ import { AnimatedCircularProgress } from "react-native-circular-progress";
 import Icon from "react-native-vector-icons/MaterialIcons";
 
 export default function SongPage({ route, navigation }) {
-  const { track } = route.params;
   const [username, setUsername] = useState("");
   const [loadingUser, setLoadingUser] = useState(true);
 
@@ -68,9 +67,29 @@ export default function SongPage({ route, navigation }) {
   // Add state for progress
   const [progress, setProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [artistName, setArtistName] = useState("");
+  const [albumName, setAlbumName] = useState("");
+  const [trackName, setTrackName] = useState("");
+  const [track, setTrack] = useState(route.params.track);
+
 
   // Fetch current user data
   useEffect(() => {
+    console.log("SongPage mounted with track:", track);
+    if(!track.preview) {
+        getSongFromDeezer(track.id).then((res) => {
+            if(res.ok) {
+                res.json().then((data) => {
+                    console.log("Data from Deezer:", data);
+                    setTrack({...track, preview: data.preview});
+                });
+            }
+        }
+    )}
+    setArtistName(track.artist?.name || track.artist);
+    setAlbumName(track.album?.title || track.album);
+    setTrackName(track.title || track.name);
+    
     try {
       populateMetadata(track.type, track.id);
     } catch (error) {
@@ -147,15 +166,15 @@ export default function SongPage({ route, navigation }) {
         const data = await response.json();
         console.log("Song liked successfully:", data);
         setLiked(true);
-
+        
         // After liking, call the recommendations endpoint
         try {
           const recResponse = await postRecommendations(
             currentUser.uid,    // user_id
             track.id,           // music_id
             track.type,         // type 
-            track.name,         // name
-            track.artist        // artist_name
+            trackName,         // name
+            artistName       // artist_name
           );
           if (recResponse.ok) {
             const recData = await recResponse.json();
@@ -351,12 +370,12 @@ export default function SongPage({ route, navigation }) {
             <Image source={trackImage} style={styles.image} />
 
             {/* Song Details */}
-            <Text style={styles.title}>{track.name || "Unknown Track"}</Text>
+            <Text style={styles.title}>{trackName || "Unknown Track"}</Text>
             <Text style={styles.artist}>
-              Artist: {track.artist || "Unknown"}
+              Artist: {artistName || "Unknown"}
             </Text>
-            {track.album && (
-              <Text style={styles.album}>Album: {track.album}</Text>
+            {albumName && (
+              <Text style={styles.album}>Album: {albumName}</Text>
             )}
 
             {/* Like, Save, Share */}

@@ -19,8 +19,13 @@ const colours = {
     bluegrey3: '#B6D5E7',
     bluegrey2: '#CEE5F1',
     oceanblue: '#d1f5f6',
-
+    white: '#ffffff',
     navbarBlue: '#4d86cb',
+    background: '#121212',
+    foreground: '#3D3D3D',
+    foreground2: '#666666',
+    accent: '#bd93f9',
+    accent2: '#D08770',
     
 
 

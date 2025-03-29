@@ -7,6 +7,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './utils/firebase';
 import { getSession } from './utils/session'; // Session utility
 import { useFonts } from 'expo-font';
+import Toast from 'react-native-toast-message';
+
 
 import colours from './styles/colours';
 import Home from './screens/Home';
@@ -109,7 +111,7 @@ function WelcomeScreen({ navigation }) {
   }, [fadeAnim, scaleAnim, rotateAnim, navigation]);
 
   return (
-    <View style={styles.container} backgroundColor={colours.bluegrey}>
+    <View style={styles.container} backgroundColor={colours.background}>
       <Animated.Image
         source={require('./images/musicNoteIcon.png')} // Path to your music note image
         style={[
@@ -196,6 +198,7 @@ export default function App() {
         <Stack.Screen name="UpdateReview" component={UpdateReviewPage} />
         <Stack.Screen name="ArtistListenables" component={ArtistListenables} />
       </Stack.Navigator>
+      <Toast />
     </NavigationContainer>
   );
 }

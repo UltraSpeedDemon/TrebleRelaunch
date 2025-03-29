@@ -43,6 +43,7 @@ export default function ArtistPage({ route, navigation }) {
 
   // 1) Fetch user data
   useEffect(() => {
+    console.log("SongPage mounted with track:", artist);
     try {
       populateMetadata(artist.type, artist.id);
     } catch (error) {

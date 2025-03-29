@@ -74,6 +74,10 @@ export async function postSearchResults(
     userId,
   });
 }
+
+export async function getSongFromDeezer(listenable_id) {
+  return await serverGet("search/getSongFromDeezer", { listenable_id });
+}
 //#endregion
 
 //#region User endpoints
@@ -141,15 +145,56 @@ export async function postRecommendations(userId, musicId, type, name, artistNam
   }
 }
 
-export async function getRecommendations(userId, { limit = 20, offset = 0 } = {}) {
+export async function getRecommendations(userId, { limit = 20, offset = 0, refresh = false } = {}) {
   try {
     return await serverGet("users/recommendations", { 
       user_id: userId, 
       offset, 
-      limit 
+      limit,
+      refresh
     });
   } catch (error) {
     console.error("Error fetching my recommendations:", error);
+  }
+}
+
+export async function share(userId, item_rid, comment, type) {
+  return await serverPost("users/share", { 
+    user_id: userId, 
+    item_rid: item_rid, 
+    comment: comment || '', 
+    share_by: auth.currentUser.uid,
+    type: type
+  });
+}
+
+export async function getSharedItems(userId)
+{
+  return await serverGet("users/share", { user_id: userId });
+}
+
+export async function getFriendReviews(user_id, cutoff_date) {
+  return await serverGet("users/friend_reviews", { user_id, cutoff_date });
+}
+
+export async function setRecommendationServed(userId, recId) {
+  return await serverPost("users/serve_recommendation", {
+    user_id: userId,
+    song_rid: recId,
+    served: true,
+  });
+}
+
+export async function getTimeline(userId, { limit = 20, offset = 0, refresh = false} = {}) {
+  try {
+    return await serverGet("users/timeline", { 
+      user_id: userId, 
+      offset, 
+      limit,
+      refresh
+    });
+  } catch (error) {
+    console.error("Error fetching my timeline:", error);
   }
 }
 
@@ -251,6 +296,7 @@ export async function getArtistAlbums(artist_id, page) {
 
 export function getServerEndpointBase() {
   if (process.env.NODE_ENV === "development") {
+      console.log(process.env.API_TUNNEL_URL);
       return process.env.API_TUNNEL_URL ? process.env.API_TUNNEL_URL : `https://127.0.0.1:5000`;
   }
   else {
