@@ -69,7 +69,10 @@ export default function AlbumPage({ route, navigation }) {
   // 1) Fetch user data
   useEffect(() => {
     try {
-      populateMetadata(album.type, album.id);
+      if (isFocused) {
+        console.log("Fetching album metadata on mount...");
+        populateMetadata(album.type, album.id);
+      }
     } catch (error) {
       console.error("Error populating metadata:", error);
     }
