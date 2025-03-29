@@ -260,7 +260,7 @@ export default function Search({ navigation, route }) {
               {!searchResult ? (
                 <ActivityIndicator size="large" color="#4CAF50" />
               ) : (
-                <View key="searchResults">
+                <View key="searchResults" style={{ paddingBottom: 50 }}>
                   {/* Filter Chips */}
                   <View style={styles.chipContainer}>
                     <Chip

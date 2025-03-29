@@ -254,11 +254,12 @@ export default function AlbumPage({ route, navigation }) {
   const navigateToSong = (song) => { 
     navigation.navigate("SongPage", { 
       track: {
-        id: song.listenableId,
+        id: parseInt(song.listenableId),
         image: song.coverArt,
         name: song.title,
         artist: album.artist,
         album: album.name,
+        type: "track"
       }
     })
   }

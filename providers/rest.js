@@ -239,6 +239,16 @@ export async function getAlbumSummary(listenable_id) {
 }
 //#endregion
 
+//#region Artist endpoints
+export async function getArtistSongs(artist_id, page) {
+  return await serverGet("artist/songs", { artist_id, page })
+}
+
+export async function getArtistAlbums(artist_id, page) {
+  return await serverGet("artist/albums", { artist_id, page })
+}
+//#endregion
+
 export function getServerEndpointBase() {
   if (process.env.NODE_ENV === "development") {
       return process.env.API_TUNNEL_URL ? process.env.API_TUNNEL_URL : `https://127.0.0.1:5000`;

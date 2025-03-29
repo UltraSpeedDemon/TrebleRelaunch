@@ -43,6 +43,7 @@ import MusicSwiperTest from './screens/MusicSwiperTest';
 SplashScreen.preventAutoHideAsync();
 import { ColorSpace } from 'react-native-reanimated';
 import UpdateReviewPage from './screens/UpdateReview';
+import ArtistListenables from './screens/ArtistListenables';
 
 // Stack Navigator
 const Stack = createStackNavigator();
@@ -193,6 +194,7 @@ export default function App() {
         <Stack.Screen name="SongCardSwipe" component={SongCardSwipe} />
         <Stack.Screen name="MusicSwiperTest" component={MusicSwiperTest} />
         <Stack.Screen name="UpdateReview" component={UpdateReviewPage} />
+        <Stack.Screen name="ArtistListenables" component={ArtistListenables} />
       </Stack.Navigator>
     </NavigationContainer>
   );

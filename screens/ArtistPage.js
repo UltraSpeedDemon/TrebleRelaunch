@@ -18,6 +18,7 @@ import colours from "../styles/colours";
 import { getUser, populateMetadata, getLike, unlike, like, postRecommendations, createReview, getReviews, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
+import { Icon, ListItem } from "@rneui/base";
 
 export default function ArtistPage({ route, navigation }) {
   const { artist } = route.params; // Expecting "artist" from navigation
@@ -234,6 +235,10 @@ export default function ArtistPage({ route, navigation }) {
     );
   }
 
+  const navigateToListenablePage = (type) => {
+    navigation.navigate("ArtistListenables", { type, artist })
+  }
+
   // If no artist data
   if (!artist) {
     return (
@@ -306,6 +311,26 @@ export default function ArtistPage({ route, navigation }) {
                 <Text style={styles.actionText}>Share</Text>
               </TouchableOpacity>
             </View>
+            
+            <TouchableOpacity onPress={() => {navigateToListenablePage("track")}}>
+              <ListItem style={{ marginTop: 20}}>
+                <Icon name="audiotrack" size={20} />
+                <ListItem.Content>
+                  <ListItem.Title>Songs</ListItem.Title>
+                </ListItem.Content>
+                <ListItem.Chevron />
+              </ListItem>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => {navigateToListenablePage("album")}}>
+              <ListItem style={{ marginTop: 20}}>
+                <Icon name="album" size={20} />
+                <ListItem.Content>
+                  <ListItem.Title>Albums</ListItem.Title>
+                </ListItem.Content>
+                <ListItem.Chevron />
+              </ListItem>
+            </TouchableOpacity>
 
             {/* Add Review Section */}
             <KeyboardAvoidingView style={styles.reviewInputContainer}>

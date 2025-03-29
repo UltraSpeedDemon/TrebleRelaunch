@@ -7,7 +7,7 @@ const SectionDivider = ({ title, nonfirst=true }) => {
         {title && (
           <Text style={styles.title}>{title}</Text>
         )}
-        <HorizontalRule />
+        <HorizontalRule style={styles.rule} />
       </View>
     );
   };
@@ -24,7 +24,11 @@ const SectionDivider = ({ title, nonfirst=true }) => {
       fontWeight: "bold",
       marginBottom: 2,
       paddingLeft: 2.5,
+      color: "#fff"
     },
+    rule: {
+      color: "#fff"
+    }
   });
   
   export default SectionDivider;

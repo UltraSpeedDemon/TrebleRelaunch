@@ -70,7 +70,7 @@ export default function UpdateReviewPage({ route, navigation }) {
         <View style={styles.container}>
             <TouchableOpacity onPress={() => { navigation.goBack(); }} style={styles.goBackButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Image
-                    source={require("../images/arrowLeftIcon.png")}
+                    source={require("../images/arrowLeftIconWhite.png")}
                     style={styles.backIcon}
                 />
             </TouchableOpacity>

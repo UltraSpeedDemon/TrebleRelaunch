@@ -100,11 +100,6 @@ export default function SongPage({ route, navigation }) {
 
   async function populateReviews() {
     let reqReviews = await (await getReviews(track.id)).json()
-    setReviews(reqReviews)
-  }
-
-  async function populateReviews() {
-    let reqReviews = await (await getReviews(track.id)).json()
     setReviews(reqReviews.reviews)
     setUsers(reqReviews.users)
   }
