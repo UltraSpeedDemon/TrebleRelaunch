@@ -303,3 +303,16 @@ export function getServerEndpointBase() {
       return `https://${process.env.API_URL}`;
   }
 }
+
+
+export async function getComments(review_id, user_rid) {
+  return await serverPost("post/getPostsByReview", {review_id, user_rid})
+}
+
+export async function deleteComment(post_id) {
+  return await serverDelete("post/deletePost", {post_id})
+}
+
+export async function addComment(author_id, review_id, message) {
+  return await serverPost("post/addPost",{author_id, review_id, message})
+}
