@@ -11,18 +11,23 @@ import {
   Alert,
   ActivityIndicator,
   TouchableHighlight,
+  Platform,
 } from "react-native";
 import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
 import { createReview, getReviews, getUser, populateMetadata, getLike, unlike, like, upvoteReview, removeUpvoteFromReview, deleteReview, getAlbumSongs, getAlbumSummary } from "../providers/rest";
+import { getSongFromDeezer } from "../providers/rest"; // Add this import
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 import { Avatar, Icon, ListItem } from "@rneui/base";
+import { Audio } from "expo-av";
+import { AnimatedCircularProgress } from "react-native-circular-progress";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 
 export default function AlbumPage({ route, navigation }) {
-  const { album } = route.params; // Expecting "album" passed from navigation
+  const { album } = route.params;
   const [username, setUsername] = useState("");
   const [loadingUser, setLoadingUser] = useState(true);
 
@@ -30,28 +35,7 @@ export default function AlbumPage({ route, navigation }) {
   const [review, setReview] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
   const [selectedEmojis, setSelectedEmojis] = useState([]);
-  const [reviews, setReviews] = useState(
-    [
-      // {
-      //   id: "1",
-      //   username: "User1",
-      //   text: "This album is so catchy!",
-      //   upvotes: 3,
-      //   upvoted: false,
-      //   rating: 5,
-      //   userSelectedEmojis: [],
-      // },
-      // {
-      //   id: "2",
-      //   username: "User2",
-      //   text: "I love the entire tracklist.",
-      //   upvotes: 5,
-      //   upvoted: false,
-      //   rating: 4,
-      //   userSelectedEmojis: ["🔥"],
-      // },
-    ]
-  );
+  const [reviews, setReviews] = useState([]);
   const [users, setUsers] = useState([]);
 
   // Like, Save, Favourite states
@@ -59,13 +43,75 @@ export default function AlbumPage({ route, navigation }) {
   const [savedToLibrary, setSavedToLibrary] = useState(false);
   const [favourite, setFavourite] = useState(false);
 
-  // For the emoji dropdown
+  // For emoji dropdown, album songs and summary
   const [showEmojiDropdown, setShowEmojiDropdown] = useState(false);
   const [albumSongs, setAlbumSongs] = useState([]);
   const [songExpanded, setSongExpanded] = useState(false);
   const [songsLoading, setSongsLoading] = useState(true);
   const [summary, setSummary] = useState("");
   const isFocused = useIsFocused();
+
+  const [sound, setSound] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentPreview, setCurrentPreview] = useState(null);
+
+  const handlePlayPreview = async (previewUrl) => {
+    try {
+      if (currentPreview === previewUrl && sound) {
+        await sound.unloadAsync();
+        setSound(null);
+        setIsPlaying(false);
+        setProgress(0);
+        setCurrentPreview(null);
+        return;
+      }
+
+      if (sound) {
+        await sound.unloadAsync();
+      }
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: previewUrl },
+        { shouldPlay: true }
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+      setCurrentPreview(previewUrl);
+
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.isPlaying) {
+          setProgress((status.positionMillis / status.durationMillis) * 100);
+        }
+        if (status.didJustFinish) {
+          setProgress(0);
+          setIsPlaying(false);
+          setCurrentPreview(null);
+        }
+      });
+    } catch (error) {
+      console.error("[ERROR] handlePlayPreview ->", error);
+      Alert.alert("Error", "Unable to play the song preview.");
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
+
+  useEffect(() => {
+    if (!isFocused && sound) {
+      sound.unloadAsync();
+      setSound(null);
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentPreview(null);
+    }
+  }, [isFocused]);
 
   // 1) Fetch user data
   useEffect(() => {
@@ -106,81 +152,87 @@ export default function AlbumPage({ route, navigation }) {
       (await getReviews(album.id)).json(),
       (await getAlbumSongs(album.id)).json(),
       (await getAlbumSummary(album.id)).json()
-    ])
+    ]);
+
     const reqReviews = promises[0]
     const albumSongs = promises[1]
     const summary = promises[2].summary
-    setReviews(reqReviews.reviews)
-    setUsers(reqReviews.users)
-    setAlbumSongs(albumSongs)
-    setSummary(summary)
-    setSongsLoading(false)
+
+    // Fetch previews for each song
+    const fetchPreviewPromises = albumSongs.map(async (song) => {
+      try {
+        const response = await getSongFromDeezer(song.listenableId);
+        const deezerData = await response.json();
+        if (deezerData && deezerData.preview) {
+          song.preview = deezerData.preview;
+        }
+      } catch (error) {
+        console.warn(`[WARNING] Failed to fetch preview for song ID: ${song.listenableId}`, error);
+      }
+      return song;
+    });
+
+    const updatedSongs = await Promise.all(fetchPreviewPromises);
+
+    setReviews(reqReviews.reviews);
+    setUsers(reqReviews.users);
+    setAlbumSongs(updatedSongs);
+    setSummary(summary);
+    setSongsLoading(false);
   }
 
   useEffect(() => {
-      async function checkLikeStatus() {
-        try {
-          const currentUser = auth.currentUser;
-          if (!currentUser) return;
-          const response = await getLike(currentUser.uid, album.id, album.type);
-          if (!response.ok) {
-            setLiked(false);
-            return;
-          }
-          const data = await response.json();
-          setLiked(data.liked);
-        } catch (error) {
-          console.error("Error checking like status:", error);
+    async function checkLikeStatus() {
+      try {
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        const response = await getLike(currentUser.uid, album.id, album.type);
+        if (!response.ok) {
+          setLiked(false);
+          return;
         }
+        const data = await response.json();
+        setLiked(data.liked);
+      } catch (error) {
+        console.error("Error checking like status:", error);
       }
-      checkLikeStatus();
-    }, [album.id]);
+    }
+    checkLikeStatus();
+  }, [album.id]);
 
-  // Sort reviews by upvotes desc
   const getSortedReviews = () => {
     return [...reviews].sort((a, b) => b.upvotes - a.upvotes);
   };
 
-  // Handlers
-    // Handler logic
-    const handleLikeAlbum = async () => {
-      try {
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-          Alert.alert("Error", "User not logged in");
-          return;
-        }
-        if (!liked) {
-          // Call the API to like the song
-          const response = await like(currentUser.uid, album.id, album.type);
-          if (!response.ok) {
-            throw new Error("Failed to like the album");
-          }
-          const data = await response.json();
-          console.log("Album liked successfully:", data);
-          setLiked(true);
-        } else {
-          // Call the API to unlike the song
-          const response = await unlike(currentUser.uid, album.id, album.type);
-          if (!response.ok) {
-            throw new Error("Failed to unlike the album");
-          }
-          const data = await response.json();
-          console.log("Album unliked successfully:", data);
-          setLiked(false);
-        }
-      } catch (error) {
-        console.error("Error toggling like status:", error);
-        Alert.alert("Error", "Unable to toggle like status");
+  const handleLikeAlbum = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        Alert.alert("Error", "User not logged in");
+        return;
       }
-    };  
+      if (!liked) {
+        const response = await like(currentUser.uid, album.id, album.type);
+        if (!response.ok) throw new Error("Failed to like the album");
+        const data = await response.json();
+        console.log("Album liked successfully:", data);
+        setLiked(true);
+      } else {
+        const response = await unlike(currentUser.uid, album.id, album.type);
+        if (!response.ok) throw new Error("Failed to unlike the album");
+        const data = await response.json();
+        console.log("Album unliked successfully:", data);
+        setLiked(false);
+      }
+    } catch (error) {
+      console.error("Error toggling like status:", error);
+      Alert.alert("Error", "Unable to toggle like status");
+    }
+  };
+
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
   const handleToggleFavourite = () => setFavourite(!favourite);
   const handleShare = () => console.log("Album shared!");
-
-  const handleEmojiDropdown = () => {
-    setShowEmojiDropdown(!showEmojiDropdown);
-  };
 
   const handleSelectEmoji = (emoji) => {
     setSelectedEmojis((prev) =>
@@ -194,21 +246,13 @@ export default function AlbumPage({ route, navigation }) {
       "Confirm",
       "Are you sure you want to post this review?",
       [
-        {
-          text: "No",
-          style: "cancel",
-        },
-        {
-          text: "Yes",
-          style: "default",
-          onPress: () => actuallyAddReview(),
-        },
+        { text: "No", style: "cancel" },
+        { text: "Yes", style: "default", onPress: () => actuallyAddReview() },
       ],
       { cancelable: true }
     );
   };
 
-  // Actually add the review
   async function actuallyAddReview() {
     const newReview = {
       id: Date.now().toString(),
@@ -218,60 +262,50 @@ export default function AlbumPage({ route, navigation }) {
       rating: reviewRating,
       emoji: [...selectedEmojis],
     };
-
-    await createReview(newReview)
+    await createReview(newReview);
     await populateReviewsAndSongs();
-
     setReview("");
     setReviewRating(0);
     setSelectedEmojis([]);
-
-  };
+  }
 
   const handleUpvote = async (id) => {
-    let rev = reviews.find(r => r.id === id)
+    let rev = reviews.find((r) => r.id === id);
     if (!rev.upvoted) {
-      await upvoteReview(id)
+      await upvoteReview(id);
     } else {
-      await removeUpvoteFromReview(id)
+      await removeUpvoteFromReview(id);
     }
     setReviews((prev) =>
       prev.map((c) =>
         c.id === id
-          ? {
-              ...c,
-              upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1,
-              upvoted: !c.upvoted,
-            }
+          ? { ...c, upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1, upvoted: !c.upvoted }
           : c
       )
     );
   };
 
   const handleDelete = async (id) => {
-    let rev = reviews.find(r => r.id === id)
+    let rev = reviews.find((r) => r.id === id);
     if (rev.isUser) {
-      await deleteReview(id)
+      await deleteReview(id);
     }
-    setReviews((prev) =>
-      prev.filter((r) => r.id !== id)
-    );
-  }
-  
+    setReviews((prev) => prev.filter((r) => r.id !== id));
+  };
+
   const navigateToSong = (song) => { 
     navigation.navigate("SongPage", { 
       track: {
         id: parseInt(song.listenableId),
         image: song.coverArt,
         name: song.title,
-        artist: album.artist,
-        album: album.name,
+        artist: album.artist.name || album.artist,
+        album: album.name || album.title,
         type: "track"
       }
-    })
-  }
+    });
+  };
 
-  // If no album data
   if (!album) {
     return (
       <View style={styles.loader}>
@@ -281,41 +315,29 @@ export default function AlbumPage({ route, navigation }) {
     );
   }
 
-  // Fallback if album.image missing
   const albumImage = album.image
     ? { uri: album.image }
     : require("../images/albumImage.jpg");
 
   return (
-    <View style={styles.container}>
-      {/* Sidebar */}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={10}
+    >
       <View style={styles.sideMenu}>
         <Sidebar menuOpen={false} setMenuOpen={() => {}} />
       </View>
-
       <FlatList
         data={getSortedReviews()}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <View style={styles.card}>
-            {/* "Album" text (like "Song") */}
             <Text style={styles.title}>Album</Text>
-
-            {/* Album Image */}
             <Image source={albumImage} style={styles.image} />
-
-            {/* Album Name */}
-            <Text style={styles.title}>{album.name || "Unknown Album"}</Text>
-            {/* Show artist if present */}
-            <Text style={styles.artist}>
-              Artist: {album.artist || "Unknown"}
-            </Text>
-
-            {summary &&
-              <Text style={styles.summaryText}>{summary}</Text>
-            }
-
-            {/* Like, Save, Share */}
+            <Text style={styles.title}>{(album.name || album.title) || "Unknown Album"}</Text>
+            <Text style={styles.artist}>Artist: {(album.artist.name || album.artist) || "Unknown"}</Text>
+            {summary && <Text style={styles.summaryText}>{summary}</Text>}
             <View style={styles.actionButtons}>
               <TouchableOpacity onPress={handleLikeAlbum} style={styles.actionButton}>
                 <Image
@@ -328,7 +350,6 @@ export default function AlbumPage({ route, navigation }) {
                 />
                 <Text style={styles.actionText}>{liked ? "Liked" : "Like"}</Text>
               </TouchableOpacity>
-
               <TouchableOpacity onPress={handleSaveToLibrary} style={styles.actionButton}>
                 <Image
                   source={
@@ -342,7 +363,6 @@ export default function AlbumPage({ route, navigation }) {
                   {savedToLibrary ? "Saved" : "Save"}
                 </Text>
               </TouchableOpacity>
-
               <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
                 <Image
                   source={require("../images/shareIcon.png")}
@@ -351,7 +371,6 @@ export default function AlbumPage({ route, navigation }) {
                 <Text style={styles.actionText}>Share</Text>
               </TouchableOpacity>
             </View>
-
             <View style={styles.songAccordion}>
               {
                 !songsLoading 
@@ -369,35 +388,63 @@ export default function AlbumPage({ route, navigation }) {
                     onPress={() => {
                       setSongExpanded(!songExpanded);
                     }}
+                    style={{ marginTop: 20 }}
                   >
-                    {albumSongs.map((song, i) => {
-                      return (
-                          <ListItem 
-                            id={song.listenableId} 
-                            key={song.listenableId}
-                            bottomDivider 
-                            onPress={() => { navigateToSong(song) }}
-                            Component={TouchableHighlight}
-                          >
-                            <Text>{i.toString()}</Text>
-                            <ListItem.Content>
-                              <ListItem.Title>{song.title}</ListItem.Title>
-                            </ListItem.Content>
-                            {/* <Avatar source={{ uri: song['coverArt']}}></Avatar> */}
-                          </ListItem>
-                      )
-                    })}
+                    {albumSongs.map((song, i) => (
+                      <ListItem 
+                        id={song.listenableId} 
+                        key={song.listenableId}
+                        bottomDivider 
+                        onPress={() => { navigateToSong(song) }}
+                        Component={TouchableHighlight}
+                      >
+                        <View style={styles.songRow}>
+                          {/* Song Number */}
+                          <Text style={styles.songNumber}>{i + 1}</Text>
+
+                          {/* Song Title */}
+                          <Text style={styles.songTitle}>{song.title}</Text>
+
+                          {/* Preview Button */}
+                          {song.preview && (
+                            <TouchableOpacity
+                              onPress={() => handlePlayPreview(song.preview)}
+                              style={styles.playButton}
+                            >
+                              <AnimatedCircularProgress
+                                size={40}
+                                width={4}
+                                fill={currentPreview === song.preview ? progress : 0}
+                                tintColor={colours.secondaryblue}
+                                backgroundColor={colours.bluegrey}
+                                rotation={0}
+                              >
+                                {() => (
+                                  <MaterialIcons
+                                    name={
+                                      currentPreview === song.preview && isPlaying
+                                        ? "stop"
+                                        : "play-arrow"
+                                    }
+                                    size={24}
+                                    color="#fff"
+                                  />
+                                )}
+                              </AnimatedCircularProgress>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </ListItem>
+                    ))}
                   </ListItem.Accordion>
                 :
                   <ActivityIndicator size="large" color="#4CAF50" />
               }
                 
             </View>
-
-            {/* Review Section */}
-            <KeyboardAvoidingView style={styles.reviewInputContainer}>
+            {/* Review Input Section (same as SongPage) */}
+            <View style={styles.reviewInputContainer}>
               <View style={styles.topRow}>
-                {/* Favourite button */}
                 <View style={styles.favouriteContainer}>
                   <TouchableOpacity onPress={handleToggleFavourite}>
                     <Image
@@ -411,14 +458,9 @@ export default function AlbumPage({ route, navigation }) {
                   </TouchableOpacity>
                   <Text style={styles.favLabel}>Favourite</Text>
                 </View>
-
-                {/* Star rating */}
                 <View style={styles.starRatingContainer}>
                   {[...Array(5)].map((_, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => setReviewRating(index + 1)}
-                    >
+                    <TouchableOpacity key={index} onPress={() => setReviewRating(index + 1)}>
                       <Image
                         source={
                           index < reviewRating
@@ -430,8 +472,6 @@ export default function AlbumPage({ route, navigation }) {
                     </TouchableOpacity>
                   ))}
                 </View>
-
-                {/* Emoji Icon Tab */}
                 <TouchableOpacity
                   style={styles.selectEmojiTab}
                   onPress={() => setShowEmojiDropdown(!showEmojiDropdown)}
@@ -442,7 +482,6 @@ export default function AlbumPage({ route, navigation }) {
                   />
                 </TouchableOpacity>
               </View>
-
               {showEmojiDropdown && (
                 <View style={styles.emojiDropdownRow}>
                   <TouchableOpacity onPress={() => handleSelectEmoji("❤️")}>
@@ -456,7 +495,6 @@ export default function AlbumPage({ route, navigation }) {
                   </TouchableOpacity>
                 </View>
               )}
-
               <View style={{ flexDirection: "row", marginTop: 15 }}>
                 <TextInput
                   style={styles.reviewInput}
@@ -469,7 +507,6 @@ export default function AlbumPage({ route, navigation }) {
                   <Text style={styles.reviewButtonText}>Post</Text>
                 </TouchableOpacity>
               </View>
-
               {selectedEmojis.length > 0 && (
                 <View style={styles.selectedEmojisSection}>
                   <Text style={styles.selectedEmojisTitle}>Selected Emojis</Text>
@@ -482,26 +519,32 @@ export default function AlbumPage({ route, navigation }) {
                   </View>
                 </View>
               )}
-            </KeyboardAvoidingView>
+            </View>
           </View>
         }
         renderItem={({ item }) => {
-          let avatar = users.filter(u => u.userId == item.userId)[0].avatarLong
-          return (<ReviewCard item={item} avatar={avatar} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />)
+          const user = users.find((u) => u.userId === item.userId);
+          const avatar = user ? user.avatarLong : null;
+          return (
+            <ReviewCard
+              item={item}
+              avatar={avatar}
+              handleUpvote={handleUpvote}
+              handleDelete={handleDelete}
+              navigation={navigation}
+            />
+          );
         }}
         contentContainerStyle={styles.reviewsContainer}
         showsVerticalScrollIndicator={false}
       />
-
-      {/* Bottom Navigation */}
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
-// Reuse the same styling as your SongPage, just changing "Song" → "Album" in text
 const styles = StyleSheet.create({
   ...StyleSheet.create({
     container: {
@@ -552,6 +595,16 @@ const styles = StyleSheet.create({
       color: "#bbb",
       marginBottom: 10,
       textAlign: "center",
+    },
+    album: {
+      fontSize: 16,
+      color: "#bbb",
+      textAlign: "center",
+      marginBottom: 10,
+    },
+    summaryText: {
+      marginBottom: 7.5,
+      color: "#ddd",
     },
     actionButtons: {
       flexDirection: "row",
@@ -705,18 +758,6 @@ const styles = StyleSheet.create({
       bottom: 10,
       right: 10,
     },
-    reviewEmoji: {
-      fontSize: 16,
-      marginLeft: 4,
-      color: "#fff",
-    },
-    summaryText: {
-      marginBottom: 7.5,
-      color: "#ddd"
-    },
-    songAccordion: {
-      marginTop: 20
-    },
     upvoteButton: {
       position: "absolute",
       top: 10,
@@ -741,6 +782,62 @@ const styles = StyleSheet.create({
       position: "absolute",
       bottom: 0,
       width: "100%",
+    },
+    previewButton: {
+      backgroundColor: colours.lightblue,
+      padding: 5,
+      borderRadius: 5,
+      marginLeft: 10,
+    },
+    previewButtonText: {
+      color: "#fff",
+      fontWeight: "bold",
+    },
+    playButton: {
+      position: "relative",
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "rgba(0, 0, 0, 0.7)",
+      borderRadius: 25,
+      width: 50,
+      height: 50,
+      marginLeft: 10,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.8,
+      shadowRadius: 3,
+      elevation: 5,
+    },
+    songRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 10,
+    },
+    songNumber: {
+      fontSize: 16,
+      color: "#000",
+      width: "10%",
+      textAlign: "center",
+    },
+    songTitle: {
+      fontSize: 16,
+      color: "#000",
+      width: "70%",
+      textAlign: "left",
+    },
+    playButton: {
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "rgba(0, 0, 0, 0.7)",
+      borderRadius: 20,
+      width: 40,
+      height: 40,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.8,
+      shadowRadius: 3,
+      elevation: 5,
     },
   }),
 });

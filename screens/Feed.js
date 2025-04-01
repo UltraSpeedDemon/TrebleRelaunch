@@ -23,6 +23,10 @@ import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
 import SearchBar from "../components/SearchBar";
 import { auth } from "../utils/firebase";
+import { Audio } from "expo-av";
+import { AnimatedCircularProgress } from "react-native-circular-progress";
+import Icon from "react-native-vector-icons/MaterialIcons";
+import { useIsFocused } from "@react-navigation/native";
 
 // Import your API calls
 import {
@@ -34,6 +38,7 @@ import {
   share,
   setRecommendationServed,
   getTimeline,
+  getSongFromDeezer
 } from "../providers/rest";
 
 export default function Feed({ navigation, route }) {
@@ -65,6 +70,75 @@ export default function Feed({ navigation, route }) {
 
   // Animated value for sliding the modal up when the keyboard is active.
   const slideAnim = useRef(new Animated.Value(0)).current;
+
+  const [sound, setSound] = useState(null); // State for managing the sound instance
+  const [isPlaying, setIsPlaying] = useState(false); // State for playback status
+  const [progress, setProgress] = useState(0); // State for playback progress
+  const [currentPreview, setCurrentPreview] = useState(null); // Track currently playing preview
+
+  const handlePlayPreview = async (previewUrl) => {
+    try {
+      if (currentPreview === previewUrl && sound) {
+        // Stop playback if the same preview is clicked again
+        await sound.unloadAsync();
+        setSound(null);
+        setIsPlaying(false);
+        setProgress(0);
+        setCurrentPreview(null);
+        return;
+      }
+
+      // Stop any currently playing sound
+      if (sound) {
+        await sound.unloadAsync();
+      }
+
+      // Load and play the new preview
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: previewUrl },
+        { shouldPlay: true }
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+      setCurrentPreview(previewUrl);
+
+      // Update progress
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.isPlaying) {
+          setProgress((status.positionMillis / status.durationMillis) * 100);
+        }
+        if (status.didJustFinish) {
+          setProgress(0);
+          setIsPlaying(false);
+          setCurrentPreview(null);
+        }
+      });
+    } catch (error) {
+      console.error("[ERROR] handlePlayPreview ->", error);
+      Alert.alert("Error", "Unable to play the song preview.");
+    }
+  };
+
+  useEffect(() => {
+    // Cleanup the sound instance when the component unmounts
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
+
+  const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (!isFocused && sound) {
+      sound.unloadAsync();
+      setSound(null);
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentPreview(null);
+    }
+  }, [isFocused]);
 
   useEffect(() => {
     const keyboardShowEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -108,14 +182,50 @@ export default function Feed({ navigation, route }) {
 // -------------------------------------------------------------------------
 const fetchInitialFeed = async (refresh) => {
   try {
-    // Fetch timeline items from your new endpoint (shares + friend reviews)
+    // Fetch timeline items and recommendations
     const timelineItems = await fetchTimeline(0, refresh);
-    // Fetch initial page of recommendations (same as before)
     const recs = await fetchRecommendations(0, refresh);
 
+    // Debug log to inspect the feed data
+    console.log("[DEBUG] Timeline Items:", timelineItems);
+    console.log("[DEBUG] Recommendations:", recs);
+
+    // Fetch missing preview URLs for tracks
+    const fetchPreviewPromises = [...timelineItems, ...recs].map(async (item) => {
+      const trackId = item.item_info?.id || item.id;
+
+      // Log the item structure and conditions
+      console.log("[DEBUG] Conditions - type:", item.type || item.item_info?.type, "preview:", item.preview || item.item_info?.preview, "trackId:", trackId);
+
+      if ((item.type === "track" || item.item_info?.type === "track") && !item.preview && !(item.item_info?.preview) && trackId) {
+        console.log("[DEBUG] Fetching preview for track ID:", trackId);
+        try {
+          const response = await getSongFromDeezer(trackId);
+          const deezerData = await response.json(); // Parse the JSON response
+          if (deezerData && deezerData.preview) {
+            if (item.item_info) {
+              item.item_info.preview = deezerData.preview;
+            } else {
+              item.preview = deezerData.preview;
+            }
+            console.log("[DEBUG] Preview set for track:", trackId, deezerData.preview);
+          } else {
+            console.warn("[WARNING] No preview available for track ID:", trackId);
+          }
+        } catch (error) {
+          console.warn("[WARNING] Failed to fetch preview for track ID:", trackId, error);
+        }
+      } else {
+        console.log("[DEBUG] Skipping preview fetch for item:", item);
+      }
+      return item;
+    });
+
+    const updatedItems = await Promise.all(fetchPreviewPromises);
+
     // Merge the two lists using your random insertion logic.
-    let combinedItems = [...timelineItems];
-    recs.forEach((rec) => {
+    let combinedItems = [...updatedItems.slice(0, timelineItems.length)];
+    updatedItems.slice(timelineItems.length).forEach((rec) => {
       // Only insert if this recommendation isn't already in the timeline.
       const alreadyExists = combinedItems.some(
         (item) => item.record_id === rec.record_id
@@ -139,46 +249,59 @@ const fetchInitialFeed = async (refresh) => {
 //  loadMoreTimeline: Load additional timeline items and recommendations
 // -------------------------------------------------------------------------
 const loadMoreTimeline = async () => {
-  // Remove the check for !hasMoreTimeline so that we always try to load new content,
-  // allowing recommendations to load even if timeline items are empty.
   if (loadingMore) return;
   setLoadingMore(true);
 
-  // Fetch the next page of timeline items and recommendations
-  const newTimelineItems = await fetchTimeline(timelineOffset, false);
-  const newRecs = await fetchRecommendations(recsOffset, false);
+  try {
+    // Fetch the next page of timeline items and recommendations
+    const newTimelineItems = await fetchTimeline(timelineOffset, false);
+    const newRecs = await fetchRecommendations(recsOffset, false);
 
-  // If both timeline and recommendations are empty, then stop further pagination.
-  // Otherwise, continue fetching recommendations even if no timeline items.
-  if (newTimelineItems.length < limit && newRecs.length === 0) {
-    setHasMoreTimeline(false);
-  }
+    // Fetch missing preview URLs for tracks in the new items
+    const fetchPreviewPromises = [...newTimelineItems, ...newRecs].map(async (item) => {
+      const trackId = item.item_info?.id || item.id;
 
-  // Instead of merging into the old feed (combinedFeed),
-  // create a new combined list from the new timeline items.
-  let newCombined = [];
-  if (newTimelineItems.length > 0) {
-    // Start with the fresh timeline items.
-    newCombined = [...newTimelineItems];
-    // Randomly insert each new recommendation into this new batch.
-    newRecs.forEach((rec) => {
-      const randomIndex = Math.floor(Math.random() * (newCombined.length + 1));
-      newCombined.splice(randomIndex, 0, rec);
+      if ((item.type === "track" || item.item_info?.type === "track") && !item.preview && !(item.item_info?.preview) && trackId) {
+        try {
+          const response = await getSongFromDeezer(trackId);
+          const deezerData = await response.json();
+          if (deezerData && deezerData.preview) {
+            if (item.item_info) {
+              item.item_info.preview = deezerData.preview;
+            } else {
+              item.preview = deezerData.preview;
+            }
+          }
+        } catch (error) {
+          console.warn("[WARNING] Failed to fetch preview for track ID:", trackId, error);
+        }
+      }
+      return item;
     });
-  } else {
-    // When there are no timeline items, simply use recommendations.
-    newCombined = newRecs;
+
+    const updatedItems = await Promise.all(fetchPreviewPromises);
+
+    // Merge the new timeline items and recommendations
+    let newCombined = [...updatedItems.slice(0, newTimelineItems.length)];
+    updatedItems.slice(newTimelineItems.length).forEach((rec) => {
+      const alreadyExists = newCombined.some((item) => item.record_id === rec.record_id);
+      if (!alreadyExists) {
+        const randomIndex = Math.floor(Math.random() * (newCombined.length + 1));
+        newCombined.splice(randomIndex, 0, rec);
+      }
+    });
+
+    // Append the new combined batch to the existing feed
+    setCombinedFeed((prevFeed) => [...prevFeed, ...newCombined]);
+
+    // Update the pagination offsets
+    setTimelineOffset((prev) => prev + newTimelineItems.length);
+    setRecsOffset((prev) => prev + newRecs.length);
+  } catch (error) {
+    console.error("[ERROR] loadMoreTimeline ->", error);
+  } finally {
+    setLoadingMore(false);
   }
-
-  // Append the new combined batch to the existing feed.
-  // This keeps the old feed intact while adding a fresh set.
-  setCombinedFeed(prevFeed => [...prevFeed, ...newCombined]);
-
-  // Update the pagination offsets based on what we fetched.
-  setTimelineOffset(prev => prev + newTimelineItems.length);
-  setRecsOffset(prev => prev + newRecs.length);
-
-  setLoadingMore(false);
 };
 
 
@@ -640,6 +763,23 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
   //  renderFeedItem
   // -------------------------------------------------------------------------
   const renderFeedItem = ({ item }) => {
+    const handlePreview = () => {
+      const previewUrl = item.preview || item.item_info?.preview;
+      if (previewUrl) {
+        handlePlayPreview(previewUrl);
+      } else {
+        Alert.alert("Preview not available", "This item does not have a preview.");
+      }
+    };
+  
+    // Debug log to verify item structure
+    console.log("[DEBUG] Rendering feed item:", item);
+  
+    // Add debug logs for the condition
+    console.log("[DEBUG] item.type:", item.type);
+    console.log("[DEBUG] item.item_info?.type", item.item_info?.type);
+    console.log("[DEBUG] item.preview:", item.preview);
+    console.log("[DEBUG] item.item_info?.preview:", item.item_info?.preview);
   
     // Branch 1: Friend or following reviews
     if (item.class === "friend_review" || item.class === "following_review") {
@@ -682,7 +822,32 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
                 </TouchableOpacity>
               </View>
             </View>
-            <Image source={{ uri: imageUri || "https://via.placeholder.com/250" }} style={styles.postImage} />
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: imageUri || "https://via.placeholder.com/250" }} style={styles.postImage} />
+              {item.item_info?.type === "track" && (item.preview || item.item_info?.preview) && (
+                <TouchableOpacity
+                  onPress={handlePreview}
+                  style={styles.playButton}
+                >
+                  <AnimatedCircularProgress
+                    size={50}
+                    width={5}
+                    fill={currentPreview === (item.preview || item.item_info?.preview) ? progress : 0}
+                    tintColor={colours.secondaryblue}
+                    backgroundColor={colours.bluegrey}
+                    rotation={0}
+                  >
+                    {() => (
+                      <Icon
+                        name={currentPreview === (item.preview || item.item_info?.preview) && isPlaying ? "stop" : "play-arrow"}
+                        size={30}
+                        color="#fff"
+                      />
+                    )}
+                  </AnimatedCircularProgress>
+                </TouchableOpacity>
+              )}
+            </View>
             <View style={styles.cardContent}>
               <Text style={styles.postTitle}>{displayName}</Text>
               {itemInfo.album && itemInfo.album.title && (
@@ -772,7 +937,32 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
                 </TouchableOpacity>
               </View>
             </View>
-            <Image source={{ uri: imageUri }} style={styles.postImage} />
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: imageUri }} style={styles.postImage} />
+              {item.item_info?.type === "track" && (item.preview || item.item_info?.preview) && (
+                <TouchableOpacity
+                  onPress={handlePreview}
+                  style={styles.playButton}
+                >
+                  <AnimatedCircularProgress
+                    size={50}
+                    width={5}
+                    fill={currentPreview === (item.preview || item.item_info?.preview) ? progress : 0}
+                    tintColor={colours.secondaryblue}
+                    backgroundColor={colours.bluegrey}
+                    rotation={0}
+                  >
+                    {() => (
+                      <Icon
+                        name={currentPreview === (item.preview || item.item_info?.preview) && isPlaying ? "stop" : "play-arrow"}
+                        size={30}
+                        color="#fff"
+                      />
+                    )}
+                  </AnimatedCircularProgress>
+                </TouchableOpacity>
+              )}
+            </View>
             <View style={styles.cardContent}>
               <Text style={styles.postTitle}>{displayName}</Text>
               {itemInfo.album && itemInfo.album.title && (
@@ -868,7 +1058,32 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
               </TouchableOpacity>
             </View>
           </View>
-          <Image source={{ uri: imageUri }} style={styles.postImage} />
+          <View style={styles.imageContainer}>
+            <Image source={{ uri: imageUri }} style={styles.postImage} />
+            {(item.type === "track" || item.item_info?.type === "track") && (item.preview || item.item_info?.preview) && (
+              <TouchableOpacity
+                onPress={handlePreview}
+                style={styles.playButton}
+              >
+                <AnimatedCircularProgress
+                  size={50}
+                  width={5}
+                  fill={currentPreview === (item.preview || item.item_info?.preview) ? progress : 0}
+                  tintColor={colours.secondaryblue}
+                  backgroundColor={colours.bluegrey}
+                  rotation={0}
+                >
+                  {() => (
+                    <Icon
+                      name={currentPreview === (item.preview || item.item_info?.preview) && isPlaying ? "stop" : "play-arrow"}
+                      size={30}
+                      color="#fff"
+                    />
+                  )}
+                </AnimatedCircularProgress>
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.cardContent}>
             <Text style={styles.postTitle}>{displayName}</Text>
             {subText ? <Text style={styles.postArtist}>{subText}</Text> : null}
@@ -1774,6 +1989,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginRight: 4,
     color: "#FFF",
+  },
+  previewButton: {
+    backgroundColor: colours.lightblue,
+    padding: 10,
+    borderRadius: 5,
+    marginTop: 10,
+  },
+  previewButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  imageContainer: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playButton: {
+    position: "absolute",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)", // Darker semi-transparent background
+    borderRadius: 25,
+    width: 50,
+    height: 50,
+    shadowColor: "#000", // Add shadow for better visibility
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 3,
+    elevation: 5, // For Android shadow
   },
 
 });

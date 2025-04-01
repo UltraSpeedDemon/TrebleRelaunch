@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-} from "react-native";
-import { useRoute } from "@react-navigation/native";
-import { auth } from "../utils/firebase";
+  FlatList,
+  ScrollView,
+} from 'react-native';
+import { auth } from '../utils/firebase';
+import { useRoute } from '@react-navigation/native';
 import {
   getUser,
   getFollowers,
@@ -18,64 +20,69 @@ import {
   unfollowUser,
   requestFollow,
   getFollowRequests,
-  getUserReview,
+  getUserTopReviews,
+  getUserFavorites,
+  getUserMostUpvoted,
+  getUserActivity,
   upvoteReview,
   removeUpvoteFromReview,
   deleteReview,
-} from "../providers/rest";
-import colours from "../styles/colours";
-import Sidebar from "../components/Sidebar";
-import BottomNavbar from "../components/BottomNavbar";
-import ReviewCard from "../components/Review";
-import { FlatList } from "react-native-gesture-handler";
+  getReviewSong, // New function for enriching reviews
+} from '../providers/rest';
+import colours from '../styles/colours';
+import Sidebar from '../components/Sidebar';
+import BottomNavbar from '../components/BottomNavbar';
+import ReviewCard from '../components/Review';
 
 export default function UserProfiles({ navigation }) {
   const route = useRoute();
   const { userId } = route.params;
 
-  // Basic user info
-  const [username, setUsername] = useState("");
-  const [avatar, setAvatar] = useState(require("../images/avatarIcon.png"));
-  const noAvatar = require("../images/avatarIcon.png");
 
+  // Basic user info
+  const [username, setUsername] = useState('');
+  const [avatar, setAvatar] = useState(null);
+  const noAvatar = require('../images/avatarIcon.png');
+
+  // Followers & Friends
   const [theirFollowers, setTheirFollowers] = useState([]);
   const [myFriends, setMyFriends] = useState([]);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
-  // Account settings
+  // Account
   const [isPublic, setIsPublic] = useState(true);
   const [isSpotifyLinked, setIsSpotifyLinked] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Follow request status
+  // Follow requests
   const [followRequested, setFollowRequested] = useState(false);
 
-  // Demo placeholders for topTracks & topRated
-  const [topTracks, setTopTracks] = useState([]);
-  const [topRated, setTopRated] = useState([]);
-
-  // Activity feed
+  // Review sections
+  const [topReviews, setTopReviews] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+  const [mostUpvoted, setMostUpvoted] = useState([]);
   const [activity, setActivity] = useState([]);
-  const [totalReviews, setTotalReviews] = useState(0); // track the number of reviews
+  const [totalReviews, setTotalReviews] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [canViewFullContent, setCanViewFullContent] = useState(true);
 
-  // For naming
-  function formatUsername(name) {
-    if (!name) return "";
+  // Helper: capitalize first letter
+  const formatUsername = (name) => {
+    if (!name) return '';
     return name.charAt(0).toUpperCase() + name.slice(1);
-  }
+  };
 
-  // On mount or userId change, fetch user data / followers / friend list
+
+  // Fetch data when userId changes
   useEffect(() => {
     fetchUserData();
     fetchTheirFollowers();
     fetchMyFriends();
   }, [userId]);
 
-  // Check if we already requested follow
   useEffect(() => {
     async function checkFollowRequest() {
       try {
@@ -88,185 +95,240 @@ export default function UserProfiles({ navigation }) {
           setFollowRequested(alreadyRequested);
         }
       } catch (error) {
-        console.error("Error fetching follow request status:", error);
+        console.error('Error fetching follow request status:', error);
       }
     }
     checkFollowRequest();
   }, [userId]);
 
-  // 1) Fetch user data
   async function fetchUserData() {
     try {
       setLoading(true);
       const resp = await getUser(userId);
-      if (!resp.ok) {
-        const errText = await resp.text();
-        console.log("DEBUG: getUser error response:", errText);
-        throw new Error("Failed to fetch user data from backend.");
-      }
+      if (!resp.ok) throw new Error('Failed to fetch user data');
       const data = await resp.json();
-      console.log("DEBUG: Fetched user data:", data);
-
-      setUsername(data.username || "");
+      setUsername(data.username || '');
       setFollowersCount(data.followersCount || 0);
       setFollowingCount(data.followingCount || 0);
       setIsPublic(data.isPublic !== false);
       setIsSpotifyLinked(data.spotifyIsLinked === true);
       setIsAdmin(data.isAdmin || false);
-
-      // If avatar is valid, set it. Otherwise, fallback.
       if (
         data.avatar &&
-        data.avatar !== "None" &&
-        (data.avatar.startsWith("data:") || data.avatar.startsWith("http"))
+        data.avatar !== 'None' &&
+        (data.avatar.startsWith('http') || data.avatar.startsWith('data:'))
       ) {
         setAvatar(data.avatar);
       } else {
         setAvatar(null);
       }
-
-      // Example placeholders
-      setTopTracks([
-        {
-          id: "1",
-          name: "I Wonder",
-          artist: "Kanye West",
-          image: require("../images/albumImage.jpg"),
-        },
-        {
-          id: "2",
-          name: "Stronger",
-          artist: "Kanye West",
-          image: require("../images/albumImage.jpg"),
-        },
-        {
-          id: "3",
-          name: "Gold Digger",
-          artist: "Kanye West",
-          image: require("../images/albumImage.jpg"),
-        },
-      ]);
-      setTopRated([
-        {
-          id: "1",
-          name: "Stronger",
-          artist: "Kanye West",
-          rating: 5,
-          image: require("../images/albumImage.jpg"),
-        },
-        {
-          id: "2",
-          name: "Gold Digger",
-          artist: "Kanye West",
-          rating: 4,
-          image: require("../images/albumImage.jpg"),
-        },
-      ]);
-
-      // Now fetch user reviews
-      const reviewResp = await getUserReview(userId);
-      if (reviewResp.ok) {
-        const userReviews = await reviewResp.json();
-        setActivity(userReviews);
-
-        // Update totalReviews to length of userReviews
-        setTotalReviews(userReviews.length);
+      const currentUserId = auth.currentUser?.uid;
+      const isSelf = currentUserId === userId;
+      const iAmFollowing = await checkIfImFollowing(userId);
+      const canView = data.isPublic || isSelf || iAmFollowing;
+      setCanViewFullContent(canView);
+      if (canView) {
+        await loadAllReviewsSections();
       } else {
-        console.error("Failed to fetch user reviews. Status:", reviewResp.status);
-        setActivity([]); // or leave existing
+        setTopReviews([]);
+        setFavorites([]);
+        setMostUpvoted([]);
+        setActivity([]);
         setTotalReviews(0);
       }
     } catch (error) {
-      console.error("Error fetching user data:", error);
-      Alert.alert("Error", "Unable to fetch user data.");
+      console.error('Error fetching user data:', error);
+      Alert.alert('Error', 'Unable to fetch user data.');
     } finally {
       setLoading(false);
     }
   }
 
-  // 2) Fetch the user’s followers
+  async function checkIfImFollowing(targetUserId) {
+    try {
+      const resp = await getFollowers(targetUserId);
+      if (resp.ok) {
+        const arr = await resp.json();
+        return arr.some((f) => f.userId === auth.currentUser?.uid);
+      }
+    } catch (error) {
+      console.error("Error checking if I'm following:", error);
+    }
+    return false;
+  }
+
   async function fetchTheirFollowers() {
     try {
       const resp = await getFollowers(userId);
-      if (!resp.ok) {
-        throw new Error("Failed to fetch their followers");
+      if (resp.ok) {
+        const arr = await resp.json();
+        setTheirFollowers(arr);
       }
-      const arr = await resp.json();
-      setTheirFollowers(arr);
     } catch (error) {
-      console.error("Error fetching their followers:", error);
+      console.error('Error fetching their followers:', error);
     }
   }
 
-  // 3) Fetch my friend list
   async function fetchMyFriends() {
     try {
       const resp = await getFriends(auth.currentUser.uid);
-      if (!resp.ok) {
-        throw new Error("Failed to fetch my friends");
+      if (resp.ok) {
+        const friendsArr = await resp.json();
+        setMyFriends(friendsArr);
       }
-      const friendsArr = await resp.json();
-      setMyFriends(friendsArr);
     } catch (error) {
-      console.error("Error fetching my friends:", error);
+      console.error('Error fetching my friends:', error);
     }
   }
 
-  const handleUpvote = async (id) => {
-    let rev = activity.find((r) => r.id === id);
-    if (!rev) return;
+  // Enrichment function – now attaches only the song's RID (plus type and listenableId)
+  async function enrichReviewsWithSong(reviews) {
+    const enriched = await Promise.all(
+      reviews.map(async (review) => {
+        if (!review.song) {
+          try {
+            console.log("DEBUG: Calling getReviewSong for", review.id);
+            const response = await getReviewSong(userId, review.id);
+            if (response && response.ok) {
+              const songData = await response.json();
+              // If the backend returns an object with a title then we assume we have valid song info.
+              return songData;
+            }
+          } catch (err) {
+            console.error("Error enriching review with song:", err);
+          }
+        }
+        return review;
+      })
+    );
+    return enriched;
+  }
 
+
+  async function loadAllReviewsSections() {
+      try {
+        const [topResp, favResp, upvotedResp, activityResp] = await Promise.all([
+          getUserTopReviews(userId),
+          getUserFavorites(userId),
+          getUserMostUpvoted(userId),
+          getUserActivity(userId),
+        ]);
+  
+        if (topResp.ok) {
+          let topData = await topResp.json();
+          var topData2 = await enrichReviewsWithSong(topData);
+  
+          const enrichedReviews = topData.map((review, index) => ({
+            ...review,
+            song: topData2[index]
+          }));
+          
+          setTopReviews(enrichedReviews);
+          console.log("DEBUG: Enriched reviews:", enrichedReviews);
+        }
+        if (favResp.ok) {
+          let favData = await favResp.json();
+          var favData2 = await enrichReviewsWithSong(favData);
+  
+          const enrichedReviews = favData.map((review, index) => ({
+            ...review,
+            song: favData2[index]
+          }));
+          setFavorites(enrichedReviews);
+        }
+        if (upvotedResp.ok) {
+          let upvotedData = await upvotedResp.json();
+          var upvotedData2 = await enrichReviewsWithSong(upvotedData);
+  
+          const enrichedReviews = upvotedData.map((review, index) => ({
+            ...review,
+            song: upvotedData2[index]
+          }));
+  
+          setMostUpvoted(enrichedReviews);
+        }
+        if (activityResp.ok) {
+          let activityData = await activityResp.json();
+          var activityData2 = await enrichReviewsWithSong(activityData);
+  
+          const enrichedReviews = activityData.map((review, index) => ({
+            ...review,
+            song: activityData2[index]
+          }));
+  
+          setActivity(enrichedReviews);
+          setTotalReviews(activityData.length);
+        }
+      } catch (err) {
+        console.error("Error loading review sections:", err);
+      }
+    }
+
+  // Helper: update a review array for a given reviewId
+  const updateReviewArray = (array, reviewId) =>
+    array.map((r) =>
+      r.id === reviewId
+        ? { ...r, upvotes: r.upvoted ? r.upvotes - 1 : r.upvotes + 1, upvoted: !r.upvoted }
+        : r
+    );
+
+  // Updated upvote handler to mimic SongPage behavior
+  const handleUpvote = async (reviewId) => {
+    const combined = [...topReviews, ...favorites, ...mostUpvoted, ...activity];
+    const rev = combined.find((r) => r.id === reviewId);
+    if (!rev) return;
     try {
       if (!rev.upvoted) {
-        await upvoteReview(id);
+        await upvoteReview(reviewId);
       } else {
-        await removeUpvoteFromReview(id);
+        await removeUpvoteFromReview(reviewId);
       }
-      setActivity((prev) =>
-        prev.map((c) =>
-          c.id === id
-            ? {
-                ...c,
-                upvotes: rev.upvoted ? c.upvotes - 1 : c.upvotes + 1,
-                upvoted: !c.upvoted,
-              }
-            : c
-        )
-      );
+      setTopReviews((prev) => updateReviewArray(prev, reviewId));
+      setFavorites((prev) => updateReviewArray(prev, reviewId));
+      setMostUpvoted((prev) => updateReviewArray(prev, reviewId));
+      setActivity((prev) => updateReviewArray(prev, reviewId));
     } catch (err) {
-      console.error("Error upvoting review:", err);
+      console.error('Error upvoting review:', err);
     }
   };
 
-  const handleDelete = async (id) => {
-    let rev = activity.find((r) => r.id === id);
-    if (rev?.isUser) {
-      try {
-        await deleteReview(id);
-        setActivity((prev) => prev.filter((r) => r.id !== id));
-        setTotalReviews((prevCount) => Math.max(prevCount - 1, 0)); // Decrement total
-      } catch (err) {
-        console.error("Error deleting review:", err);
+  const handleDelete = async (reviewId) => {
+    const combined = [...topReviews, ...favorites, ...mostUpvoted, ...activity];
+    const rev = combined.find((r) => r.id === reviewId);
+    if (!rev) return;
+    try {
+      if (rev.isUser) {
+        await deleteReview(reviewId);
       }
+      await loadAllReviewsSections();
+    } catch (err) {
+      console.error('Error deleting review:', err);
     }
   };
 
-  // Determine if I'm following or if we are friends
+  // Badge popup handlers
+  const handleSpotifyBadgePress = () => {
+    Alert.alert('Spotify Badge', 'User is linked to Spotify!');
+  };
+  const handleAdminBadgePress = () => {
+    Alert.alert('Admin Badge', 'User is an Admin/Developer!');
+  };
+
+  // Follow logic
   const iAmFollowing = theirFollowers.some(
     (f) => f.userId === auth.currentUser.uid
   );
   const isInMyFriends = myFriends.some((fr) => fr.userId === userId);
-
-  let finalButtonLabel = "Follow";
+  let finalButtonLabel = 'Follow';
   if (iAmFollowing || isInMyFriends) {
-    finalButtonLabel = "Following";
+    finalButtonLabel = 'Following';
   } else if (!isPublic && followRequested) {
-    finalButtonLabel = "Requested";
+    finalButtonLabel = 'Requested';
   }
   const showFriendsLabel = isInMyFriends;
 
   async function handleFollowPress() {
-    if (finalButtonLabel === "Following") {
+    if (finalButtonLabel === 'Following') {
       try {
         const resp = await unfollowUser(auth.currentUser.uid, userId);
         if (resp.ok) {
@@ -275,7 +337,7 @@ export default function UserProfiles({ navigation }) {
           setMyFriends((prev) => prev.filter((f) => f.userId !== userId));
         }
       } catch (error) {
-        console.error("Error unfollowing user:", error);
+        console.error('Error unfollowing user:', error);
       }
       return;
     }
@@ -292,7 +354,7 @@ export default function UserProfiles({ navigation }) {
           }
         }
       } catch (error) {
-        console.error("Error following user:", error);
+        console.error('Error following user:', error);
       }
     } else {
       if (!followRequested) {
@@ -300,15 +362,12 @@ export default function UserProfiles({ navigation }) {
           const resp = await requestFollow(auth.currentUser.uid, userId);
           if (resp.ok) {
             setFollowRequested(true);
-            Alert.alert(
-              "Request Sent",
-              "Your request to follow this private account was sent."
-            );
+            Alert.alert('Request Sent', 'Your follow request was sent.');
           } else {
-            console.error("Failed to request follow");
+            console.error('Failed to request follow');
           }
         } catch (error) {
-          console.error("Error requesting follow:", error);
+          console.error('Error requesting follow:', error);
         }
       }
     }
@@ -316,7 +375,6 @@ export default function UserProfiles({ navigation }) {
 
   const currentUserId = auth.currentUser.uid;
   const isSelf = currentUserId === userId;
-  const canViewFullContent = isPublic || isSelf || iAmFollowing || isInMyFriends;
 
   if (loading) {
     return (
@@ -340,122 +398,87 @@ export default function UserProfiles({ navigation }) {
         <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
       </View>
 
-      <FlatList
-        ListHeaderComponent={
-          <View style={styles.profileHeader}>
-            <Image source={avatar ? { uri: avatar } : noAvatar} style={styles.avatar} />
-            <View style={styles.headerInfo}>
-              <Text style={styles.username}>{formatUsername(username)}</Text>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        {/* Profile Header */}
+        <View style={styles.profileHeader}>
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate('UserProfile', { userId: userId })
+            }
+          >
+            <Image
+              source={avatar ? { uri: avatar } : noAvatar}
+              style={styles.avatar}
+            />
+          </TouchableOpacity>
+          <View style={styles.headerInfo}>
+            <Text style={styles.username}>{formatUsername(username)}</Text>
               <Text style={styles.stats}>Followers: {followersCount}</Text>
               <Text style={styles.stats}>Following: {followingCount}</Text>
-              {(isSpotifyLinked || isAdmin) && (
-                <View style={styles.badgeContainer}>
-                  {isSpotifyLinked ? (
-                    <Image
-                      source={require("../images/spotifyLogo.png")}
-                      style={styles.badgeIcon}
-                    />
-                  ) : null}
-                  {isAdmin ? (
-                    <Image
-                      source={require("../images/adminBadge.png")}
-                      style={[
-                        styles.badgeIcon,
-                        !isSpotifyLinked && { marginLeft: 0 },
-                      ]}
-                    />
-                  ) : null}
-                </View>
+            <View style={styles.badgeContainer}>
+              {isSpotifyLinked && (
+                <TouchableOpacity onPress={handleSpotifyBadgePress}>
+                  <Image
+                    source={require('../images/spotifyLogo.png')}
+                    style={styles.badgeIcon}
+                  />
+                </TouchableOpacity>
+              )}
+              {isAdmin && (
+                <TouchableOpacity onPress={handleAdminBadgePress}>
+                  <Image
+                    source={require('../images/adminBadge.png')}
+                    style={styles.badgeIcon}
+                  />
+                </TouchableOpacity>
               )}
             </View>
-            {!isSelf && (
-              <View style={styles.followContainer}>
-                <TouchableOpacity
-                  style={
-                    finalButtonLabel === "Requested"
-                      ? styles.requestedButton
-                      : styles.followButton
-                  }
-                  onPress={handleFollowPress}
-                  disabled={finalButtonLabel === "Requested"}
-                >
-                  <Text style={styles.followButtonText}>{finalButtonLabel}</Text>
-                </TouchableOpacity>
-                {showFriendsLabel && (
-                  <Text style={styles.friendText}>Friends</Text>
-                )}
-              </View>
-            )}
           </View>
-        }
-        data={[]}
-        ListFooterComponent={
-          canViewFullContent ? (
-            <>
-              {/* Top Tracks */}
-              <View style={styles.cardSection}>
-                <Text style={styles.sectionTitle}>Top Tracks</Text>
+          {!isSelf && (
+            <View style={styles.followContainer}>
+              <TouchableOpacity
+                style={
+                  finalButtonLabel === 'Requested'
+                    ? styles.requestedButton
+                    : styles.followButton
+                }
+                onPress={handleFollowPress}
+                disabled={finalButtonLabel === 'Requested'}
+              >
+                <Text style={styles.followButtonText}>{finalButtonLabel}</Text>
+              </TouchableOpacity>
+              {showFriendsLabel && (
+                <Text style={styles.friendText}>Friends</Text>
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* If account is private, show only the privacy message */}
+        {!canViewFullContent ? (
+          <View style={styles.privateContainer}>
+            <Text style={styles.privateText}>
+              User's Account is Private
+            </Text>
+            <Text style={styles.privateText2}>
+              Request to follow to view their content.
+            </Text>
+          </View>
+        ) : (
+          <>
+            {/* Top Reviews Section */}
+            <View style={styles.cardSection}>
+              <Text style={styles.sectionTitle}>Top Reviews</Text>
+              {topReviews.length === 0 ? (
+                <Text style={styles.sectionPlaceholder}>No top reviews.</Text>
+              ) : (
                 <FlatList
-                  data={topTracks}
-                  renderItem={({ item }) => (
-                    <View style={styles.trackCard}>
-                      <Image source={item.image} style={styles.trackImage} />
-                      <Text style={styles.trackName}>{item.name}</Text>
-                      <Text style={styles.trackArtist}>{item.artist}</Text>
-                    </View>
-                  )}
-                  keyExtractor={(item) => item.id}
+                  data={topReviews}
                   horizontal
-                  showsHorizontalScrollIndicator={false}
-                />
-              </View>
-
-              {/* Top Rated */}
-              <View style={styles.cardSection}>
-                <Text style={styles.sectionTitle}>Top Rated</Text>
-                <FlatList
-                  data={topRated}
-                  renderItem={({ item }) => (
-                    <View style={styles.trackCard}>
-                      <Image source={item.image} style={styles.trackImage} />
-                      <Text style={styles.trackName}>{item.name}</Text>
-                      <Text style={styles.trackArtist}>{item.artist}</Text>
-                      <View style={styles.ratingContainer}>
-                        {[...Array(5)].map((_, index) => (
-                          <Image
-                            key={index}
-                            source={
-                              index < item.rating
-                                ? require("../images/starFullIcon.png")
-                                : require("../images/starEmptyIcon.png")
-                            }
-                            style={styles.starIcon}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  )}
                   keyExtractor={(item) => item.id}
-                  horizontal
                   showsHorizontalScrollIndicator={false}
-                />
-              </View>
-
-              {/* Activity / Reviews */}
-              <View style={styles.cardSectionActivity}>
-                <Text style={styles.sectionTitle}>Activity</Text>
-                {/* Show total number of reviews */}
-                <Text style={styles.totalActivity}>
-                  Total Reviews: {totalReviews}
-                </Text>
-
-                {/* If user has no reviews, show "No Reviews" */}
-                {activity.length === 0 ? (
-                  <Text style={styles.noReviewsText}>No Reviews</Text>
-                ) : (
-                  <FlatList
-                    data={activity}
-                    renderItem={({ item }) => (
+                  renderItem={({ item }) => (
+                    <View style={styles.reviewSnippetCard}>
                       <ReviewCard
                         item={item}
                         avatar={avatar}
@@ -463,22 +486,97 @@ export default function UserProfiles({ navigation }) {
                         handleDelete={handleDelete}
                         navigation={navigation}
                       />
-                    )}
-                    keyExtractor={(item) => item.id}
-                  />
-                )}
-              </View>
-            </>
-          ) : (
-            <View style={{ margin: 20 }}>
-              <Text style={styles.privateAccountText}>
-                This Account is Private
-              </Text>
+                    </View>
+                  )}
+                />
+              )}
             </View>
-          )
-        }
-      />
-      <Text></Text>
+
+            {/* Favourites Section */}
+            <View style={styles.cardSection}>
+              <Text style={styles.sectionTitle}>Favourites</Text>
+              {favorites.length === 0 ? (
+                <Text style={styles.sectionPlaceholder}>No favourites.</Text>
+              ) : (
+                <FlatList
+                  data={favorites}
+                  horizontal
+                  keyExtractor={(item) => item.id}
+                  showsHorizontalScrollIndicator={false}
+                  renderItem={({ item }) => (
+                    <View style={styles.reviewSnippetCard}>
+                      <ReviewCard
+                        item={item}
+                        avatar={avatar}
+                        handleUpvote={handleUpvote}
+                        handleDelete={handleDelete}
+                        navigation={navigation}
+                      />
+                    </View>
+                  )}
+                />
+              )}
+            </View>
+
+            {/* Most Upvoted Section */}
+            <View style={styles.cardSection}>
+              <Text style={styles.sectionTitle}>Most Upvoted</Text>
+              {mostUpvoted.length === 0 ? (
+                <Text style={styles.sectionPlaceholder}>
+                  No most-upvoted reviews.
+                </Text>
+              ) : (
+                <FlatList
+                  data={mostUpvoted}
+                  horizontal
+                  keyExtractor={(item) => item.id}
+                  showsHorizontalScrollIndicator={false}
+                  renderItem={({ item }) => (
+                    <View style={styles.reviewSnippetCard}>
+                      <ReviewCard
+                        item={item}
+                        avatar={avatar}
+                        handleUpvote={handleUpvote}
+                        handleDelete={handleDelete}
+                        navigation={navigation}
+                      />
+                    </View>
+                  )}
+                />
+              )}
+            </View>
+
+            {/* Activity Section */}
+            <View style={styles.cardSection}>
+              <View style={styles.activityHeader}>
+                <Text style={styles.sectionTitle}>Activity</Text>
+                <Text style={styles.activitySubtitle}>Newest to Oldest</Text>
+              </View>
+              <Text style={styles.totalActivity}>
+                Total Reviews: {totalReviews}
+              </Text>
+              {activity.length === 0 ? (
+                <Text style={styles.sectionPlaceholder}>No reviews found.</Text>
+              ) : (
+                <View style={styles.activityContainer}>
+                  {activity.map((item) => (
+                    <View key={item.id} style={styles.activityReviewWrapper}>
+                      <ReviewCard
+                        item={item}
+                        avatar={avatar}
+                        handleUpvote={handleUpvote}
+                        handleDelete={handleDelete}
+                        navigation={navigation}
+                      />
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
+
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
@@ -488,11 +586,12 @@ export default function UserProfiles({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colours.bluegrey },
-  sideMenu: { position: "absolute", top: 40, right: 525, bottom: 0, zIndex: 10 },
-  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  scrollContainer: { paddingBottom: 120 },
+  sideMenu: { position: 'absolute', top: 40, right: 525, bottom: 0, zIndex: 10 },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   profileHeader: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 20,
     marginTop: 120,
     backgroundColor: colours.darkblue,
@@ -501,15 +600,13 @@ const styles = StyleSheet.create({
   },
   avatar: { width: 80, height: 80, borderRadius: 40, marginRight: 15 },
   headerInfo: { flex: 1 },
-  username: { fontSize: 18, fontWeight: "bold", color: colours.lightblue },
-  stats: { fontSize: 14, fontWeight: "bold", color: "#fff" },
-  badgeContainer: { flexDirection: "row", alignItems: "center", marginTop: 5 },
+  username: { fontSize: 18, fontWeight: 'bold', color: colours.lightblue },
+  stats: { fontSize: 14, fontWeight: 'bold', color: '#fff' },
+  badgeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
   badgeIcon: { width: 24, height: 24, marginRight: 5 },
-  spotifyContainer: { flexDirection: "row", alignItems: "center", marginTop: 5 },
-  spotifyLogo: { width: 24, height: 24, marginRight: 5 },
   editButton: { padding: 10, borderRadius: 5 },
-  editButtonText: { color: "#fff", fontWeight: "bold" },
-  followContainer: { alignItems: "center", marginLeft: 10 },
+  editButtonText: { color: '#fff', fontWeight: 'bold' },
+  followContainer: { alignItems: 'center', marginLeft: 10 },
   followButton: {
     backgroundColor: colours.lightblue,
     paddingVertical: 10,
@@ -517,13 +614,13 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   requestedButton: {
-    backgroundColor: "#999",
+    backgroundColor: '#999',
     paddingVertical: 10,
     paddingHorizontal: 15,
     borderRadius: 5,
   },
-  followButtonText: { color: "#fff", fontWeight: "bold" },
-  friendText: { marginTop: 8, fontSize: 14, fontWeight: "bold", color: "#fff" },
+  followButtonText: { color: '#fff', fontWeight: 'bold' },
+  friendText: { marginTop: 8, fontSize: 14, fontWeight: 'bold', color: '#fff' },
   cardSection: {
     backgroundColor: colours.darkblue,
     padding: 10,
@@ -531,63 +628,41 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
     marginVertical: 10,
   },
-  cardSectionActivity: {
-    backgroundColor: colours.darkblue,
-    padding: 10,
-    borderRadius: 10,
-    marginHorizontal: 10,
-    marginVertical: 10,
-    marginBottom: 100,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: colours.lightblue,
-    marginBottom: 10,
-  },
-  trackCard: { marginRight: 10, alignItems: "center" },
-  totalActivity: { fontSize: 14, color: "#fff", marginBottom: 10 },
-  noReviewsText: {
+  reviewSnippetCard: { width: 250, marginRight: 10 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: colours.lightblue },
+  sectionPlaceholder: {
     fontSize: 14,
-    color: "#fff",
-    textAlign: "center",
-    marginTop: 5,
+    color: '#fff',
+    fontStyle: 'italic',
+    marginVertical: 5,
   },
-  trackImage: { width: 100, height: 100, borderRadius: 10, marginBottom: 5 },
-  trackName: { fontSize: 14, fontWeight: "bold", color: "#fff" },
-  trackArtist: { fontSize: 12, color: "#aaa" },
-  ratingContainer: { flexDirection: "row", marginTop: 5 },
-  starIcon: { width: 16, height: 16, marginRight: 2 },
-  activityCardSection: {
-    backgroundColor: colours.bluegrey,
-    marginBottom: 100,
-    padding: 10,
-    borderRadius: 10,
-    marginHorizontal: 10,
-    marginVertical: 10,
-  },
-  activityCard: {
-    backgroundColor: "#1E1E2C",
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 10,
-  },
-  activityUsername: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: colours.lightblue,
+  totalActivity: { fontSize: 14, fontWeight: 'bold', color: '#fff', marginBottom: 7 },
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 5,
   },
-  activityText: { fontSize: 12, color: "#fff", marginBottom: 5 },
-  activityFooter: { flexDirection: "row", justifyContent: "space-between" },
-  upvotes: { fontSize: 12, color: "#fff" },
-  emojis: { fontSize: 14, color: "#fff", marginLeft: 10 },
-  privateAccountText: {
-    fontSize: 18,
-    marginTop: 40,
-    fontWeight: "bold",
-    color: colours.lightblue,
-    textAlign: "center",
+  activitySubtitle: { fontSize: 12, color: '#ccc', fontStyle: 'italic' },
+  activityContainer: { paddingHorizontal: 5 },
+  activityReviewWrapper: { marginVertical: 5 },
+  privateContainer: {
+    margin: 20,
+    padding: 20,
+    backgroundColor: colours.darkblue,
+    borderRadius: 10,
+    alignItems: 'center',
   },
-  bottomNavBar: { position: "absolute", bottom: 0, width: "100%" },
+  privateText: {
+    fontSize: 17,
+    color: colours.lightblue,
+    fontWeight: 'bold',
+  },
+  privateText2: {
+    marginTop: 5,
+    fontSize: 12,
+    color: colours.secondaryblue,
+    fontWeight: 'bold',
+  },
+  bottomNavBar: { position: 'absolute', bottom: 0, width: '100%' },
 });

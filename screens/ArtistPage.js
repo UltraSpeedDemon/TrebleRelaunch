@@ -10,18 +10,31 @@ import {
   KeyboardAvoidingView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { getUser, populateMetadata, getLike, unlike, like, postRecommendations, createReview, getReviews, upvoteReview, removeUpvoteFromReview, deleteReview } from "../providers/rest";
+import { 
+  getUser, 
+  populateMetadata, 
+  getLike, 
+  unlike, 
+  like, 
+  postRecommendations, 
+  createReview, 
+  getReviews, 
+  upvoteReview, 
+  removeUpvoteFromReview, 
+  deleteReview 
+} from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 import { Icon, ListItem } from "@rneui/base";
 
 export default function ArtistPage({ route, navigation }) {
-  const { artist } = route.params; // Expecting "artist" from navigation
+  const { artist } = route.params;
   const [username, setUsername] = useState("");
   const [loadingUser, setLoadingUser] = useState(true);
 
@@ -37,11 +50,10 @@ export default function ArtistPage({ route, navigation }) {
   const [savedToLibrary, setSavedToLibrary] = useState(false);
   const [favourite, setFavourite] = useState(false);
 
-  // For the emoji dropdown
+  // For emoji dropdown
   const [showEmojiDropdown, setShowEmojiDropdown] = useState(false);
   const isFocused = useIsFocused();
 
-  // 1) Fetch user data
   useEffect(() => {
     console.log("SongPage mounted with track:", artist);
     try {
@@ -72,9 +84,9 @@ export default function ArtistPage({ route, navigation }) {
   }, [navigation, isFocused]);
 
   async function populateReviews() {
-    let reqReviews = await (await getReviews(artist.id)).json()
-    setReviews(reqReviews.reviews)
-    setUsers(reqReviews.users)
+    let reqReviews = await (await getReviews(artist.id)).json();
+    setReviews(reqReviews.reviews);
+    setUsers(reqReviews.users);
   }
 
   useEffect(() => {
@@ -96,13 +108,10 @@ export default function ArtistPage({ route, navigation }) {
     checkLikeStatus();
   }, [artist.id]);
 
-  // Sort reviews by upvotes desc
   const getSortedReviews = () => {
     return [...reviews].sort((a, b) => b.upvotes - a.upvotes);
   };
 
-  // Handlers
-  // Handler logic
   const handleLikeArtist = async () => {
     try {
       const currentUser = auth.currentUser;
@@ -111,27 +120,22 @@ export default function ArtistPage({ route, navigation }) {
         return;
       }
       if (!liked) {
-        // Call the API to like the song
         const response = await like(currentUser.uid, artist.id, artist.type);
-        if (!response.ok) {
-          throw new Error("Failed to like the artist");
-        }
+        if (!response.ok) throw new Error("Failed to like the artist");
         const data = await response.json();
         console.log("Artist liked successfully:", data);
         setLiked(true);
-        // After liking, call the recommendations endpoint
         try {
           const recResponse = await postRecommendations(
-            currentUser.uid,    // user_id
-            artist.id,           // music_id
-            artist.type,         // type 
+            currentUser.uid,
+            artist.id,
+            artist.type,
             "",
-            artist.name,         // name
+            artist.name
           );
           if (recResponse.ok) {
             const recData = await recResponse.json();
             console.log("Recommendations result:", recData);
-            // Optionally handle/display recData.recommendations in your UI
           } else {
             console.error("Failed to create recommendations:", recResponse.status);
           }
@@ -139,11 +143,8 @@ export default function ArtistPage({ route, navigation }) {
           console.error("Error calling postRecommendations:", err);
         }
       } else {
-        // Call the API to unlike the song
         const response = await unlike(currentUser.uid, artist.id, artist.type);
-        if (!response.ok) {
-          throw new Error("Failed to unlike the artist");
-        }
+        if (!response.ok) throw new Error("Failed to unlike the artist");
         const data = await response.json();
         console.log("Artist unliked successfully:", data);
         setLiked(false);
@@ -158,10 +159,6 @@ export default function ArtistPage({ route, navigation }) {
   const handleToggleFavourite = () => setFavourite(!favourite);
   const handleShare = () => console.log("Artist shared!");
 
-  const handleEmojiDropdown = () => {
-    setShowEmojiDropdown(!showEmojiDropdown);
-  };
-
   const handleSelectEmoji = (emoji) => {
     setSelectedEmojis((prev) =>
       prev.includes(emoji) ? prev.filter((e) => e !== emoji) : [...prev, emoji]
@@ -174,15 +171,8 @@ export default function ArtistPage({ route, navigation }) {
       "Confirm",
       "Are you sure you want to post?",
       [
-        {
-          text: "No",
-          style: "cancel",
-        },
-        {
-          text: "Yes",
-          style: "default",
-          onPress: () => actuallyAddReview(),
-        },
+        { text: "No", style: "cancel" },
+        { text: "Yes", style: "default", onPress: () => actuallyAddReview() },
       ],
       { cancelable: true }
     );
@@ -197,44 +187,36 @@ export default function ArtistPage({ route, navigation }) {
       rating: reviewRating,
       emoji: [...selectedEmojis],
     };
-
-    await createReview(newReview)
+    await createReview(newReview);
     await populateReviews();
-
     setReview("");
     setReviewRating(0);
     setSelectedEmojis([]);
   };
 
   const handleUpvote = async (id) => {
-    let rev = reviews.find(r => r.id === id)
+    let rev = reviews.find((r) => r.id === id);
     if (!rev.upvoted) {
-      await upvoteReview(id)
+      await upvoteReview(id);
     } else {
-      await removeUpvoteFromReview(id)
+      await removeUpvoteFromReview(id);
     }
     setReviews((prev) =>
       prev.map((c) =>
         c.id === id
-          ? {
-            ...c,
-            upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1,
-            upvoted: !c.upvoted,
-          }
+          ? { ...c, upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1, upvoted: !c.upvoted }
           : c
       )
     );
   };
 
   const handleDelete = async (id) => {
-    let rev = reviews.find(r => r.id === id)
+    let rev = reviews.find((r) => r.id === id);
     if (rev.isUser) {
-      await deleteReview(id)
+      await deleteReview(id);
     }
-    setReviews((prev) =>
-      prev.filter((r) => r.id !== id)
-    );
-  }
+    setReviews((prev) => prev.filter((r) => r.id !== id));
+  };
 
   const navigateToListenablePage = (type) => {
     navigation.navigate("ArtistListenables", { type, artist })
@@ -250,33 +232,27 @@ export default function ArtistPage({ route, navigation }) {
     );
   }
 
-  // Fallback if artist.image missing
   const artistImage = artist.image
     ? { uri: artist.image }
     : require("../images/albumImage.jpg");
 
   return (
-    <View style={styles.container}>
-      {/* Sidebar */}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={10}
+    >
       <View style={styles.sideMenu}>
-        <Sidebar menuOpen={false} setMenuOpen={() => { }} />
+        <Sidebar menuOpen={false} setMenuOpen={() => {}} />
       </View>
-
       <FlatList
         data={getSortedReviews()}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <View style={styles.card}>
-            {/* "Artist" text in place of "Song" */}
             <Text style={styles.title}>Artist</Text>
-
-            {/* Artist Image */}
             <Image source={artistImage} style={styles.image} />
-
-            {/* Artist Name */}
             <Text style={styles.title}>{artist.name || "Unknown Artist"}</Text>
-
-            {/* Like, Save, Share */}
             <View style={styles.actionButtons}>
               <TouchableOpacity onPress={handleLikeArtist} style={styles.actionButton}>
                 <Image
@@ -289,7 +265,6 @@ export default function ArtistPage({ route, navigation }) {
                 />
                 <Text style={styles.actionText}>{liked ? "Liked" : "Like"}</Text>
               </TouchableOpacity>
-
               <TouchableOpacity onPress={handleSaveToLibrary} style={styles.actionButton}>
                 <Image
                   source={
@@ -303,7 +278,6 @@ export default function ArtistPage({ route, navigation }) {
                   {savedToLibrary ? "Saved" : "Save"}
                 </Text>
               </TouchableOpacity>
-
               <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
                 <Image
                   source={require("../images/shareIcon.png")}
@@ -334,9 +308,8 @@ export default function ArtistPage({ route, navigation }) {
             </TouchableOpacity>
 
             {/* Add Review Section */}
-            <KeyboardAvoidingView style={styles.reviewInputContainer}>
+            <View style={styles.reviewInputContainer}>
               <View style={styles.topRow}>
-                {/* Favourite button */}
                 <View style={styles.favouriteContainer}>
                   <TouchableOpacity onPress={handleToggleFavourite}>
                     <Image
@@ -350,14 +323,9 @@ export default function ArtistPage({ route, navigation }) {
                   </TouchableOpacity>
                   <Text style={styles.favLabel}>Favourite</Text>
                 </View>
-
-                {/* Star rating */}
                 <View style={styles.starRatingContainer}>
                   {[...Array(5)].map((_, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => setReviewRating(index + 1)}
-                    >
+                    <TouchableOpacity key={index} onPress={() => setReviewRating(index + 1)}>
                       <Image
                         source={
                           index < reviewRating
@@ -369,8 +337,6 @@ export default function ArtistPage({ route, navigation }) {
                     </TouchableOpacity>
                   ))}
                 </View>
-
-                {/* Emoji Icon Tab */}
                 <TouchableOpacity
                   style={styles.selectEmojiTab}
                   onPress={() => setShowEmojiDropdown(!showEmojiDropdown)}
@@ -381,7 +347,6 @@ export default function ArtistPage({ route, navigation }) {
                   />
                 </TouchableOpacity>
               </View>
-
               {showEmojiDropdown && (
                 <View style={styles.emojiDropdownRow}>
                   <TouchableOpacity onPress={() => handleSelectEmoji("❤️")}>
@@ -395,7 +360,6 @@ export default function ArtistPage({ route, navigation }) {
                   </TouchableOpacity>
                 </View>
               )}
-
               <View style={{ flexDirection: "row", marginTop: 15 }}>
                 <TextInput
                   style={styles.reviewInput}
@@ -408,7 +372,6 @@ export default function ArtistPage({ route, navigation }) {
                   <Text style={styles.reviewButtonText}>Post</Text>
                 </TouchableOpacity>
               </View>
-
               {selectedEmojis.length > 0 && (
                 <View style={styles.selectedEmojisSection}>
                   <Text style={styles.selectedEmojisTitle}>Selected Emojis</Text>
@@ -421,26 +384,31 @@ export default function ArtistPage({ route, navigation }) {
                   </View>
                 </View>
               )}
-            </KeyboardAvoidingView>
+            </View>
           </View>
         }
         renderItem={({ item }) => {
-          let avatar = users.filter(u => u.userId == item.userId)[0].avatarLong
-          return (<ReviewCard item={item} avatar={avatar} handleUpvote={handleUpvote} handleDelete={handleDelete} navigation={navigation} />)
+          let avatar = users.filter((u) => u.userId === item.userId)[0].avatarLong;
+          return (
+            <ReviewCard
+              item={item}
+              avatar={avatar}
+              handleUpvote={handleUpvote}
+              handleDelete={handleDelete}
+              navigation={navigation}
+            />
+          );
         }}
         contentContainerStyle={styles.reviewsContainer}
         showsVerticalScrollIndicator={false}
       />
-
-      {/* Bottom Nav */}
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
-// Identical styling
 const styles = StyleSheet.create({
   ...StyleSheet.create({
     container: {
@@ -643,11 +611,6 @@ const styles = StyleSheet.create({
       position: "absolute",
       bottom: 10,
       right: 10,
-    },
-    reviewEmoji: {
-      fontSize: 16,
-      marginLeft: 4,
-      color: "#fff",
     },
     upvoteButton: {
       position: "absolute",

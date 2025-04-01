@@ -145,6 +145,23 @@ export async function postRecommendations(userId, musicId, type, name, artistNam
   }
 }
 
+// New endpoints for the four review sections:
+export async function getUserTopReviews(userId) {
+  return serverGet(`users/${userId}/top-reviews`);
+}
+
+export async function getUserFavorites(userId) {
+  return serverGet(`users/${userId}/favorites`);
+}
+
+export async function getUserMostUpvoted(userId) {
+  return serverGet(`users/${userId}/most-upvoted`);
+}
+
+export async function getUserActivity(userId) {
+  return serverGet(`users/${userId}/activity`);
+}
+
 export async function getRecommendations(userId, { limit = 20, offset = 0, refresh = false } = {}) {
   try {
     return await serverGet("users/recommendations", { 
@@ -282,7 +299,10 @@ export async function getAlbumSongs(listenable_id) {
 export async function getAlbumSummary(listenable_id) {
   return await serverGet("album/summary", { listenable_id })
 }
-//#endregion
+
+export async function getReviewSong(userId, rid) {
+  return await serverGet("review/reviewSong", { userId, rid });
+}
 
 //#region Artist endpoints
 export async function getArtistSongs(artist_id, page) {
@@ -295,8 +315,8 @@ export async function getArtistAlbums(artist_id, page) {
 //#endregion
 
 export function getServerEndpointBase() {
+  console.log("API_TUNNEL_URL", process.env.API_TUNNEL_URL)
   if (process.env.NODE_ENV === "development") {
-      console.log(process.env.API_TUNNEL_URL);
       return process.env.API_TUNNEL_URL ? process.env.API_TUNNEL_URL : `https://127.0.0.1:5000`;
   }
   else {

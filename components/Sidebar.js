@@ -44,10 +44,13 @@ const Sidebar = () => {
         if (currentUser) {
           const displayName = currentUser.displayName || "";
           setEmail(currentUser.email || "");
+
           const orientRes = await getUser(currentUser.uid);
+        
           if (!orientRes.ok) {
-            throw new Error("Failed to fetch user data from OrientDB.");
+            throw new Error("Failed to fetch user data from OrientDB.asdasd");
           }
+
           const userData = await orientRes.json();
           setUsername(userData.username || displayName);
           // Use the avatar from backend if valid (either base64 data URI or an http URL)

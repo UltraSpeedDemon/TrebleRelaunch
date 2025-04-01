@@ -207,17 +207,13 @@ export default function FollowersList({ navigation }) {
 
                   // If user.avatar is a valid base64 or URL, we pass it in. Otherwise default
                   const fallbackAvatar = require("../images/avatarIcon.png");
-                  const userAvatar =
-                    user.avatar && user.avatar.startsWith("data:")
-                      ? { uri: user.avatar }
-                      : fallbackAvatar;
 
                   return (
                     <MusicCard
                       key={user.userId}
                       id={user.userId}
                       name={formatUsername(user.username)}
-                      image={userAvatar}
+                      image={user.avatar}
                       onFollow={() =>
                         isFollowing ? handleUnfollow(user) : handleFollow(user)
                       }
