@@ -10,7 +10,10 @@ import {
 } from "react-native";
 import { FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { Audio } from "expo-av";
+import { setRecommendationServed, like } from "../providers/rest";
+import { auth } from "../utils/firebase"; // Add this import
 
 const { width, height } = Dimensions.get('window');
 
@@ -18,6 +21,7 @@ export function MusicSwiper({ songs }) {
   const navigation = useNavigation();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [loadingSound, setLoadingSound] = useState(false); // Prevent overlapping playback
   const translateX = useRef(new Animated.Value(0)).current;
   const rotate = translateX.interpolate({
     inputRange: [-300, 0, 300],
@@ -29,27 +33,90 @@ export function MusicSwiper({ songs }) {
   const currentXRef = useRef(0);
   const isDraggingRef = useRef(false);
   const currentSong = songs[currentIndex];
-  const audioRef = useRef(null);
+  const [sound, setSound] = useState(null);
 
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = new Audio(currentSong.audioUrl);
-      audioRef.current.muted = isMuted;
-      audioRef.current.play();
-    }
-  }, [currentIndex, isMuted]);
+    const playPreview = async () => {
+      if (loadingSound) return; // Prevent multiple sound loads
+      setLoadingSound(true);
 
-  const handleSwipe = (direction) => {
+      if (sound) {
+        await sound.unloadAsync();
+        setSound(null);
+      }
+
+      if (currentSong?.audioUrl) {
+        try {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: currentSong.audioUrl },
+            { shouldPlay: true, isLooping: true, isMuted }
+          );
+          setSound(newSound);
+        } catch (error) {
+          console.error("Error playing preview:", error);
+        }
+      }
+
+      setLoadingSound(false);
+    };
+
+    playPreview();
+
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [currentIndex, currentSong?.audioUrl, isMuted]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // Cleanup sound when the view is unfocused
+      return () => {
+        if (sound) {
+          sound.unloadAsync();
+          setSound(null);
+        }
+      };
+    }, [sound])
+  );
+
+  const handleSwipe = async (direction) => {
+    if (loadingSound) return; // Prevent swiping while sound is loading
+
+    const currentSong = songs[currentIndex];
+    if (!currentSong) return;
+
+    if (direction === "right") {
+      // Like the song
+      try {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          await like(currentUser.uid, currentSong.id, "track");
+        }
+      } catch (error) {
+        console.error("Error liking song:", error);
+      }
+    } else if (direction === "left") {
+      // Mark the recommendation as served (future implementation)
+      // try {
+      //   const currentUser = auth.currentUser;
+      //   if (currentUser) {
+      //     await setRecommendationServed(currentUser.uid, currentSong.id);
+      //   }
+      // } catch (error) {
+      //   console.error("Error marking recommendation as served:", error);
+      // }
+    } 
+
+    // Move to the next song
     Animated.timing(translateX, {
       toValue: direction === "left" ? -300 : 300,
       duration: 300,
       useNativeDriver: true,
     }).start(() => {
       setCurrentIndex((prevIndex) => {
-        const newIndex = direction === "left" 
-          ? (prevIndex + 1) % songs.length 
-          : (prevIndex - 1 + songs.length) % songs.length;
+        const newIndex = (prevIndex + 1) % songs.length;
         translateX.setValue(0);
         return newIndex;
       });
