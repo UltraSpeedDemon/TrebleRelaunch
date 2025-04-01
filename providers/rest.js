@@ -175,9 +175,10 @@ export async function getRecommendations(userId, { limit = 20, offset = 0, refre
   }
 }
 
-export async function share(userId, item_rid, comment, type) {
+export async function share(userId, item_rid, item_id, comment, type) {
   return await serverPost("users/share", { 
     user_id: userId, 
+    item_id: item_id,
     item_rid: item_rid, 
     comment: comment || '', 
     share_by: auth.currentUser.uid,

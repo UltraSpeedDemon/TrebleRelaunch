@@ -587,6 +587,7 @@ const handleLikeSong = (item, isDoubleTap = false) => {
       share(
         selectedUser.userId,
         currentShareItem.record_id,
+        currentShareItem.id,
         comment,
         currentShareItem.type
       );
@@ -792,9 +793,9 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
             <View style={styles.cardInformation}>
               <View style={styles.postContextContainer}>
                 <Text style={styles.postContext}>
-                  <Text style={styles.boldPostContext}>
-                    Friend Review {getTimeAgo(item.createdAt)}:
-                  </Text>
+                <Text style={styles.boldPostContext}>
+                  {item.class === "friend_review" ? "Friend Review" : "Following Review"} {getTimeAgo(item.createdAt)}:
+                </Text>
                   {"\n"}
                   {item.author?.username}
                 </Text>
@@ -1168,7 +1169,7 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
                         value={comment}
                         onChangeText={setComment}
                         placeholder="Write your comment here..."
-                        maxLength={30}
+                        maxLength={40}
                         multiline={false}
                       />
                     </View>

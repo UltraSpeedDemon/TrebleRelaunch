@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -11,13 +11,18 @@ import {
   Alert,
   ActivityIndicator,
   TouchableHighlight,
+  Modal,
   Platform,
+  TouchableWithoutFeedback,
+  Animated,
+  Keyboard
 } from "react-native";
+import Toast from 'react-native-toast-message';
 import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { createReview, getReviews, getUser, populateMetadata, getLike, unlike, like, upvoteReview, removeUpvoteFromReview, deleteReview, getAlbumSongs, getAlbumSummary } from "../providers/rest";
+import { createReview, getReviews, getUser, populateMetadata, getLike, unlike, like, upvoteReview, removeUpvoteFromReview, deleteReview, getAlbumSongs, getAlbumSummary, getFriends, share } from "../providers/rest";
 import { getSongFromDeezer } from "../providers/rest"; // Add this import
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
@@ -232,7 +237,128 @@ export default function AlbumPage({ route, navigation }) {
 
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
   const handleToggleFavourite = () => setFavourite(!favourite);
-  const handleShare = () => console.log("Album shared!");
+  
+  // Share modal
+    const [modalVisible, setModalVisible] = useState(false);
+    const [friendsList, setFriendsList] = useState([]);
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [comment, setComment] = useState("");
+    const [currentShareItem, setCurrentShareItem] = useState(null);
+  
+    // -------------------------------------------------------------------------
+    //  handleModal (open share modal)
+    // -------------------------------------------------------------------------
+    const handleModal = async (album) => {
+      try {
+        const response = await getFriends(auth.currentUser.uid);
+        const json = await response.json();
+        setFriendsList(json);
+        setCurrentShareItem(album);
+        setModalVisible(true);
+      } catch (error) {
+        console.error("[ERROR] handleModal ->", error);
+        Alert.alert("Error", "Could not load friends list");
+      }
+    };
+  
+    // -------------------------------------------------------------------------
+    //  closeModal
+    // -------------------------------------------------------------------------
+    const closeModal = () => {
+      setModalVisible(false);
+      setSelectedUser(null);
+      setComment("");
+      setCurrentShareItem(null);
+    };
+  
+    // Animated value for sliding the modal up when the keyboard is active.
+    const slideAnim = useRef(new Animated.Value(0)).current;
+  
+    useEffect(() => {
+      const keyboardShowEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+      const keyboardHideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+  
+      const keyboardShowListener = Keyboard.addListener(keyboardShowEvent, (event) => {
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }).start();
+      });
+  
+      const keyboardHideListener = Keyboard.addListener(keyboardHideEvent, (event) => {
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: event.duration || 250,
+          useNativeDriver: true,
+        }).start();
+      });
+  
+      return () => {
+        keyboardShowListener.remove();
+        keyboardHideListener.remove();
+      };
+    }, [slideAnim]);
+  
+    // -------------------------------------------------------------------------
+    //  renderFriendItem
+    // -------------------------------------------------------------------------
+    const renderFriendItem = ({ item }) => {
+      const isSelected = selectedUser && selectedUser.userId === item.userId;
+      return (
+        <TouchableOpacity
+          onPress={() => handleSelectUser(item)}
+          style={[styles.friendItem, isSelected && styles.selectedFriendItem]}
+        >
+          <Image
+            source={{ uri: item.avatar ? item.avatar : "https://via.placeholder.com/50" }}
+            style={styles.avatar}
+          />
+          <Text style={styles.username}>{item.username}</Text>
+          {isSelected && (
+            <Image
+              source={require("../images/checkmarkIcon.png")}
+              style={styles.checkmarkIcon}
+            />
+          )}
+        </TouchableOpacity>
+      );
+    };
+  
+    // -------------------------------------------------------------------------
+    //  handleShareComment
+    // -------------------------------------------------------------------------
+    const handleShareComment = () => {
+      if (!selectedUser) {
+        Alert.alert("Error", "Please select a friend to share with");
+        return;
+      }
+      try {
+        share(
+          selectedUser.userId,
+          currentShareItem.record_id,
+          currentShareItem.id,
+          comment,
+          currentShareItem.type
+        );
+        Toast.show({
+          type: 'success',
+          text1: 'Sent'
+        });
+      } catch (error) {
+        console.error("[ERROR] handleShareComment ->", error);
+      }
+      closeModal();
+    };
+  
+    // -------------------------------------------------------------------------
+    //  handleSelectUser
+    // -------------------------------------------------------------------------
+    const handleSelectUser = (user) => {
+      setSelectedUser((prevUser) =>
+        prevUser && prevUser.userId === user.userId ? null : user
+      );
+    };
 
   const handleSelectEmoji = (emoji) => {
     setSelectedEmojis((prev) =>
@@ -323,8 +449,81 @@ export default function AlbumPage({ route, navigation }) {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={10}
+      keyboardVerticalOffset={10} // adjust this value as needed
     >
+      {/* SHARE MODAL */}
+                  <Modal
+                    animationType="slide"
+                    transparent={true}
+                    visible={modalVisible}
+                    onRequestClose={closeModal}
+                  >
+                    <KeyboardAvoidingView
+                      behavior={Platform.OS === "ios" ? "padding" : "height"}
+                      style={{ flex: 1 }}
+                      keyboardVerticalOffset={0}
+                    >
+                      <TouchableWithoutFeedback onPress={closeModal}>
+                        <View style={styles.modalOverlay}>
+                          <TouchableWithoutFeedback onPress={() => {}}>
+                            <Animated.View
+                              style={[
+                                styles.modalContent,
+                                { transform: [{ translateY: slideAnim }] },
+                              ]}
+                            >
+                              <Text style={styles.modalText}>
+                                Share "{currentShareItem?.name || "Item"}"
+                              </Text>
+                              <FlatList
+                                data={friendsList}
+                                renderItem={renderFriendItem}
+                                keyExtractor={(item) => item.userId}
+                                numColumns={3}
+                                contentContainerStyle={styles.gridContainer}
+                              />
+                              {selectedUser && (
+                                <View style={styles.commentSection}>
+                                  <Text style={styles.commentPrompt}>
+                                    Leave a message for {selectedUser.username}:
+                                  </Text>
+                                  <TextInput
+                                    style={styles.commentInput}
+                                    value={comment}
+                                    onChangeText={setComment}
+                                    placeholder="Write your comment here..."
+                                    maxLength={40}
+                                    multiline={false}
+                                  />
+                                </View>
+                              )}
+                              <View style={styles.modalButtonContainer}>
+                                <TouchableOpacity
+                                  style={[
+                                    styles.button,
+                                    styles.shareButton,
+                                    !selectedUser && styles.disabledButton,
+                                  ]}
+                                  onPress={handleShareComment}
+                                  disabled={!selectedUser}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.buttonText,
+                                      !selectedUser && styles.disabledButtonText,
+                                    ]}
+                                  >
+                                    Share
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            </Animated.View>
+                          </TouchableWithoutFeedback>
+                        </View>
+                      </TouchableWithoutFeedback>
+                    </KeyboardAvoidingView>
+                  </Modal>
+      {/* Sidebar */}
       <View style={styles.sideMenu}>
         <Sidebar menuOpen={false} setMenuOpen={() => {}} />
       </View>
@@ -333,44 +532,50 @@ export default function AlbumPage({ route, navigation }) {
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <View style={styles.card}>
-            <Text style={styles.title}>Album</Text>
+            <View style={styles.cardInformation}>
+                          <View style={styles.titleContainer}>
+                              <Text style={styles.boldTitle}>
+                                Album
+                              </Text>
+                          </View>
+                          <View style={styles.actionButtons}>
+                            <TouchableOpacity onPress={handleLikeAlbum} style={styles.actionButton}>
+                              <Image
+                                source={
+                                  liked
+                                    ? require("../images/whiteFullHeart.png")
+                                    : require("../images/whiteOpenHeart.png")
+                                }
+                                style={styles.actionIcon}
+                              />
+                              <Text style={styles.actionText}>
+                                {liked ? "Liked" : "Like"}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleModal(album)} style={styles.actionButton}>
+                              <Image
+                                source={require("../images/shareIcon.png")}
+                                style={styles.actionIcon}
+                              />
+                              <Text style={styles.actionText}>Share</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+
+            {/* Album Image */}
             <Image source={albumImage} style={styles.image} />
+
+            {/* Album Name */}
             <Text style={styles.title}>{(album.name || album.title) || "Unknown Album"}</Text>
-            <Text style={styles.artist}>Artist: {(album.artist.name || album.artist) || "Unknown"}</Text>
-            {summary && <Text style={styles.summaryText}>{summary}</Text>}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity onPress={handleLikeAlbum} style={styles.actionButton}>
-                <Image
-                  source={
-                    liked
-                      ? require("../images/whiteFullHeart.png")
-                      : require("../images/whiteOpenHeart.png")
-                  }
-                  style={styles.actionIcon}
-                />
-                <Text style={styles.actionText}>{liked ? "Liked" : "Like"}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleSaveToLibrary} style={styles.actionButton}>
-                <Image
-                  source={
-                    savedToLibrary
-                      ? require("../images/musicLibraryClosed.png")
-                      : require("../images/musicLibraryOpen.png")
-                  }
-                  style={styles.actionIcon}
-                />
-                <Text style={styles.actionText}>
-                  {savedToLibrary ? "Saved" : "Save"}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
-                <Image
-                  source={require("../images/shareIcon.png")}
-                  style={styles.actionIcon}
-                />
-                <Text style={styles.actionText}>Share</Text>
-              </TouchableOpacity>
-            </View>
+            {/* Show artist if present */}
+            <Text style={styles.artist}>
+              Artist: {(album.artist.name || album.artist )|| "Unknown"}
+            </Text>
+
+            {summary &&
+              <Text style={styles.summaryText}>{summary}</Text>
+            }
+
             <View style={styles.songAccordion}>
               {
                 !songsLoading 
@@ -570,10 +775,11 @@ const styles = StyleSheet.create({
     },
     card: {
       backgroundColor: colours.darkblue,
-      padding: 20,
+      paddingHorizontal: 15,
+      paddingVertical: 15,
       borderRadius: 20,
       marginTop: 110,
-      marginHorizontal: 5,
+      marginHorizontal: 0,
       marginBottom: 20,
     },
     title: {
@@ -783,6 +989,289 @@ const styles = StyleSheet.create({
       bottom: 0,
       width: "100%",
     },
+    modalOverlay: {
+
+      flex: 1,
+  
+      justifyContent: "flex-end",
+  
+      alignItems: "center",
+  
+    },
+    modalContent: {
+  
+      height: "50%",
+  
+      margin: 0,
+  
+      backgroundColor: colours.background,
+  
+      borderRadius: 20,
+  
+      padding: 0,
+  
+      alignItems: "center",
+  
+      shadowColor: "#000",
+  
+      shadowOffset: { width: 0, height: 2 },
+  
+      shadowOpacity: 0.25,
+  
+      shadowRadius: 4,
+  
+      elevation: 5,
+  
+    },
+  
+    modalText: {
+  
+      marginVertical: 15,
+  
+      textAlign: "center",
+  
+      fontSize: 20,
+  
+      fontWeight: "bold",
+  
+      color: colours.white,
+  
+    },
+  
+    gridContainer: {
+  
+      flex: 1,
+  
+      flexDirection: "row",
+  
+      flexWrap: "wrap",
+  
+      justifyContent: "space-evenly",
+  
+    },
+  
+    friendItem: {
+  
+      paddingTop: 8,
+  
+      alignItems: "center",
+  
+      marginBottom: 20,
+  
+      marginHorizontal: 10,
+  
+      width: 100,
+  
+    },
+  
+    selectedFriendItem: {
+  
+      backgroundColor: "rgba(33, 150, 243, 0.2)",
+  
+      borderRadius: 20,
+  
+    },
+  
+    checkmarkIcon: {
+  
+      position: "absolute",
+  
+      top: 40,
+  
+      right: 15,
+  
+      width: 20,
+  
+      height: 20,
+  
+    },
+  
+    avatar: {
+  
+      width: 50,
+  
+      height: 50,
+  
+      borderRadius: 25,
+  
+      marginBottom: 5,
+  
+    },
+  
+    commentSection: {
+  
+      width: "100%",
+  
+      paddingHorizontal: 20,
+  
+      marginTop: 15,
+  
+    },
+  
+    commentPrompt: {
+  
+      fontSize: 16,
+  
+      marginBottom: 10,
+  
+      textAlign: "center",
+  
+      color: colours.white,
+  
+    },
+  
+    commentInput: {
+  
+      width: 220,
+  
+      padding: 10,
+  
+      borderWidth: 1,
+  
+      borderColor: colours.white,
+  
+      borderRadius: 5,
+  
+      marginBottom: 0,
+  
+      textAlign: "center",
+  
+      color: colours.white,
+  
+    },
+  
+    modalButtonContainer: {
+  
+      flexDirection: "row",
+  
+      justifyContent: "space-between",
+  
+      width: "100%",
+  
+      paddingHorizontal: 20,
+  
+      marginBottom: 20,
+  
+    },
+  
+    button: {
+  
+      borderRadius: 20,
+  
+      padding: 10,
+  
+      elevation: 2,
+  
+      marginTop: 20,
+  
+    },
+  
+    shareButton: {
+  
+      backgroundColor: "#2196F3",
+  
+      flex: 1,
+  
+      marginRight: 0,
+  
+      width: "100%",
+  
+    },
+  
+    disabledButton: {
+  
+      backgroundColor: "#cccccc",
+  
+      opacity: 0.5,
+  
+    },
+  
+    buttonText: {
+  
+      color: "white",
+  
+      fontWeight: "bold",
+  
+      textAlign: "center",
+  
+    },
+  
+    disabledButtonText: {
+  
+      color: "#666666",
+  
+    },
+    cardInformation: {
+
+      display: "flex",
+  
+      flex: 1,
+  
+      flexDirection: "row",
+  
+      marginBottom: 10
+  
+    },
+    titleContainer: {
+  
+      flex: 1,
+  
+    },
+  
+  
+    boldTitle: {
+  
+      fontSize: 20,
+  
+      color: "#fff",
+  
+      width: "100%",
+  
+      marginBottom: 0,
+  
+      alignSelf: "left",
+  
+  
+      textTransform: "capitalize",
+  
+    },
+  
+    actionButtons: {
+  
+      flexDirection: "row",
+  
+      justifyContent: "flex-start",
+  
+      gap: 20,
+  
+      marginTop: 0,
+  
+    },
+  
+    actionButton: {
+  
+      alignItems: "center",
+  
+    },
+  
+    actionIcon: {
+  
+      width: 30,
+  
+      height: 30,
+  
+    },
+  
+    actionText: {
+  
+      fontSize: 14,
+  
+      color: "#fff",
+  
+      marginTop: 5,
+  
+    },
+  
     previewButton: {
       backgroundColor: colours.lightblue,
       padding: 5,
