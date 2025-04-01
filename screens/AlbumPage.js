@@ -63,6 +63,7 @@ export default function AlbumPage({ route, navigation }) {
   const [showEmojiDropdown, setShowEmojiDropdown] = useState(false);
   const [albumSongs, setAlbumSongs] = useState([]);
   const [songExpanded, setSongExpanded] = useState(false);
+  const [songsLoading, setSongsLoading] = useState(true);
   const [summary, setSummary] = useState("");
   const isFocused = useIsFocused();
 
@@ -100,6 +101,7 @@ export default function AlbumPage({ route, navigation }) {
   }, [navigation, isFocused]);
   
   async function populateReviewsAndSongs() {
+    setSongsLoading(true)
     let promises = await Promise.all([
       (await getReviews(album.id)).json(),
       (await getAlbumSongs(album.id)).json(),
@@ -112,6 +114,7 @@ export default function AlbumPage({ route, navigation }) {
     setUsers(reqReviews.users)
     setAlbumSongs(albumSongs)
     setSummary(summary)
+    setSongsLoading(false)
   }
 
   useEffect(() => {
@@ -350,38 +353,45 @@ export default function AlbumPage({ route, navigation }) {
             </View>
 
             <View style={styles.songAccordion}>
-                <ListItem.Accordion
-                  content={
-                    <>
-                      <Icon name="audiotrack" size={20} style={{ marginRight: 10}} />
-                      <ListItem.Content>
-                        <ListItem.Title>Songs</ListItem.Title>
-                      </ListItem.Content>
-                    </>
-                  }
-                  isExpanded={songExpanded}
-                  onPress={() => {
-                    setSongExpanded(!songExpanded);
-                  }}
-                >
-                  {albumSongs.map((song, i) => {
-                    return (
-                        <ListItem 
-                          id={song.listenableId} 
-                          key={song.listenableId}
-                          bottomDivider 
-                          onPress={() => { navigateToSong(song) }}
-                          Component={TouchableHighlight}
-                        >
-                          <Text>{i.toString()}</Text>
-                          <ListItem.Content>
-                            <ListItem.Title>{song.title}</ListItem.Title>
-                          </ListItem.Content>
-                          {/* <Avatar source={{ uri: song['coverArt']}}></Avatar> */}
-                        </ListItem>
-                    )
-                  })}
-                </ListItem.Accordion>
+              {
+                !songsLoading 
+                ?
+                  <ListItem.Accordion
+                    content={
+                      <>
+                        <Icon name="audiotrack" size={20} style={{ marginRight: 10}} />
+                        <ListItem.Content>
+                          <ListItem.Title>Songs</ListItem.Title>
+                        </ListItem.Content>
+                      </>
+                    }
+                    isExpanded={songExpanded}
+                    onPress={() => {
+                      setSongExpanded(!songExpanded);
+                    }}
+                  >
+                    {albumSongs.map((song, i) => {
+                      return (
+                          <ListItem 
+                            id={song.listenableId} 
+                            key={song.listenableId}
+                            bottomDivider 
+                            onPress={() => { navigateToSong(song) }}
+                            Component={TouchableHighlight}
+                          >
+                            <Text>{i.toString()}</Text>
+                            <ListItem.Content>
+                              <ListItem.Title>{song.title}</ListItem.Title>
+                            </ListItem.Content>
+                            {/* <Avatar source={{ uri: song['coverArt']}}></Avatar> */}
+                          </ListItem>
+                      )
+                    })}
+                  </ListItem.Accordion>
+                :
+                  <ActivityIndicator size="large" color="#4CAF50" />
+              }
+                
             </View>
 
             {/* Review Section */}
