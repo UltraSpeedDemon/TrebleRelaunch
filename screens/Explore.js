@@ -12,26 +12,14 @@ import SearchBar from "../components/SearchBar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
 import { auth } from "../utils/firebase";
-import { getFollowRequests } from "../providers/rest";
+import { getFollowRequests, getTopReviews, getTopSongs, getRecommendedSongs } from "../providers/rest";
 
 export default function Explore({ navigation }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsCount, setNotificationsCount] = useState(0);
-
-  // Example data for sections
-  const topReviewed = [
-    { id: "1", name: "I Wonder", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-    { id: "2", name: "Stronger", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-    { id: "3", name: "Gold Digger", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-  ];
-
-  const popularWithFriends = [
-    { id: "1", name: "Graduation", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-    { id: "2", name: "Graduation", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-    { id: "3", name: "Graduation", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-    { id: "4", name: "Graduation", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-    { id: "5", name: "Graduation", artist: "Kanye West", image: require("../images/albumImage.jpg") },
-  ];
+  const [topReviewed, setTopReviewed] = useState([]);
+  const [topLiked, setTopLiked] = useState([]);
+  const [recommendedSongs, setRecommendedSongs] = useState([]);
 
   // Fetch notifications count (number of follow requests)
   useEffect(() => {
@@ -49,12 +37,120 @@ export default function Explore({ navigation }) {
     fetchNotificationsCount();
   }, []);
 
+  // Fetch top reviewed songs
+  useEffect(() => {
+    async function fetchTopReviewed() {
+      try {
+        if (!auth.currentUser || !auth.currentUser.uid) {
+          console.error("User is not authenticated.");
+          return;
+        }
+        const resp = await getTopReviews(auth.currentUser.uid);
+        if (resp.ok) {
+          const data = await resp.json();
+          const formattedData = data.topSongsByReviews.map((song) => ({
+            listenableId: song.listenableId,
+            title: song.title,
+            reviewCount: song.reviewCount,
+            artist: song.artist,
+            coverArt: song.coverArt,
+            track: song.track, // Include the track object for navigation
+          }));
+          setTopReviewed(formattedData);
+        } else {
+          console.error("Failed to fetch top reviewed songs:", resp.status);
+        }
+      } catch (error) {
+        console.error("Error fetching top reviewed songs:", error);
+      }
+    }
+    fetchTopReviewed();
+  }, []);
+
+  // Fetch top liked songs
+  useEffect(() => {
+    async function fetchTopLiked() {
+      try {
+        if (!auth.currentUser || !auth.currentUser.uid) {
+          console.error("User is not authenticated.");
+          return;
+        }
+        const resp = await getTopSongs(auth.currentUser.uid);
+        if (resp.ok) {
+          const data = await resp.json();
+          const formattedData = data.topSongsByLikes.map((song) => ({
+            listenableId: song.listenableId,
+            title: song.title,
+            likes: song.likes,
+            artist: song.artist,
+            coverArt: song.coverArt,
+            track: song.track, // Include the track object for navigation
+          }));
+          setTopLiked(formattedData);
+        } else {
+          console.error("Failed to fetch top liked songs:", resp.status);
+        }
+      } catch (error) {
+        console.error("Error fetching top liked songs:", error);
+      }
+    }
+    fetchTopLiked();
+  }, []);
+
+  // Fetch recommended songs
+  useEffect(() => {
+    async function fetchRecommendedSongs() {
+      try {
+        if (!auth.currentUser || !auth.currentUser.uid) {
+          console.error("User is not authenticated.");
+          return;
+        }
+        const resp = await getRecommendedSongs(auth.currentUser.uid);
+        if (resp.ok) {
+          const data = await resp.json();
+          const formattedData = data.recommendedSongs.map((song) => ({
+            listenableId: song.listenableId,
+            title: song.title,
+            artist: song.artist.name,
+            coverArt: song.coverArt,
+            playbackUrl: song.playbackUrl,
+          }));
+          setRecommendedSongs(formattedData.slice(0, 10)); // Limit to 10 songs
+        } else {
+          console.error("Failed to fetch recommended songs:", resp.status);
+        }
+      } catch (error) {
+        console.error("Error fetching recommended songs:", error);
+      }
+    }
+    fetchRecommendedSongs();
+  }, []);
+
   const renderTrackCard = ({ item }) => (
-    <View style={styles.trackCard}>
-      <Image source={item.image} style={styles.trackImage} />
-      <Text style={styles.trackName}>{item.name}</Text>
-      <Text style={styles.trackArtist}>{item.artist}</Text>
-    </View>
+    <TouchableOpacity
+      onPress={() =>
+        navigation.navigate("SongPage", {
+          track: {
+            id: item.listenableId, // Unique identifier for the track
+            name: item.title, // Track title
+            artist: item.artist, // Artist name
+            image: item.coverArt, // Album art URL
+            previewUrl: item.playbackUrl || null, // Preview URL (if available)
+            type: "track", // Specify the type as "track"
+          },
+        })
+      }
+    >
+      <View style={styles.trackCard}>
+        <Image source={{ uri: item.coverArt }} style={styles.trackImage} />
+        <Text style={styles.trackName} numberOfLines={1} ellipsizeMode="tail">
+          {item.title}
+        </Text>
+        <Text style={styles.trackArtist} numberOfLines={1} ellipsizeMode="tail">
+          {item.artist}
+        </Text>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -86,36 +182,50 @@ export default function Explore({ navigation }) {
       </View>
 
       {/* Main Content */}
-      <FlatList
-        style={styles.content}
-        ListHeaderComponent={
-          <>
-            {/* Top Reviewed Section */}
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Top Reviewed</Text>
-              <FlatList
-                data={topReviewed}
-                renderItem={renderTrackCard}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              />
-            </View>
+      <View style={{ marginBottom: 100 }}>
+        <FlatList
+          style={styles.content}
+          ListHeaderComponent={
+            <>
+              {/* Top Reviewed Section */}
+              <View style={styles.cardSection}>
+                <Text style={styles.sectionTitle}>Top Reviewed</Text>
+                <FlatList
+                  data={topReviewed}
+                  renderItem={renderTrackCard}
+                  keyExtractor={(item) => item.listenableId} // Use listenableId as the unique key
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                />
+              </View>
 
-            {/* Popular with Friends Section */}
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Popular with Friends</Text>
-              <FlatList
-                data={popularWithFriends}
-                renderItem={renderTrackCard}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-              />
-            </View>
-          </>
-        }
-      />
+              {/* Top Liked Section */}
+              <View style={styles.cardSection}>
+                <Text style={styles.sectionTitle}>Top Liked</Text>
+                <FlatList
+                  data={topLiked}
+                  renderItem={renderTrackCard}
+                  keyExtractor={(item) => item.listenableId} // Use listenableId as the unique key
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                />
+              </View>
+
+              {/* Recommended by Genre Section */}
+              <View style={styles.cardSection}>
+                <Text style={styles.sectionTitle}>Recommended by Genre</Text>
+                <FlatList
+                  data={recommendedSongs}
+                  renderItem={renderTrackCard}
+                  keyExtractor={(item) => item.listenableId} // Use listenableId as the unique key
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                />
+              </View>
+            </>
+          }
+        />
+      </View>
 
       {/* Bottom Navigation Bar */}
       <View style={styles.bottomNavBar}>
@@ -207,6 +317,7 @@ const styles = StyleSheet.create({
   trackCard: {
     marginRight: 10,
     alignItems: "center",
+    width: 100, // Match the width of the image
   },
   trackImage: {
     width: 100,
@@ -218,14 +329,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "bold",
     color: "#fff",
+    textAlign: "center",
+    width: "100%", // Ensure text stays within the card width
   },
   trackArtist: {
     fontSize: 12,
     color: "#aaa",
+    textAlign: "center",
+    width: "100%", // Ensure text stays within the card width
   },
   bottomNavBar: {
     position: "absolute",
     bottom: 0,
     width: "100%",
-  },
+  }
 });

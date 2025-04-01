@@ -337,3 +337,19 @@ export async function deleteComment(post_id) {
 export async function addComment(author_id, review_id, message) {
   return await serverPost("post/addPost",{author_id, review_id, message})
 }
+
+
+// /users/top-songs/likes
+export async function getTopSongs(userId) {
+  return await serverGet(`users/top-songs/likes`);
+}
+
+// /users/top-songs/reviews
+export async function getTopReviews(userId) {
+  return await serverGet(`users/top-songs/reviews`);
+}
+
+// /users/recommended-songs?user_id={uid}
+export async function getRecommendedSongs(userId) {
+  return await serverGet(`users/recommended-songs`, { user_id: userId });
+}

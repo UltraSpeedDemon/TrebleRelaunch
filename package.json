@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "main": "screens/index.js",
   "scripts": {
-    "start": "npx expo start ",
+    "start": "npx expo start --tunnel",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web"
