@@ -38,7 +38,8 @@ import {
   share,
   setRecommendationServed,
   getTimeline,
-  getSongFromDeezer
+  getSongFromDeezer,
+  getFollowRequests
 } from "../providers/rest";
 
 export default function Feed({ navigation, route }) {
@@ -244,6 +245,23 @@ const fetchInitialFeed = async (refresh) => {
     console.error("[ERROR] fetchInitialFeed ->", err);
   }
 };
+
+//notifications
+useEffect(() => {
+  async function fetchNotificationsCount() {
+    if (!auth.currentUser?.uid) return; // Wait until auth is ready
+    try {
+      const resp = await getFollowRequests(auth.currentUser.uid);
+      if (resp.ok) {
+        const requests = await resp.json();
+        setNotificationsCount(requests.length);
+      }
+    } catch (error) {
+      console.error("Error fetching notifications count:", error);
+    }
+  }
+  fetchNotificationsCount();
+}, [auth.currentUser]);  
 
 // -------------------------------------------------------------------------
 //  loadMoreTimeline: Load additional timeline items and recommendations
