@@ -121,13 +121,17 @@ export default function AlbumPage({ route, navigation }) {
   // 1) Fetch user data
   useEffect(() => {
     if (isFocused) {
-      try {  
+      async function fetchMetadataReviewAndSongs() {
+        try {  
           console.log("Fetching album metadata on mount...");
-          populateMetadata(album.type, album.id);
+          await populateMetadata(album.type, album.id);
+          await populateReviewsAndSongs();
         }
         catch (error) {
-        console.error("Error populating metadata:", error);
+          console.error("Error populating metadata:", error);
         }
+      }
+
       async function fetchUserData() {
         try {
           const currentUser = auth.currentUser;
@@ -146,7 +150,8 @@ export default function AlbumPage({ route, navigation }) {
           setLoadingUser(false);
         }
       }
-      populateReviewsAndSongs();
+
+      fetchMetadataReviewAndSongs();
       fetchUserData();
     }
   }, [navigation, isFocused]);
