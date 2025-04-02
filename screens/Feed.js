@@ -1008,7 +1008,7 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
               <View style={styles.reviewContainer}>
                 <View style={styles.avatarContainer}>
                   <Image
-                    source={{ uri: itemInfo.author?.avatarLong || "https://via.placeholder.com/250" }}
+                    source={{ uri: topReview.author?.avatarLong || "https://via.placeholder.com/250" }}
                     style={styles.avatar}
                   />
                 </View>

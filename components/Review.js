@@ -151,7 +151,7 @@ const ReviewCard = ({
   // console.log("item", item);
   // When the content area is pressed, navigate based on the enriched song data.
   const handleContentPress = () => {
-    if (item.song.type != undefined) {
+    if (item.song && item.song.type) {
       switch (item.song.type) {
         case "track":
           navigation.navigate("SongPage", { track: item.song });

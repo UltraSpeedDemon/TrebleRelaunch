@@ -465,7 +465,7 @@ export default function SongPage({ route, navigation }) {
     : require("../images/albumImage.jpg");
 
   return (
-    <View
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={10} // adjust this value as needed
@@ -724,7 +724,7 @@ export default function SongPage({ route, navigation }) {
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
