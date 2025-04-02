@@ -339,6 +339,8 @@ export default function Profile({ navigation }) {
                     handleUpvote={handleUpvote}
                     handleDelete={handleDelete}
                     navigation={navigation}
+                    showReplyInput={false}
+                    showComments={false}
                   />
                 </View>
               )}
@@ -369,6 +371,8 @@ export default function Profile({ navigation }) {
                     handleUpvote={handleUpvote}
                     handleDelete={handleDelete}
                     navigation={navigation}
+                    showReplyInput={false}
+                    showComments={false}
                   />
                 </View>
               )}
@@ -401,6 +405,8 @@ export default function Profile({ navigation }) {
                     handleUpvote={handleUpvote}
                     handleDelete={handleDelete}
                     navigation={navigation}
+                    showReplyInput={false}
+                    showComments={false}
                   />
                 </View>
               )}
@@ -429,6 +435,8 @@ export default function Profile({ navigation }) {
                     handleUpvote={handleUpvote}
                     handleDelete={handleDelete}
                     navigation={navigation}
+                    showReplyInput={false}
+                    showComments={false}
                   />
                 </View>
               ))}

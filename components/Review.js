@@ -24,6 +24,9 @@ const ReviewCard = ({
   handleUpvote,
   handleDelete,
   navigation,
+  // NEW PROPS for toggling comments/reply on/off
+  showComments = true,
+  showReplyInput = true,
 }) => {
 
   const [comments, setComments] = useState([]);
@@ -245,22 +248,29 @@ const ReviewCard = ({
                   )}
                 </View>
                 
-                <KeyboardAvoidingView
-                  behavior={Platform.OS === "ios" ? "padding" : "height"}
-                  keyboardVerticalOffset={10} // adjust this value as needed
-                >
-                  <TextInput
-                    style={styles.replyInput}
-                    placeholder="Write a reply..."
-                    placeholderTextColor="#CCC"
-                    value={replyText}
-                    onChangeText={setReplyText}
-                    editable={!loading} // Disable input while posting
-                  />
-                  <TouchableOpacity onPress={confirmReply} style={styles.replyButton} disabled={loading}>
-                    <Text style={styles.replyText}>Reply</Text>
-                  </TouchableOpacity>
-                </KeyboardAvoidingView>
+                {/* Only show reply input if showReplyInput is true */}
+                {showReplyInput && (
+                  <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    keyboardVerticalOffset={10} // adjust as needed
+                  >
+                    <TextInput
+                      style={styles.replyInput}
+                      placeholder="Write a reply..."
+                      placeholderTextColor="#CCC"
+                      value={replyText}
+                      onChangeText={setReplyText}
+                      editable={!loading} // Disable input while posting
+                    />
+                    <TouchableOpacity
+                      onPress={confirmReply}
+                      style={styles.replyButton}
+                      disabled={loading}
+                    >
+                      <Text style={styles.replyText}>Reply</Text>
+                    </TouchableOpacity>
+                  </KeyboardAvoidingView>
+                )}
               </View>
               
               <View style={styles.infoAndDateContainer}>  
@@ -310,15 +320,19 @@ const ReviewCard = ({
           <Text style={styles.upvoteCount}>{item.upvotes}</Text>
       </TouchableOpacity>
 
-      <View style={styles.commentsContainer}>
-        {comments.length > 0 ? (
-          comments.map((comment, index) => (
-            <CommentCard key={index} comment={comment} onDelete={handleDeletePost} />
-          ))
-        ) : (
-          <></>
-        )}
-      </View>
+      {/* Only show comments if showComments is true */}
+      {showComments && (
+        <View style={styles.commentsContainer}>
+          {comments.length > 0 ? (
+            comments.map((comment, index) => (
+              <CommentCard key={index} comment={comment} onDelete={handleDeletePost} />
+            ))
+          ) : (
+            // If no comments, you could display something like "No comments yet"
+            <></>
+          )}
+        </View>
+      )}
     </View>
   );
 };
