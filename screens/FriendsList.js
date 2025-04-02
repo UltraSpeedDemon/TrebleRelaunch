@@ -170,7 +170,7 @@ export default function FriendsList({ navigation }) {
         <SafeAreaProvider>
           <SafeAreaView>
             {loading ? (
-              <ActivityIndicator size="large" color="#4CAF50" />
+              <ActivityIndicator size="large" color="white" />
             ) : friendsList.length > 0 ? (
               <ScrollView>
                 {friendsList.map((friend) => {

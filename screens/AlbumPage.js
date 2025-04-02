@@ -214,6 +214,31 @@ export default function AlbumPage({ route, navigation }) {
     return [...reviews].sort((a, b) => b.upvotes - a.upvotes);
   };
 
+  const tapTimerRef = useRef(null);
+      const DOUBLE_TAP_DELAY = 300; // ms
+    
+      // This function is called on every tap
+      const handleTap = () => {
+        if (tapTimerRef.current) {
+          // Second tap detected
+          clearTimeout(tapTimerRef.current);
+          tapTimerRef.current = null;
+          handleDoubleTap();
+        } else {
+          // First tap detected
+          tapTimerRef.current = setTimeout(() => {
+            tapTimerRef.current = null;
+            // single tap would go here, if you needed it
+            // e.g. open details, etc.
+          }, DOUBLE_TAP_DELAY);
+        }
+      };
+    
+      // 2) Action for a double tap
+      const handleDoubleTap = () => {
+        handleLikeAlbum(); // Use your existing like function
+      };
+
   const handleLikeAlbum = async () => {
     try {
       const currentUser = auth.currentUser;
@@ -440,7 +465,7 @@ export default function AlbumPage({ route, navigation }) {
   if (!album) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color="white" />
         <Text style={styles.errorText}>No album data found.</Text>
       </View>
     );
@@ -536,201 +561,205 @@ export default function AlbumPage({ route, navigation }) {
         data={getSortedReviews()}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
-          <View style={styles.card}>
-            <View style={styles.cardInformation}>
-                          <View style={styles.titleContainer}>
-                              <Text style={styles.boldTitle}>
-                                Album
-                              </Text>
+          <TouchableWithoutFeedback onPress={handleTap}>
+            <View style={styles.card}>
+              <View style={styles.cardInformation}>
+                            <View style={styles.titleContainer}>
+                                <Text style={styles.boldTitle}>
+                                  Album
+                                </Text>
+                            </View>
+                            <View style={styles.actionButtons}>
+                              <TouchableOpacity onPress={handleLikeAlbum} style={styles.actionButton}>
+                                <Image
+                                  source={
+                                    liked
+                                      ? require("../images/whiteFullHeart.png")
+                                      : require("../images/whiteOpenHeart.png")
+                                  }
+                                  style={styles.actionIcon}
+                                />
+                                <Text style={styles.actionText}>
+                                  {liked ? "Liked" : "Like"}
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => handleModal(album)} style={styles.actionButton}>
+                                <Image
+                                  source={require("../images/shareIcon.png")}
+                                  style={styles.actionIcon}
+                                />
+                                <Text style={styles.actionText}>Share</Text>
+                              </TouchableOpacity>
+                            </View>
                           </View>
-                          <View style={styles.actionButtons}>
-                            <TouchableOpacity onPress={handleLikeAlbum} style={styles.actionButton}>
-                              <Image
-                                source={
-                                  liked
-                                    ? require("../images/whiteFullHeart.png")
-                                    : require("../images/whiteOpenHeart.png")
-                                }
-                                style={styles.actionIcon}
-                              />
-                              <Text style={styles.actionText}>
-                                {liked ? "Liked" : "Like"}
-                              </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleModal(album)} style={styles.actionButton}>
-                              <Image
-                                source={require("../images/shareIcon.png")}
-                                style={styles.actionIcon}
-                              />
-                              <Text style={styles.actionText}>Share</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
 
-            {/* Album Image */}
-            <Image source={albumImage} style={styles.image} />
+              {/* Album Image */}
+              <Image source={albumImage} style={styles.image} />
 
-            {/* Album Name */}
-            <Text style={styles.title}>{(album.name || album.title) || "Unknown Album"}</Text>
-            {/* Show artist if present */}
-            <Text style={styles.artist}>
-              Artist: {(album.artist.name || album.artist )|| "Unknown"}
-            </Text>
+              {/* Album Name */}
+              <Text style={styles.title}>{(album.name || album.title) || "Unknown Album"}</Text>
+              {/* Show artist if present */}
+              <Text style={styles.artist}>
+                Artist: {(album.artist.name || album.artist )|| "Unknown"}
+              </Text>
 
-            {summary &&
-              <Text style={styles.summaryText}>{summary}</Text>
-            }
-
-            <View style={styles.songAccordion}>
-              {
-                !songsLoading 
-                ?
-                  <ListItem.Accordion
-                    content={
-                      <>
-                        <Icon name="audiotrack" size={20} style={{ marginRight: 10}} />
-                        <ListItem.Content>
-                          <ListItem.Title>Songs</ListItem.Title>
-                        </ListItem.Content>
-                      </>
-                    }
-                    isExpanded={songExpanded}
-                    onPress={() => {
-                      setSongExpanded(!songExpanded);
-                    }}
-                    style={{ marginTop: 20 }}
-                  >
-                    {albumSongs.map((song, i) => (
-                      <ListItem 
-                        id={song.listenableId} 
-                        key={song.listenableId}
-                        bottomDivider 
-                        onPress={() => { navigateToSong(song) }}
-                        Component={TouchableHighlight}
-                      >
-                        <View style={styles.songRow}>
-                          {/* Song Number */}
-                          <Text style={styles.songNumber}>{i + 1}</Text>
-
-                          {/* Song Title */}
-                          <Text style={styles.songTitle}>{song.title}</Text>
-
-                          {/* Preview Button */}
-                          {song.preview && (
-                            <TouchableOpacity
-                              onPress={() => handlePlayPreview(song.preview)}
-                              style={styles.playButton}
-                            >
-                              <AnimatedCircularProgress
-                                size={40}
-                                width={4}
-                                fill={currentPreview === song.preview ? progress : 0}
-                                tintColor={colours.secondaryblue}
-                                backgroundColor={colours.bluegrey}
-                                rotation={0}
-                              >
-                                {() => (
-                                  <MaterialIcons
-                                    name={
-                                      currentPreview === song.preview && isPlaying
-                                        ? "stop"
-                                        : "play-arrow"
-                                    }
-                                    size={24}
-                                    color="#fff"
-                                  />
-                                )}
-                              </AnimatedCircularProgress>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      </ListItem>
-                    ))}
-                  </ListItem.Accordion>
-                :
-                  <ActivityIndicator size="large" color="#4CAF50" />
+              {summary &&
+                <Text style={styles.summaryText}>{summary}</Text>
               }
-                
-            </View>
-            {/* Review Input Section (same as SongPage) */}
-            <View style={styles.reviewInputContainer}>
-              <View style={styles.topRow}>
-                <View style={styles.favouriteContainer}>
-                  <TouchableOpacity onPress={handleToggleFavourite}>
-                    <Image
-                      source={
-                        favourite
-                          ? require("../images/whiteFullHeart.png")
-                          : require("../images/whiteOpenHeart.png")
-                      }
-                      style={styles.smallFavIcon}
-                    />
-                  </TouchableOpacity>
-                  <Text style={styles.favLabel}>Favourite</Text>
-                </View>
-                <View style={styles.starRatingContainer}>
-                  {[...Array(5)].map((_, index) => (
-                    <TouchableOpacity key={index} onPress={() => setReviewRating(index + 1)}>
+
+              <View style={styles.songAccordion}>
+                {
+                  !songsLoading 
+                  ?
+                    <View style={styles.roundedWrapper}>
+                      <ListItem.Accordion
+                        content={
+                          <>
+                            <Icon name="audiotrack" size={20} style={{ borderRadius: 10, marginRight: 10}} />
+                            <ListItem.Content>
+                              <ListItem.Title>Songs</ListItem.Title>
+                            </ListItem.Content>
+                          </>
+                        }
+                        isExpanded={songExpanded}
+                        onPress={() => {
+                          setSongExpanded(!songExpanded);
+                        }}
+                        style={{ marginTop: 20 }}
+                      >
+                        {albumSongs.map((song, i) => (
+                          <ListItem 
+                            id={song.listenableId} 
+                            key={song.listenableId}
+                            bottomDivider 
+                            onPress={() => { navigateToSong(song) }}
+                            Component={TouchableHighlight}
+                          >
+                            <View style={styles.songRow}>
+                              {/* Song Number */}
+                              <Text style={styles.songNumber}>{i + 1}</Text>
+
+                              {/* Song Title */}
+                              <Text style={styles.songTitle}>{song.title}</Text>
+
+                              {/* Preview Button */}
+                              {song.preview && (
+                                <TouchableOpacity
+                                  onPress={() => handlePlayPreview(song.preview)}
+                                  style={styles.playButton}
+                                >
+                                  <AnimatedCircularProgress
+                                    size={40}
+                                    width={4}
+                                    fill={currentPreview === song.preview ? progress : 0}
+                                    tintColor={colours.secondaryblue}
+                                    backgroundColor={colours.bluegrey}
+                                    rotation={0}
+                                  >
+                                    {() => (
+                                      <MaterialIcons
+                                        name={
+                                          currentPreview === song.preview && isPlaying
+                                            ? "stop"
+                                            : "play-arrow"
+                                        }
+                                        size={24}
+                                        color="#fff"
+                                      />
+                                    )}
+                                  </AnimatedCircularProgress>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          </ListItem>
+                        ))}
+                      </ListItem.Accordion>
+                    </View>
+                  :
+                    <ActivityIndicator size="large" color="white" />
+                }
+                  
+              </View>
+              {/* Review Input Section (same as SongPage) */}
+              <View style={styles.reviewInputContainer}>
+                <View style={styles.topRow}>
+                  <View style={styles.favouriteContainer}>
+                    <TouchableOpacity onPress={handleToggleFavourite}>
                       <Image
                         source={
-                          index < reviewRating
-                            ? require("../images/starFullIcon.png")
-                            : require("../images/starEmptyIcon.png")
+                          favourite
+                            ? require("../images/whiteFullHeart.png")
+                            : require("../images/whiteOpenHeart.png")
                         }
-                        style={styles.starIcon}
+                        style={styles.smallFavIcon}
                       />
                     </TouchableOpacity>
-                  ))}
-                </View>
-                <TouchableOpacity
-                  style={styles.selectEmojiTab}
-                  onPress={() => setShowEmojiDropdown(!showEmojiDropdown)}
-                >
-                  <Image
-                    source={require("../images/selectEmojiIcon.png")}
-                    style={styles.selectEmojiIcon}
-                  />
-                </TouchableOpacity>
-              </View>
-              {showEmojiDropdown && (
-                <View style={styles.emojiDropdownRow}>
-                  <TouchableOpacity onPress={() => handleSelectEmoji("❤️")}>
-                    <Text style={styles.reviewEmoji}>❤️</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleSelectEmoji("🔥")}>
-                    <Text style={styles.reviewEmoji}>🔥</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleSelectEmoji("👏")}>
-                    <Text style={styles.reviewEmoji}>👏</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              <View style={{ flexDirection: "row", marginTop: 15 }}>
-                <TextInput
-                  style={styles.reviewInput}
-                  placeholder="Add a review..."
-                  placeholderTextColor="#aaa"
-                  value={review}
-                  onChangeText={setReview}
-                />
-                <TouchableOpacity style={styles.reviewButton} onPress={handleAddReview}>
-                  <Text style={styles.reviewButtonText}>Post</Text>
-                </TouchableOpacity>
-              </View>
-              {selectedEmojis.length > 0 && (
-                <View style={styles.selectedEmojisSection}>
-                  <Text style={styles.selectedEmojisTitle}>Selected Emojis</Text>
-                  <View style={styles.selectedEmojisContainer}>
-                    {selectedEmojis.map((em, idx) => (
-                      <Text key={idx} style={styles.selectedEmoji}>
-                        {em}
-                      </Text>
+                    <Text style={styles.favLabel}>Favourite</Text>
+                  </View>
+                  <View style={styles.starRatingContainer}>
+                    {[...Array(5)].map((_, index) => (
+                      <TouchableOpacity key={index} onPress={() => setReviewRating(index + 1)}>
+                        <Image
+                          source={
+                            index < reviewRating
+                              ? require("../images/starFullIcon.png")
+                              : require("../images/starEmptyIcon.png")
+                          }
+                          style={styles.starIcon}
+                        />
+                      </TouchableOpacity>
                     ))}
                   </View>
+                  <TouchableOpacity
+                    style={styles.selectEmojiTab}
+                    onPress={() => setShowEmojiDropdown(!showEmojiDropdown)}
+                  >
+                    <Image
+                      source={require("../images/selectEmojiIcon.png")}
+                      style={styles.selectEmojiIcon}
+                    />
+                  </TouchableOpacity>
                 </View>
-              )}
+                {showEmojiDropdown && (
+                  <View style={styles.emojiDropdownRow}>
+                    <TouchableOpacity onPress={() => handleSelectEmoji("❤️")}>
+                      <Text style={styles.reviewEmoji}>❤️</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleSelectEmoji("🔥")}>
+                      <Text style={styles.reviewEmoji}>🔥</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleSelectEmoji("👏")}>
+                      <Text style={styles.reviewEmoji}>👏</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <View style={{ flexDirection: "row", marginTop: 15 }}>
+                  <TextInput
+                    style={styles.reviewInput}
+                    placeholder="Add a review..."
+                    placeholderTextColor="#aaa"
+                    value={review}
+                    onChangeText={setReview}
+                  />
+                  <TouchableOpacity style={styles.reviewButton} onPress={handleAddReview}>
+                    <Text style={styles.reviewButtonText}>Post</Text>
+                  </TouchableOpacity>
+                </View>
+                {selectedEmojis.length > 0 && (
+                  <View style={styles.selectedEmojisSection}>
+                    <Text style={styles.selectedEmojisTitle}>Selected Emojis</Text>
+                    <View style={styles.selectedEmojisContainer}>
+                      {selectedEmojis.map((em, idx) => (
+                        <Text key={idx} style={styles.selectedEmoji}>
+                          {em}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         }
         renderItem={({ item }) => {
           const user = users.find((u) => u.userId === item.userId);
@@ -1333,5 +1362,9 @@ const styles = StyleSheet.create({
       shadowRadius: 3,
       elevation: 5,
     },
+    roundedWrapper: {
+      borderRadius: 10,
+      overflow: 'hidden',
+    }
   }),
 });

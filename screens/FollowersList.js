@@ -185,7 +185,7 @@ export default function FollowersList({ navigation }) {
           <SafeAreaView>
             <ScrollView>
               {loading ? (
-                <ActivityIndicator size="large" color="#4CAF50" />
+                <ActivityIndicator size="large" color="white" />
               ) : followersList.length > 0 ? (
                 followersList.map((user) => {
                   // If we manually toggled follow status, use that; else use user.isFollowing

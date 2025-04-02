@@ -50,7 +50,7 @@ export default function ForgotPassword({ navigation }) {
         style={[styles.button, { backgroundColor: colours.secondaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("Login")}
       >
-        <Text style={styles.buttonText}>Back to Login</Text>
+        <Text style={styles.altButtonText}>Back to Login</Text>
       </TouchableOpacity>
     </View>
   );
@@ -100,5 +100,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Domine',
     marginBottom: 20,
     textAlign: "center",
+  },
+  altButtonText: {
+    color: "black",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });

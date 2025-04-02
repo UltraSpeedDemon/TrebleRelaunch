@@ -90,7 +90,7 @@ export default function ArtistListenables({ navigation, route }) {
                 <View style={{ marginBottom: 15 }}>
                     <SectionDivider title={type == "track" ? `Songs by ${artist.name}` : `Albums by ${artist.name}`} />
                 </View>
-                {loading && <ActivityIndicator size="large" color="#4CAF50" />}
+                {loading && <ActivityIndicator size="large" color="white" />}
                 <View key="Listenables">
                     <FlatList
                         data={listenableData}

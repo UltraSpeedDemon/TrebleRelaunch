@@ -12,8 +12,9 @@ import { FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Audio } from "expo-av";
-import { setRecommendationServed, like } from "../providers/rest";
+import { setRecommendationServed, like, postRecommendations, } from "../providers/rest";
 import { auth } from "../utils/firebase"; // Add this import
+import colours from "../styles/colours";
 
 const { width, height } = Dimensions.get('window');
 
@@ -81,6 +82,18 @@ export function MusicSwiper({ songs }) {
     }, [sound])
   );
 
+  // 1) Create an Animated.Value for the opacity (1 means fully opaque)
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    // 2) Animate the opacity from 1 to 0 over 1000 ms
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 5000,
+      useNativeDriver: true, // improves performance
+    }).start();
+  }, [fadeAnim]);
+
   const handleSwipe = async (direction) => {
     if (loadingSound) return; // Prevent swiping while sound is loading
 
@@ -92,7 +105,19 @@ export function MusicSwiper({ songs }) {
       try {
         const currentUser = auth.currentUser;
         if (currentUser) {
-          await like(currentUser.uid, currentSong.id, "track");
+          like(currentUser.uid, currentSong.id, "track")
+          .then(() => {
+            return postRecommendations(
+              currentUser.uid,
+              currentSong.id,
+              "track",
+              currentSong.title || "",
+              currentSong.artist || ""
+            );
+          })
+          .catch((error) => {
+            console.error("Error liking or posting recommendations:", error);
+          });
         }
       } catch (error) {
         console.error("Error liking song:", error);
@@ -162,6 +187,9 @@ export function MusicSwiper({ songs }) {
 
   return (
     <View style={styles.container}>
+      <Animated.Text style={[styles.mainText, { opacity: fadeAnim }]}>
+        Swipe To Find New Songs!
+      </Animated.Text>
       <Animated.View style={[styles.gradientContainer, { opacity: leftOpacity }]}>
         <LinearGradient
           colors={['rgba(255, 0, 0, 0.5)', 'transparent']}
@@ -193,7 +221,7 @@ export function MusicSwiper({ songs }) {
           <FontAwesome name="thumbs-down" size={32} color="red" />
         </TouchableOpacity>
         <TouchableOpacity onPress={handleMuteToggle} style={styles.button}>
-          <FontAwesome name={isMuted ? "volume-off" : "volume-up"} size={32} color="black" />
+          <FontAwesome name={isMuted ? "volume-off" : "volume-up"} size={32} color="white" />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => handleSwipe("right")} style={styles.button}>
           <FontAwesome name="thumbs-up" size={32} color="green" />
@@ -215,6 +243,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: colours.background,
   },
   gradientContainer: {
     ...StyleSheet.absoluteFillObject,
@@ -223,10 +252,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   card: {
+    borderColor: "red", borderWidth: 2,
     width: '90%',
     margin: 10,
     padding: 10,
-    backgroundColor: '#d1f5f6',
+    backgroundColor: colours.foreground,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -238,8 +268,8 @@ const styles = StyleSheet.create({
     height: '60%',
   },
   image: {
-    width: 200,
-    height: 200,
+    width: 280,
+    height: 280,
     resizeMode: "cover",
     borderRadius: 10,
   },
@@ -247,11 +277,18 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     marginTop: 10,
+    color: colours.white
+  },
+  mainText: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: colours.white
   },
   artist: {
     fontSize: 18,
     color: "#666",
     marginTop: 5,
+    color: colours.white
   },
   buttonsContainer: {
     flexDirection: "row",

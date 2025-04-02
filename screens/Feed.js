@@ -14,7 +14,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  Animated
+  Animated,
+  ActivityIndicator
 } from "react-native";
 import Toast from 'react-native-toast-message';
 import { TapGestureHandler, GestureHandlerRootView, State } from "react-native-gesture-handler";
@@ -45,6 +46,7 @@ export default function Feed({ navigation, route }) {
   // -------------------------------------------------------------------------
   //  State
   // -------------------------------------------------------------------------
+  const [isLoading, setIsLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [combinedFeed, setCombinedFeed] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -182,6 +184,7 @@ export default function Feed({ navigation, route }) {
 // -------------------------------------------------------------------------
 const fetchInitialFeed = async (refresh) => {
   try {
+    setIsLoading(true);
     // Fetch timeline items and recommendations
     const timelineItems = await fetchTimeline(0, refresh);
     const recs = await fetchRecommendations(0, refresh);
@@ -242,6 +245,8 @@ const fetchInitialFeed = async (refresh) => {
     setCombinedFeed(combinedItems);
   } catch (err) {
     console.error("[ERROR] fetchInitialFeed ->", err);
+  } finally {
+    setIsLoading(false);
   }
 };
 
@@ -787,6 +792,10 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
       const itemInfo = item.item_info || {};
       const displayName = itemInfo.name || itemInfo.title || "Unknown Title";
       const imageUri = itemInfo.image || itemInfo.coverArt || "https://via.placeholder.com/250";
+      if(itemInfo.type == "track")
+      {
+        console.log("Album Title for friend review: ", itemInfo.album.title)
+      }
       return (
         <TouchableWithoutFeedback onPress={() => handleTap(item)}>
           <View style={[styles.card, getCardBorderStyle(item)]}>
@@ -899,6 +908,10 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
     // Branch 2: Share or enriched timeline items
     if (item.class === "share") {
       const itemInfo = item.item_info || {};
+      if(itemInfo.type == "track")
+      {
+        console.log("Album Title for share: ", itemInfo.album.title)
+      }
       const topReview = itemInfo.topReview || {};
       const displayName = itemInfo.name || itemInfo.title || "Unknown Title";
       const imageUri = itemInfo.image || itemInfo.coverArt || "https://via.placeholder.com/250";
@@ -1011,6 +1024,9 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
     const isArtist = item.type === "artist";
     const displayName = item.name || "Unknown Title";
     const topReview = item.topReview || {};
+    const albumName = isArtist
+      ? ''
+      : item.album.title
     const subText = isArtist
       ? item.artistId
         ? `ID: ${item.artistId}`
@@ -1087,6 +1103,7 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
           </View>
           <View style={styles.cardContent}>
             <Text style={styles.postTitle}>{displayName}</Text>
+            {albumName ? <Text style={styles.postAlbum}>{albumName}</Text> : null}
             {subText ? <Text style={styles.postArtist}>{subText}</Text> : null}
             {topReview && Object.keys(topReview).length > 0 && (
               <View style={styles.reviewContainer}>
@@ -1225,6 +1242,9 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
       {/* MAIN CONTENT: FEED */}
       <View style={styles.content}>
         <Text style={styles.header}>Recent Feed</Text>
+        {isLoading ? (
+            <ActivityIndicator size="large" color="white" />
+        ) : (
         <FlatList
           data={combinedFeed}
           renderItem={renderFeedItem}
@@ -1262,14 +1282,15 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
             itemVisiblePercentThreshold: 100,
           }}
         />
+        )}
       </View>
       {/* CREATE POST BUTTON */}
-      <TouchableOpacity
+      {/* <TouchableOpacity
         style={styles.addPostButton}
         onPress={() => navigation.navigate("CreatePost")}
       >
         <Image source={require("../images/addPost.png")} style={styles.addPostIcon} />
-      </TouchableOpacity>
+      </TouchableOpacity> */}
       {/* BOTTOM NAV BAR */}
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
@@ -1491,6 +1512,8 @@ const styles = StyleSheet.create({
   },
 
   postAlbum: {
+
+    textAlign: "center" ,
 
     fontSize: 16,
 

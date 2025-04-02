@@ -82,6 +82,31 @@ export default function ArtistPage({ route, navigation }) {
     setUsers(reqReviews.users);
   }
 
+  const tapTimerRef = useRef(null);
+  const DOUBLE_TAP_DELAY = 300; // ms
+
+  // This function is called on every tap
+  const handleTap = () => {
+    if (tapTimerRef.current) {
+      // Second tap detected
+      clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = null;
+      handleDoubleTap();
+    } else {
+      // First tap detected
+      tapTimerRef.current = setTimeout(() => {
+        tapTimerRef.current = null;
+        // single tap would go here, if you needed it
+        // e.g. open details, etc.
+      }, DOUBLE_TAP_DELAY);
+    }
+  };
+
+  // 2) Action for a double tap
+  const handleDoubleTap = () => {
+    handleLikeArtist(); // Use your existing like function
+  };
+
   useEffect(() => {
     async function checkLikeStatus() {
       try {
@@ -339,7 +364,7 @@ export default function ArtistPage({ route, navigation }) {
   if (!artist) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#4CAF50" />
+        <ActivityIndicator size="large" color="white" />
         <Text style={styles.errorText}>No artist data found.</Text>
       </View>
     );
@@ -435,6 +460,7 @@ export default function ArtistPage({ route, navigation }) {
         data={getSortedReviews()}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
+          <TouchableWithoutFeedback onPress={handleTap}>
           <View style={styles.card}>
             <View style={styles.cardInformation}>
               <View style={styles.titleContainer}>
@@ -471,17 +497,25 @@ export default function ArtistPage({ route, navigation }) {
             <Text style={styles.title}>{artist.name || "Unknown Artist"}</Text>
             
             <TouchableOpacity onPress={() => {navigateToListenablePage("track")}}>
-              <ListItem style={{ marginTop: 20}}>
+              <ListItem containerStyle={{
+                borderRadius: 10,
+                overflow: 'hidden',
+                marginTop: 20
+                }}>
                 <Icon name="audiotrack" size={20} />
                 <ListItem.Content>
-                  <ListItem.Title>Songs</ListItem.Title>
+                  <ListItem.Title style={{ borderRadius: 10}}>Songs</ListItem.Title>
                 </ListItem.Content>
                 <ListItem.Chevron />
               </ListItem>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => {navigateToListenablePage("album")}}>
-              <ListItem style={{ marginTop: 20}}>
+              <ListItem containerStyle={{
+                  borderRadius: 10,
+                  overflow: 'hidden',
+                  marginTop: 20
+                  }}>
                 <Icon name="album" size={20} />
                 <ListItem.Content>
                   <ListItem.Title>Albums</ListItem.Title>
@@ -569,6 +603,7 @@ export default function ArtistPage({ route, navigation }) {
               )}
             </View>
           </View>
+          </TouchableWithoutFeedback>
         }
         renderItem={({ item }) => {
           let avatar = users.filter((u) => u.userId === item.userId)[0].avatarLong;

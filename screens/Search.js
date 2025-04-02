@@ -258,7 +258,9 @@ export default function Search({ navigation, route }) {
           <SafeAreaView>
             <ScrollView>
               {!searchResult ? (
-                <ActivityIndicator size="large" color="#4CAF50" />
+                <View style={styles.loaderContainer}>
+                  <ActivityIndicator size="large" color="white" />
+                </View>
               ) : (
                 <View key="searchResults" style={{ paddingBottom: 50 }}>
                   {/* Filter Chips */}
@@ -498,5 +500,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 20,
     marginVertical: 10,
+  },
+  loaderContainer: {
+    marginTop: 10,
   },
 });

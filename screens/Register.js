@@ -166,7 +166,7 @@ export default function Register({ navigation }) {
         ]}
         onPress={() => navigation.navigate("Login")}
       >
-        <Text style={styles.buttonText}>Back to Login</Text>
+        <Text style={styles.altButtonText}>Back to Login</Text>
       </TouchableOpacity>
     </View>
   );
@@ -214,5 +214,10 @@ const styles = StyleSheet.create({
     color: "#FFFFFF", // White text
     fontSize: 16, // Font size
     fontWeight: "bold", // Optional bold text
+  },
+  altButtonText: {
+    color: "black",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });

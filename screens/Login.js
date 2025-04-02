@@ -111,7 +111,7 @@ export default function Login({ navigation }) {
         style={[styles.button, { backgroundColor: colours.secondaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("ForgotPassword")}
       >
-        <Text style={styles.buttonText}>Forgot Password?</Text>
+        <Text style={styles.altButtonText}>Forgot Password?</Text>
       </TouchableOpacity>
     </View>
   );
@@ -160,6 +160,11 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  altButtonText: {
+    color: "black",
     fontSize: 16,
     fontWeight: "bold",
   },
