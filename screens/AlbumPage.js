@@ -476,7 +476,7 @@ export default function AlbumPage({ route, navigation }) {
     : require("../images/albumImage.jpg");
 
   return (
-    <KeyboardAvoidingView
+    <View
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={10} // adjust this value as needed
@@ -780,7 +780,7 @@ export default function AlbumPage({ route, navigation }) {
       <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
