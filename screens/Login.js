@@ -173,4 +173,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: "center",
   },
+  altText: {
+    color: "black", // White text
+    fontSize: 16, // Font size
+    fontWeight: "bold", // Optional bold text
+  },
+  
 });

@@ -69,7 +69,7 @@ export default function Home({ navigation }) {
         style={[styles.button, { backgroundColor: colours.secondaryblue, opacity: 0.7 }]}
         onPress={() => navigation.navigate("Welcome")}
       >
-        <Text style={styles.buttonText}>Restart App</Text>
+        <Text style={styles.altText}>Restart App</Text>
       </TouchableOpacity>
     </View>
   );
@@ -143,5 +143,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 20,
     textAlign: "center",
+  },
+  altText: {
+    color: "black", // White text
+    fontSize: 16, // Font size
+    fontWeight: "bold", // Optional bold text
   },
 });
