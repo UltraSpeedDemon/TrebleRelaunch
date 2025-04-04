@@ -52,6 +52,11 @@ Prior to running make sure to have a local NGROK configuration set up https://ng
    ```
 
 ### Running the Project
+1. Run Ngrok:
+   ```bash
+   ngrok http --url={your URL}.app 80
+
+   ```
 1. Start the project:
    ```bash
    npm start
