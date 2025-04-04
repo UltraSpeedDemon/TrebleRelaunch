@@ -21,6 +21,7 @@ Treble is a music review and social networking application that allows users to 
 - Expo CLI
 
 ### Installation
+Prior to running make sure to have a local NGROK configuration set up https://ngrok.com/
 1. Clone the repository:
    ```bash
    git clone https://github.com/TeamBass/Treble.git
