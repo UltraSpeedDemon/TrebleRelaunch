@@ -84,7 +84,15 @@ const Sidebar = () => {
   useEffect(() => {
     async function fetchNotificationsCount() {
       try {
-        const resp = await getFollowRequests(auth.currentUser.uid);
+        const currentUser = auth.currentUser;
+
+        if (!currentUser) {
+          setNotificationsCount(0);
+          return;
+        }
+
+        const resp = await getFollowRequests(currentUser.uid);
+
         if (resp.ok) {
           const requests = await resp.json();
           setNotificationsCount(requests.length);
@@ -93,6 +101,7 @@ const Sidebar = () => {
         console.error("Error fetching notifications count:", error);
       }
     }
+
     fetchNotificationsCount();
   }, []);
 

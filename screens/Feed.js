@@ -175,7 +175,7 @@ export default function Feed({ navigation, route }) {
   useEffect(() => {
     if (!fetchedInitial.current) {
       fetchedInitial.current = true;
-      fetchInitialFeed(refresh = false);
+      fetchInitialFeed(false);
     }
   }, []);
 
@@ -380,8 +380,12 @@ const loadMoreTimeline = async () => {
   // -------------------------------------------------------------------------
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchInitialFeed(refresh = true);
-    setRefreshing(false);
+
+    try {
+      await fetchInitialFeed(true);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const [likeLoading, setLikeLoading] = useState({}); // keys are song IDs

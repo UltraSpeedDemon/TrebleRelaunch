@@ -9,7 +9,11 @@ export async function serverGet(endpoint, params = null) {
       const urlParams = new URLSearchParams(params).toString();
       url += `?${urlParams}`;
     }
-    return await fetch(url); // no parse here, let caller .json()
+    return await fetch(url, {
+      headers: {
+        "ngrok-skip-browser-warning": "true",
+      },
+  });
   } catch (e) {
     console.error(e);
   }
@@ -19,7 +23,10 @@ export async function serverPost(endpoint, body) {
   try {
     return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
       body: JSON.stringify(body),
     });
   } catch (e) {
@@ -31,7 +38,10 @@ export async function serverPut(endpoint, body) {
   try {
     return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
       body: JSON.stringify(body),
     });
   } catch (e) {
@@ -43,7 +53,10 @@ export async function serverDelete(endpoint, body) {
   try {
     return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
       body: JSON.stringify(body),
     });
   } catch (e) {
@@ -316,13 +329,22 @@ export async function getArtistAlbums(artist_id, page) {
 //#endregion
 
 export function getServerEndpointBase() {
-  console.log("API_TUNNEL_URL", process.env.API_TUNNEL_URL)
-  if (process.env.NODE_ENV === "development") {
-      return process.env.API_TUNNEL_URL ? process.env.API_TUNNEL_URL : `https://127.0.0.1:5000`;
+  const tunnelUrl = process.env.EXPO_PUBLIC_API_TUNNEL_URL;
+  const productionUrl = process.env.EXPO_PUBLIC_API_URL;
+
+  console.log("API endpoint:", tunnelUrl || productionUrl);
+
+  if (__DEV__) {
+    if (!tunnelUrl) {
+      console.warn(
+        "EXPO_PUBLIC_API_TUNNEL_URL is missing from the .env file"
+      );
+    }
+
+    return tunnelUrl || "http://10.0.0.80:5000";
   }
-  else {
-      return `https://${process.env.API_URL}`;
-  }
+
+  return productionUrl;
 }
 
 

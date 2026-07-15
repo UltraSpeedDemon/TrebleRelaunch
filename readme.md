@@ -1,557 +1,285 @@
-# Treble
+# Treble Relaunch
 
-## Table of Contents
-1. Project Overview
-2. Getting Started
-3. Project Structure
-4. Branching Strategy
-5. Commit Message Guidelines
-6. Pull Request Process
-7. Useful Git Commands
-8. Contributing
-9. License
+Treble is a music review and social networking application built with Expo and React Native. Users can explore music, create reviews, follow other users, comment, like content, and receive recommendations.
 
-## Project Overview
-Treble is a music review and social networking application that allows users to explore, review, and share their favorite music tracks, albums, and artists. Users can interact with each other by following, commenting, and upvoting reviews.
+This relaunch repository contains both:
 
-## Getting Started
-### Prerequisites
+- the Expo mobile/web frontend;
+- a Node.js/Express backend in `backend/`.
+
+## Repository
+
+```text
+https://github.com/UltraSpeedDemon/TrebleRelaunch.git
+```
+
+## Requirements
+
+Install these before starting:
+
 - Node.js
-- npm or yarn
-- Expo CLI
+- npm
+- Expo Go on your phone
+- an ngrok account
+- access to the TrebleRelaunch Firebase project
 
-### Installation
-Prior to running make sure to have a local NGROK configuration set up https://ngrok.com/
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/TeamBass/Treble.git
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd Treble
-   ```
-3. Install the dependencies:
-   ```bash
-   npm install
-   ```
-4. Set up the .env file in the root directory with the following variables:
-   ```
-   FIREBASE_API_KEY=your_api_key
-   FIREBASE_AUTH_DOMAIN=your_auth_domain
-   FIREBASE_PROJECT_ID=your_project_id
-   FIREBASE_STORAGE_BUCKET=your_storage_bucket
-   FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-   FIREBASE_APP_ID=your_app_id
+## Clone and install
 
-   SPOTIFY_CLIENT_ID=your_client_id
-   SPOTIFY_CLIENT_SECRET=your_client_secret
-   SPOTIFY_REDIRECT_URI=your_redirect_uri
-   SPOTIFY_SCOPE="user-read-private user-read-email user-read-playback-state user-modify-playback-state"
-   API_TUNNEL_URL="URL_FROM_NGROK"
-   API_URL="ONLY IF DEPLOYING INTO NON-DEV ENVIRONMENT [STAGING, PROD]"
-   ```
-
-### Running the Project
-1. Run Ngrok:
-   ```bash
-   ngrok http --url={your URL}.app 80
-
-   ```
-1. Start the project:
-   ```bash
-   npm start
-   ```
-   If you encounter issues, try:
-   ```bash
-   npm start -- --reset-cache --clear
-   ```
-2. Open the project using the Expo Go app on your phone or emulator. Scan the QR code generated in the terminal or enter the URL underneath the QR code into your phone's browser.
-
-## Project Structure
-- assets - Contains images and other assets used in the project
-- components - Contains all the components used in the project
-- screens - Contains all the screens used in the project
-- utils - Contains utility functions used throughout the project
-- App.js - The main file that runs the app
-- app.json - Contains the configuration for the app
-- babel.config.js - Contains the configuration for Babel
-- package.json - Contains the dependencies and scripts used in the project
-- package-lock.json - Contains the exact versions of the dependencies used in the project
-- README.md - Contains the instructions for running the project
-
-## Branching Strategy
-### Main Branches
-- **`main`**: Contains production-ready code. No direct commits or merges are allowed.
-- **`develop`**: Integration branch for ongoing development. All feature branches should be merged into `develop`.
-
-### Supporting Branches
-- **`feature/`**: Used for developing new features.  
-  _Example:_ `feature/user-authentication`
-- **`bugfix/`**: Used for fixing bugs.  
-  _Example:_ `bugfix/login-error`
-- **`documentation/`**: Used for updating or adding documentation.  
-  _Example:_ `documentation/api-endpoints`
-- **`hotfix/`**: Used for urgent fixes directly related to production issues.  
-  _Example:_ `hotfix/critical-bug`
-
-### Branching Workflow
-1. **Create a new branch** off `develop`:
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git checkout -b feature/your-feature-name
-   ```
-2. **Commit changes** with clear, concise messages.
-3. **Push your branch** to the remote repository:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-4. **Create a Pull Request (PR)** into `develop`.
-
-## Commit Message Guidelines
-### Writing Style for Commits
-- **Tense:** Use the imperative mood (e.g., "Add feature" instead of "Added" or "Adding").
-- **Tone:** Keep messages clear, concise, and specific. Avoid vague statements.
-- **Scope:** Ensure each commit addresses a single, focused change. Break larger changes into multiple commits when necessary.
-
-### Commit Message Format
-```
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-```
-- **`type`**: Describes the category of the change (e.g., feat, fix).
-- **`scope`**: Specifies the part of the codebase affected (e.g., auth, api).
-- **`subject`**: A brief, imperative statement summarizing the change.
-
-### Commit Types
-- **feat**: New feature
-- **fix**: Bug fix
-- **docs**: Documentation updates
-- **style**: Code style changes (formatting, missing semicolons, etc.)
-- **refactor**: Code changes that neither fix a bug nor add a feature
-- **chore**: Maintenance tasks (build process, dependencies)
-
-### Example Commit
-```
-feat(auth): add JWT authentication
-
-Implement JWT authentication for user login and registration.
-
-Closes #42
+```powershell
+cd C:\Users\ethan\Desktop\GitHub
+git clone https://github.com/UltraSpeedDemon/TrebleRelaunch.git
+cd TrebleRelaunch
 ```
 
-## Pull Request Process
-1. **Ensure your branch is up-to-date** with `develop`:
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git checkout feature/your-feature-name
-   git merge develop
-   ```
-2. **Push your branch** if needed:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-3. **Open a Pull Request (PR)** into `develop`.
-4. **Request at least one team member's review**.
-5. **Use the 'Squash and Merge' option** after approval to combine commits.
+Install the frontend dependencies:
 
-## Useful Git Commands
-- **Clone a repository**:
-  ```bash
-  git clone <repository-url>
-  ```
-- **Create a new branch**:
-  ```bash
-  git checkout -b <branch-name>
-  ```
-- **Switch to an existing branch**:
-  ```bash
-  git checkout <branch-name>
-  ```
-- **Commit changes**:
-  ```bash
-  git commit -m "commit message"
-  ```
-- **Push changes to remote**:
-  ```bash
-  git push origin <branch-name>
-  ```
-- **Pull latest changes**:
-  ```bash
-  git pull origin <branch-name>
-  ```
+```powershell
+$env:npm_config_legacy_peer_deps="true"
+npm install
+Remove-Item Env:\npm_config_legacy_peer_deps
+```
 
-## Contributing
-We welcome contributions from the community. Please read our Contributing Guidelines for more details.
+Install the backend dependencies:
 
-## License
-This project is licensed under the MIT License. See the LICENSE file for details.
+```powershell
+cd backend
+npm install
+cd ..
+```
 
-Aleks4920: give me the markdown so i can put it in a file
+## Firebase setup
 
-GitHub Copilot: Here is the Markdown content for your README file:
+The mobile app uses Firebase Authentication. The backend uses Firebase Admin and Firestore.
 
-```markdown
-# Treble
+### Root `.env`
 
-## Table of Contents
-1. [Project Overview](#project-overview)
-2. [Getting Started](#getting-started)
-3. [Project Structure](#project-structure)
-4. [Branching Strategy](#branching-strategy)
-5. [Commit Message Guidelines](#commit-message-guidelines)
-6. [Pull Request Process](#pull-request-process)
-7. [Useful Git Commands](#useful-git-commands)
-8. [Contributing](#contributing)
-9. [License](#license)
+Create `.env` in the repository root beside the main `package.json`:
 
-## Project Overview
-Treble is a music review and social networking application that allows users to explore, review, and share their favorite music tracks, albums, and artists. Users can interact with each other by following, commenting, and upvoting reviews.
+```env
+EXPO_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=treblerelaunch.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=treblerelaunch
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=treblerelaunch.firebasestorage.app
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+EXPO_PUBLIC_FIREBASE_APP_ID=your_app_id
 
-## Getting Started
-### Prerequisites
+EXPO_PUBLIC_SPOTIFY_CLIENT_ID=your_spotify_client_id
+EXPO_PUBLIC_SPOTIFY_REDIRECT_URI=your_redirect_uri
+EXPO_PUBLIC_SPOTIFY_SCOPE="user-read-private user-read-email user-read-playback-state user-modify-playback-state"
+
+EXPO_PUBLIC_API_TUNNEL_URL=https://your-ngrok-domain.ngrok-free.app
+EXPO_PUBLIC_API_URL=
+```
+
+Do not place a Spotify client secret in an `EXPO_PUBLIC_` variable. Public Expo environment variables are included in the client application.
+
+### Backend `.env`
+
+Create `backend/.env`:
+
+```env
+PORT=5000
+```
+
+### Firebase service account
+
+Download a new Firebase Admin service-account key and save it as:
+
+```text
+backend/firebase-service-account.json
+```
+
+Never commit this file. It must remain ignored by Git.
+
+The backend `.gitignore` should include:
+
+```gitignore
+node_modules/
+.env
+firebase-service-account.json
+```
+
+## ngrok setup
+
+Authenticate the ngrok agent once:
+
+```powershell
+npx ngrok config add-authtoken YOUR_NGROK_AUTHTOKEN
+```
+
+Do not commit or share the authtoken.
+
+The project startup script opens ngrok automatically. The free ngrok plan may generate a different URL each time. When it changes, update:
+
+```env
+EXPO_PUBLIC_API_TUNNEL_URL=https://new-address.ngrok-free.app
+```
+
+Then restart Expo so it reloads the environment variable.
+
+## Start everything
+
+Run this command from the repository root:
+
+```powershell
+npm start
+```
+
+The startup script launches:
+
+1. the backend on `http://localhost:5000`;
+2. an ngrok tunnel to port `5000`;
+3. Expo in tunnel mode with a QR code.
+
+Three windows will appear:
+
+```text
+Backend  -> Node/Express API
+ngrok    -> Public HTTPS tunnel
+Expo     -> Metro bundler and QR code
+```
+
+Scan the Expo QR code using Expo Go.
+
+To stop everything, close the spawned backend and ngrok windows and press `Ctrl + C` in the Expo terminal.
+
+## Test the backend
+
+Local test:
+
+```powershell
+Invoke-RestMethod http://localhost:5000/test
+```
+
+Expected response:
+
+```text
+ok      : True
+message : Treble backend is running
+```
+
+Public ngrok test:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "https://your-ngrok-domain.ngrok-free.app/test" `
+  -Headers @{ "ngrok-skip-browser-warning" = "true" }
+```
+
+## Useful commands
+
+Start everything:
+
+```powershell
+npm start
+```
+
+Start only Expo:
+
+```powershell
+npx expo start --tunnel --clear
+```
+
+Start only the backend:
+
+```powershell
+npm --prefix backend run dev
+```
+
+Start only ngrok:
+
+```powershell
+npx ngrok http 5000
+```
+
+Run Expo Doctor:
+
+```powershell
+npx expo-doctor
+```
+
+Clear the Expo cache:
+
+```powershell
+npx expo start --clear
+```
+
+## Project structure
+
+```text
+TrebleRelaunch/
+├── backend/                 Node.js and Express API
+│   ├── server.js
+│   ├── package.json
+│   ├── .env
+│   └── firebase-service-account.json
+├── assets/                  Expo assets and fonts
+├── components/              Shared React Native components
+├── hooks/                   Shared hooks
+├── images/                  Application images
+├── providers/               REST API client
+├── screens/                 Application screens
+├── styles/                  Shared styling
+├── utils/                   Firebase, sessions, Spotify utilities
+├── App.js                   Main application component
+├── app.json                 Expo configuration
+├── package.json             Frontend scripts and dependencies
+├── start-all.ps1            Starts backend, ngrok, and Expo
+└── README.md
+```
+
+## Current technology
+
+- Expo SDK 54
+- React 19
+- React Native 0.81
+- Firebase Authentication
+- Firebase Admin
+- Firestore
 - Node.js
-- npm or yarn
-- Expo CLI
+- Express
+- ngrok
 
-### Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/TeamBass/Treble.git
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd Treble
-   ```
-3. Install the dependencies:
-   ```bash
-   npm install
-   ```
-4. Set up the `.env` file in the root directory with the following variables:
-   ```
-   FIREBASE_API_KEY=your_api_key
-   FIREBASE_AUTH_DOMAIN=your_auth_domain
-   FIREBASE_PROJECT_ID=your_project_id
-   FIREBASE_STORAGE_BUCKET=your_storage_bucket
-   FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-   FIREBASE_APP_ID=your_app_id
+## Known migration notes
 
-   SPOTIFY_CLIENT_ID=your_client_id
-   SPOTIFY_CLIENT_SECRET=your_client_secret
-   SPOTIFY_REDIRECT_URI=your_redirect_uri
-   SPOTIFY_SCOPE="user-read-private user-read-email user-read-playback-state user-modify-playback-state"
-   API_TUNNEL_URL="URL_FROM_NGROK"
-   API_URL="ONLY IF DEPLOYING INTO NON-DEV ENVIRONMENT [STAGING, PROD]"
-   ```
+The application was originally connected to an OrientDB-based API. The relaunch backend is being rebuilt with Firebase Admin and Firestore. Some old frontend error messages and API assumptions may still reference OrientDB and must be updated as endpoints are migrated.
 
-### Running the Project
-1. Start the project:
-   ```bash
-   npm start
-   ```
-   If you encounter issues, try:
-   ```bash
-   npm start -- --reset-cache --clear
-   ```
-2. Open the project using the Expo Go app on your phone or emulator. Scan the QR code generated in the terminal or enter the URL underneath the QR code into your phone's browser.
+`expo-av` is deprecated and should eventually be replaced with `expo-audio` and `expo-video`.
 
-## Project Structure
-- `assets/` - Contains images and other assets used in the project
-- `components/` - Contains all the components used in the project
-- `screens/` - Contains all the screens used in the project
-- `utils/` - Contains utility functions used throughout the project
-- `App.js` - The main file that runs the app
-- `app.json` - Contains the configuration for the app
-- `babel.config.js` - Contains the configuration for Babel
-- `package.json` - Contains the dependencies and scripts used in the project
-- `package-lock.json` - Contains the exact versions of the dependencies used in the project
-- `README.md` - Contains the instructions for running the project
+Some older React Native packages may require replacement before a future Expo SDK upgrade.
 
-## Branching Strategy
-### Main Branches
-- **`main`**: Contains production-ready code. No direct commits or merges are allowed.
-- **`develop`**: Integration branch for ongoing development. All feature branches should be merged into `develop`.
+## Git workflow
 
-### Supporting Branches
-- **`feature/`**: Used for developing new features.  
-  _Example:_ `feature/user-authentication`
-- **`bugfix/`**: Used for fixing bugs.  
-  _Example:_ `bugfix/login-error`
-- **`documentation/`**: Used for updating or adding documentation.  
-  _Example:_ `documentation/api-endpoints`
-- **`hotfix/`**: Used for urgent fixes directly related to production issues.  
-  _Example:_ `hotfix/critical-bug`
+Create a branch:
 
-### Branching Workflow
-1. **Create a new branch** off `develop`:
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git checkout -b feature/your-feature-name
-   ```
-2. **Commit changes** with clear, concise messages.
-3. **Push your branch** to the remote repository:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-4. **Create a Pull Request (PR)** into `develop`.
-
-## Commit Message Guidelines
-### Writing Style for Commits
-- **Tense:** Use the imperative mood (e.g., "Add feature" instead of "Added" or "Adding").
-- **Tone:** Keep messages clear, concise, and specific. Avoid vague statements.
-- **Scope:** Ensure each commit addresses a single, focused change. Break larger changes into multiple commits when necessary.
-
-### Commit Message Format
-```
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-```
-- **`type`**: Describes the category of the change (e.g., feat, fix).
-- **`scope`**: Specifies the part of the codebase affected (e.g., auth, api).
-- **`subject`**: A brief, imperative statement summarizing the change.
-
-### Commit Types
-- **feat**: New feature
-- **fix**: Bug fix
-- **docs**: Documentation updates
-- **style**: Code style changes (formatting, missing semicolons, etc.)
-- **refactor**: Code changes that neither fix a bug nor add a feature
-- **chore**: Maintenance tasks (build process, dependencies)
-
-### Example Commit
-```
-feat(auth): add JWT authentication
-
-Implement JWT authentication for user login and registration.
-
-Closes #42
+```powershell
+git checkout -b feature/your-feature-name
 ```
 
-## Pull Request Process
-1. **Ensure your branch is up-to-date** with `develop`:
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git checkout feature/your-feature-name
-   git merge develop
-   ```
-2. **Push your branch** if needed:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-3. **Open a Pull Request (PR)** into `develop`.
-4. **Request at least one team member's review**.
-5. **Use the 'Squash and Merge' option** after approval to combine commits.
+Save and push changes:
 
-## Useful Git Commands
-- **Clone a repository**:
-  ```bash
-  git clone <repository-url>
-  ```
-- **Create a new branch**:
-  ```bash
-  git checkout -b <branch-name>
-  ```
-- **Switch to an existing branch**:
-  ```bash
-  git checkout <branch-name>
-  ```
-- **Commit changes**:
-  ```bash
-  git commit -m "commit message"
-  ```
-- **Push changes to remote**:
-  ```bash
-  git push origin <branch-name>
-  ```
-- **Pull latest changes**:
-  ```bash
-  git pull origin <branch-name>
-  ```
-
-## Contributing
-We welcome contributions from the community. Please read our [Contributing Guidelines](CONTRIBUTING.md) for more details.
-
-## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+```powershell
+git add .
+git commit -m "feat: describe the change"
+git push -u origin feature/your-feature-name
 ```
 
-Aleks4920: try again, that wasnt markdown
+The private relaunch repository is configured as `origin`. The original TeamBass repository may remain configured as `upstream`.
 
-GitHub Copilot: Here is the Markdown content for your README file:
+Check remotes:
 
-# Treble
+```powershell
+git remote -v
+```
 
-## Table of Contents
-1. Project Overview
-2. Getting Started
-3. Project Structure
-4. Branching Strategy
-5. Commit Message Guidelines
-6. Pull Request Process
-7. Useful Git Commands
-8. Contributing
-9. License
+## Security
 
-## Project Overview
-Treble is a music review and social networking application that allows users to explore, review, and share their favorite music tracks, albums, and artists. Users can interact with each other by following, commenting, and upvoting reviews.
+Never commit:
 
-## Getting Started
-### Prerequisites
-- Node.js
-- npm or yarn
-- Expo CLI
+- `.env` files;
+- Firebase Admin service-account JSON files;
+- ngrok authtokens;
+- Spotify client secrets;
+- production database credentials.
 
-### Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/TeamBass/Treble.git
-   ```
-2. Navigate to the project directory:
-   ```bash
-   cd Treble
-   ```
-3. Install the dependencies:
-   ```bash
-   npm install
-   ```
-4. Set up the .env file in the root directory with the following variables:
-   ```
-   FIREBASE_API_KEY=your_api_key
-   FIREBASE_AUTH_DOMAIN=your_auth_domain
-   FIREBASE_PROJECT_ID=your_project_id
-   FIREBASE_STORAGE_BUCKET=your_storage_bucket
-   FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-   FIREBASE_APP_ID=your_app_id
-
-   SPOTIFY_CLIENT_ID=your_client_id
-   SPOTIFY_CLIENT_SECRET=your_client_secret
-   SPOTIFY_REDIRECT_URI=your_redirect_uri
-   SPOTIFY_SCOPE="user-read-private user-read-email user-read-playback-state user-modify-playback-state"
-   API_TUNNEL_URL="URL_FROM_NGROK"
-   API_URL="ONLY IF DEPLOYING INTO NON-DEV ENVIRONMENT [STAGING, PROD]"
-   ```
-
-### Running the Project
-1. Start the project:
-   ```bash
-   npm start
-   ```
-   If you encounter issues, try:
-   ```bash
-   npm start -- --reset-cache --clear
-   ```
-2. Open the project using the Expo Go app on your phone or emulator. Scan the QR code generated in the terminal or enter the URL underneath the QR code into your phone's browser.
-
-## Project Structure
-- assets - Contains images and other assets used in the project
-- components - Contains all the components used in the project
-- screens - Contains all the screens used in the project
-- utils - Contains utility functions used throughout the project
-- App.js - The main file that runs the app
-- app.json - Contains the configuration for the app
-- babel.config.js - Contains the configuration for Babel
-- package.json - Contains the dependencies and scripts used in the project
-- package-lock.json - Contains the exact versions of the dependencies used in the project
-- README.md - Contains the instructions for running the project
-
-## Branching Strategy
-### Main Branches
-- **`main`**: Contains production-ready code. No direct commits or merges are allowed.
-- **`develop`**: Integration branch for ongoing development. All feature branches should be merged into `develop`.
-
-### Supporting Branches
-- **`feature/`**: Used for developing new features.  
-  _Example:_ `feature/user-authentication`
-- **`bugfix/`**: Used for fixing bugs.  
-  _Example:_ `bugfix/login-error`
-- **`documentation/`**: Used for updating or adding documentation.  
-  _Example:_ `documentation/api-endpoints`
-- **`hotfix/`**: Used for urgent fixes directly related to production issues.  
-  _Example:_ `hotfix/critical-bug`
-
-### Branching Workflow
-1. **Create a new branch** off `develop`:
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git checkout -b feature/your-feature-name
-   ```
-2. **Commit changes** with clear, concise messages.
-3. **Push your branch** to the remote repository:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-4. **Create a Pull Request (PR)** into `develop`.
-
-## Commit Message Guidelines
-### Writing Style for Commits
-- **Tense:** Use the imperative mood (e.g., "Add feature" instead of "Added" or "Adding").
-- **Tone:** Keep messages clear, concise, and specific. Avoid vague statements.
-- **Scope:** Ensure each commit addresses a single, focused change. Break larger changes into multiple commits when necessary.
-
-
-### Commit Types
-- **feat**: New feature
-- **fix**: Bug fix
-- **docs**: Documentation updates
-- **style**: Code style changes (formatting, missing semicolons, etc.)
-- **refactor**: Code changes that neither fix a bug nor add a feature
-- **chore**: Maintenance tasks (build process, dependencies)
-
-
-## Pull Request Process
-1. **Ensure your branch is up-to-date** with `develop`:
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git checkout feature/your-feature-name
-   git merge develop
-   ```
-2. **Push your branch** if needed:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-3. **Open a Pull Request (PR)** into `develop`.
-4. **Request at least one team member's review**.
-5. **Use the 'Squash and Merge' option** after approval to combine commits.
-
-## Useful Git Commands
-- **Clone a repository**:
-  ```bash
-  git clone <repository-url>
-  ```
-- **Create a new branch**:
-  ```bash
-  git checkout -b <branch-name>
-  ```
-- **Switch to an existing branch**:
-  ```bash
-  git checkout <branch-name>
-  ```
-- **Commit changes**:
-  ```bash
-  git commit -m "commit message"
-  ```
-- **Push changes to remote**:
-  ```bash
-  git push origin <branch-name>
-  ```
-- **Pull latest changes**:
-  ```bash
-  git pull origin <branch-name>
-  ```
-
-## Contributing
-We welcome contributions from the community. Please read our Contributing Guidelines for more details.
-
-## License
-This project is licensed under the MIT License. See the LICENSE file for details.
+If a service-account private key is exposed, delete that key immediately in Google Cloud IAM and generate a new one.
