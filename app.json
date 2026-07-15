@@ -1,9 +1,8 @@
 {
   "expo": {
-    "scheme": "musicproject",
-    "name": "MusicAdvancedProject",
-    "slug": "musicadvancedproject",
-    "privacy": "public",
+    "scheme": "treble",
+    "name": "Treble",
+    "slug": "treble",
     "owner": "aleks4920",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,7 +11,8 @@
     "newArchEnabled": true,
     "platforms": [
       "ios",
-      "android"
+      "android",
+      "web"
     ],
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -36,6 +36,9 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }
