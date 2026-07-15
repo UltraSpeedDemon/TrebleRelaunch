@@ -29,7 +29,8 @@ import colours from "../styles/colours";
 
 export default function Search({ navigation, route }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [searchResult, setSearchResults] = useState(null);
+  const [searchResult, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(true);
   const [followingUsers, setFollowingUsers] = useState({});
   const [notificationsCount, setNotificationsCount] = useState(0);
   // Dictionary to track follow-request status per user
@@ -52,12 +53,44 @@ export default function Search({ navigation, route }) {
   // Fetch search results
   async function getSearchResults() {
     try {
-      const results = await postSearchResults(searchQuery, auth.currentUser.uid);
+      setSearchLoading(true);
+
+      if (!auth.currentUser?.uid) {
+        setSearchResults([]);
+        return;
+      }
+
+      const results = await postSearchResults(
+        searchQuery,
+        auth.currentUser.uid
+      );
+
+      if (!results) {
+        throw new Error("Search API returned no response.");
+      }
+
       const json = await results.json();
-      console.log("Search results:", json);
-      setSearchResults(json);
+
+      if (!results.ok) {
+        throw new Error(
+          json?.error || `Search failed with status ${results.status}`
+        );
+      }
+
+      const normalizedResults = Array.isArray(json)
+        ? json
+        : Array.isArray(json.searchResult)
+          ? json.searchResult
+          : Array.isArray(json.results)
+            ? json.results
+            : [];
+
+      setSearchResults(normalizedResults);
     } catch (error) {
       console.error("Error fetching search results:", error);
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
     }
   }
 
@@ -108,8 +141,7 @@ export default function Search({ navigation, route }) {
   // 1) Fetch search results on mount
   useEffect(() => {
     getSearchResults();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchQuery]);
 
   // 2) Fetch notifications count
   useEffect(() => {
@@ -224,6 +256,11 @@ export default function Search({ navigation, route }) {
   const shouldShowUser =
     !filter.songOnly && !filter.albumOnly && !filter.artistOnly;
 
+
+  const safeSearchResults = Array.isArray(searchResult)
+  ? searchResult
+  : [];
+
   return (
     <View style={styles.container}>
       {/* Search Bar */}
@@ -257,7 +294,7 @@ export default function Search({ navigation, route }) {
         <SafeAreaProvider>
           <SafeAreaView>
             <ScrollView>
-              {!searchResult ? (
+              {searchLoading ? (
                 <View style={styles.loaderContainer}>
                   <ActivityIndicator size="large" color="white" />
                 </View>
@@ -291,7 +328,7 @@ export default function Search({ navigation, route }) {
                   {shouldShowTrack && (
                     <View key="SongsView">
                       <SectionDivider title="Songs" />
-                      {searchResult.map((item) => {
+                      {safeSearchResults.map((item) => {
                         if (item.type === "track") {
                           return (
                             <MusicCard
@@ -300,7 +337,7 @@ export default function Search({ navigation, route }) {
                               image={item.image}
                               name={item.name}
                               artist={item.artist}
-                              album={item.album}
+                              album={item.albumName || item.album?.title || ""}
                               onPressCard={() =>
                                 navigation.navigate("SongPage", { track: item })
                               }
@@ -316,7 +353,7 @@ export default function Search({ navigation, route }) {
                   {shouldShowAlbum && (
                     <View key="AlbumsView">
                       <SectionDivider title="Albums" />
-                      {searchResult.map((item) => {
+                      {safeSearchResults.map((item) => {
                         if (item.type === "album") {
                           return (
                             <MusicCard
@@ -340,7 +377,7 @@ export default function Search({ navigation, route }) {
                   {shouldShowArtist && (
                     <View key="ArtistsView">
                       <SectionDivider title="Artists" />
-                      {searchResult.map((item) => {
+                      {safeSearchResults.map((item) => {
                         if (item.type === "artist") {
                           return (
                             <MusicCard
@@ -363,7 +400,7 @@ export default function Search({ navigation, route }) {
                   {shouldShowUser && (
                     <View key="UsersView">
                       <SectionDivider title="Users" />
-                      {searchResult.map((item) => {
+                      {safeSearchResults.map((item) => {
                         if (item.type === "user") {
                           const isCurrentUser = item.userId === auth.currentUser.uid;
                           const isFollowing = followingUsers.hasOwnProperty(item.userId)
