@@ -125,20 +125,40 @@ function normalizeDeezerTrack(track) {
   };
 }
 
-function createFeedItem(track, source) {
+async function createFeedItem(
+    track,
+    source,
+    userId,
+    origin = null
+) {
   const normalized = normalizeDeezerTrack(track);
+
+  let liked = false;
+
+  if (userId) {
+    const likeDoc = await db
+      .collection("likes")
+      .doc(`${userId}_track_${normalized.id}`)
+      .get();
+
+    liked = likeDoc.exists;
+  }
 
   return {
     record_id: `deezer-${source}-${normalized.id}`,
     id: normalized.id,
     listenable_id: normalized.id,
     type: "track",
-    liked: false,
+    liked,
     source,
+    origin,
 
-    item_info: normalized,
+    item_info: {
+      ...normalized,
+      liked,
+      origin,
+    },
 
-    // Compatibility with older Treble components.
     title: normalized.title,
     name: normalized.name,
     artist: normalized.artist,
@@ -163,6 +183,416 @@ function getPagination(req, defaultLimit = 20) {
       0
     ),
   };
+}
+
+function shuffleArray(items) {
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(
+      Math.random() * (index + 1)
+    );
+
+    [shuffled[index], shuffled[randomIndex]] = [
+      shuffled[randomIndex],
+      shuffled[index],
+    ];
+  }
+
+  return shuffled;
+}
+
+async function getUserLikedTrackIds(userId) {
+  const snapshot = await db
+    .collection("likes")
+    .where("userId", "==", userId)
+    .get();
+
+  return snapshot.docs
+    .map((document) => document.data())
+    .filter((item) => {
+      return (
+        String(item.type || "track") === "track" &&
+        item.musicId
+      );
+    })
+    .sort((a, b) => {
+      const firstTime =
+        a.createdAt?.toMillis?.() || 0;
+
+      const secondTime =
+        b.createdAt?.toMillis?.() || 0;
+
+      return secondTime - firstTime;
+    })
+    .map((item) => String(item.musicId));
+}
+
+async function getUserReviewSeeds(userId) {
+  const snapshot = await db
+    .collection("reviews")
+    .where("userId", "==", userId)
+    .get();
+
+  return snapshot.docs
+    .map((document) => document.data())
+    .filter((review) => {
+      const rating = Number(review.rating || 0);
+
+      return (
+        String(review.type || "track") === "track" &&
+        review.listenableId &&
+        (
+          review.hearted === true ||
+          rating >= 4
+        )
+      );
+    })
+    .sort((a, b) => {
+      /*
+       * Favourite reviews first, then highest rating,
+       * then newest review.
+       */
+      if (Boolean(b.hearted) !== Boolean(a.hearted)) {
+        return Number(Boolean(b.hearted)) -
+          Number(Boolean(a.hearted));
+      }
+
+      if (
+        Number(b.rating || 0) !==
+        Number(a.rating || 0)
+      ) {
+        return Number(b.rating || 0) -
+          Number(a.rating || 0);
+      }
+
+      const firstTime =
+        a.updatedAt?.toMillis?.() ||
+        a.createdAt?.toMillis?.() ||
+        0;
+
+      const secondTime =
+        b.updatedAt?.toMillis?.() ||
+        b.createdAt?.toMillis?.() ||
+        0;
+
+      return secondTime - firstTime;
+    })
+    .map((review) => ({
+      trackId: String(review.listenableId),
+      reason: review.hearted
+        ? "favourite"
+        : "high-rating",
+      rating: Number(review.rating || 0),
+    }));
+}
+
+async function getStoredRecommendationSeeds(userId) {
+  const snapshot = await db
+    .collection("recommendationSeeds")
+    .where("userId", "==", userId)
+    .get();
+
+  return snapshot.docs
+    .map((document) => document.data())
+    .filter((seed) => seed.musicId)
+    .sort((a, b) => {
+      const firstTime =
+        a.updatedAt?.toMillis?.() ||
+        a.createdAt?.toMillis?.() ||
+        0;
+
+      const secondTime =
+        b.updatedAt?.toMillis?.() ||
+        b.createdAt?.toMillis?.() ||
+        0;
+
+      return secondTime - firstTime;
+    });
+}
+
+async function getTrackSafely(trackId) {
+  try {
+    return await fetchDeezer(
+      `/track/${encodeURIComponent(trackId)}`
+    );
+  } catch (error) {
+    console.warn(
+      `[Recommendations] Unable to load seed track ${trackId}:`,
+      error.message
+    );
+
+    return null;
+  }
+}
+
+async function getRecommendationSeedTracks(userId) {
+  const [
+    likedTrackIds,
+    reviewSeeds,
+    storedSeeds,
+  ] = await Promise.all([
+    getUserLikedTrackIds(userId),
+    getUserReviewSeeds(userId),
+    getStoredRecommendationSeeds(userId),
+  ]);
+
+  const combinedSeeds = [];
+
+  /*
+   * Explicit recommendation seeds are added whenever the
+   * frontend calls POST /users/recommendations.
+   */
+  storedSeeds.forEach((seed) => {
+    combinedSeeds.push({
+      trackId: String(seed.musicId),
+      reason: seed.reason || "like",
+      savedName: seed.name || "",
+      savedArtistName: seed.artistName || "",
+    });
+  });
+
+  /*
+   * Favourites and 4/5-star reviews get extra influence.
+   */
+  reviewSeeds.forEach((seed) => {
+    combinedSeeds.push(seed);
+
+    if (seed.reason === "favourite") {
+      combinedSeeds.push(seed);
+    }
+
+    if (seed.rating === 5) {
+      combinedSeeds.push(seed);
+    }
+  });
+
+  likedTrackIds.forEach((trackId) => {
+    combinedSeeds.push({
+      trackId,
+      reason: "like",
+    });
+  });
+
+  const uniqueSeeds = [];
+  const usedTrackIds = new Set();
+
+  for (const seed of combinedSeeds) {
+    if (
+      !seed.trackId ||
+      usedTrackIds.has(seed.trackId)
+    ) {
+      continue;
+    }
+
+    usedTrackIds.add(seed.trackId);
+    uniqueSeeds.push(seed);
+  }
+
+  const selectedSeeds = uniqueSeeds.slice(0, 8);
+
+  const seedTracks = await Promise.all(
+    selectedSeeds.map(async (seed) => {
+      const track = await getTrackSafely(
+        seed.trackId
+      );
+
+      if (!track) {
+        return null;
+      }
+
+      return {
+        ...seed,
+        track,
+      };
+    })
+  );
+
+  return seedTracks.filter(Boolean);
+}
+
+async function getTracksFromSeed(seed, limit = 12) {
+  const seedTrack = seed.track;
+  const artistId = seedTrack.artist?.id;
+
+  if (!artistId) {
+    return [];
+  }
+
+  try {
+    /*
+     * Deezer's artist top tracks provide songs related
+     * to the user's liked/favourited/rated artist.
+     */
+    const result = await fetchDeezer(
+      `/artist/${encodeURIComponent(
+        artistId
+      )}/top?limit=${limit}`
+    );
+
+    return (result.data || []).map((track) => ({
+      track,
+      origin: {
+        type: seed.reason || "like",
+        id: String(seedTrack.id),
+        title:
+          seedTrack.title ||
+          seedTrack.title_short ||
+          seed.savedName ||
+          "a song you liked",
+        artist:
+          seedTrack.artist?.name ||
+          seed.savedArtistName ||
+          "an artist you like",
+      },
+    }));
+  } catch (error) {
+    console.warn(
+      `[Recommendations] Unable to load tracks for artist ${artistId}:`,
+      error.message
+    );
+
+    return [];
+  }
+}
+
+async function buildPersonalizedRecommendations({
+  userId,
+  limit,
+  offset,
+  refresh,
+}) {
+  const likedTrackIds = new Set(
+    await getUserLikedTrackIds(userId)
+  );
+
+  const seedTracks =
+    await getRecommendationSeedTracks(userId);
+
+  /*
+   * New users still receive a fallback feed.
+   */
+  if (seedTracks.length === 0) {
+    const fallbackOffset =
+      offset + (refresh ? 40 : 20);
+
+    const chart = await fetchDeezer(
+      `/chart/0/tracks?limit=${limit}&index=${fallbackOffset}`
+    );
+
+    return Promise.all(
+      (chart.data || []).map((track) =>
+        createFeedItem(
+          track,
+          "recommendation",
+          userId,
+          {
+            type: "discovery",
+            title: "Popular on Deezer",
+            artist: "",
+          }
+        )
+      )
+    );
+  }
+
+  const seedResults = await Promise.all(
+    seedTracks.map((seed) =>
+      getTracksFromSeed(
+        seed,
+        Math.max(limit, 10)
+      )
+    )
+  );
+
+  let candidates = seedResults.flat();
+
+  /*
+   * Refresh changes the order of personalized results.
+   */
+  if (refresh) {
+    candidates = shuffleArray(candidates);
+  }
+
+  const uniqueCandidates = [];
+  const usedRecommendationIds = new Set();
+
+  for (const candidate of candidates) {
+    const candidateId = String(
+      candidate.track?.id || ""
+    );
+
+    if (!candidateId) {
+      continue;
+    }
+
+    /*
+     * Exclude songs the user has already liked.
+     */
+    if (likedTrackIds.has(candidateId)) {
+      continue;
+    }
+
+    if (usedRecommendationIds.has(candidateId)) {
+      continue;
+    }
+
+    usedRecommendationIds.add(candidateId);
+    uniqueCandidates.push(candidate);
+  }
+
+  const page = uniqueCandidates.slice(
+    offset,
+    offset + limit
+  );
+
+  /*
+   * Fill shortages with Deezer chart tracks.
+   */
+  if (page.length < limit) {
+    const fallback = await fetchDeezer(
+      `/chart/0/tracks?limit=${
+        limit * 2
+      }&index=${20 + offset}`
+    );
+
+    for (const track of fallback.data || []) {
+      const trackId = String(track.id);
+
+      if (
+        likedTrackIds.has(trackId) ||
+        usedRecommendationIds.has(trackId)
+      ) {
+        continue;
+      }
+
+      usedRecommendationIds.add(trackId);
+
+      page.push({
+        track,
+        origin: {
+          type: "discovery",
+          title: "Popular on Deezer",
+          artist: "",
+        },
+      });
+
+      if (page.length >= limit) {
+        break;
+      }
+    }
+  }
+
+  return Promise.all(
+    page.map(({ track, origin }) =>
+      createFeedItem(
+        track,
+        "recommendation",
+        userId,
+        origin
+      )
+    )
+  );
 }
 
 app.get("/test", (req, res) => {
@@ -215,8 +645,12 @@ app.get("/users/timeline", async (req, res) => {
       `/chart/0/tracks?limit=${limit}&index=${offset}`
     );
 
-    const timeline = (chart.data || []).map((track) =>
-      createFeedItem(track, "timeline")
+    const userId = req.query.user_id;
+
+    const timeline = await Promise.all(
+      (chart.data || []).map((track) =>
+        createFeedItem(track, "timeline", userId)
+      )
     );
 
     return res.json({
@@ -240,29 +674,114 @@ app.get("/users/recommendations", async (req, res) => {
   try {
     const { limit, offset } = getPagination(req);
 
-    // Start farther down the chart so these differ from timeline items.
-    const recommendationOffset = offset + 20;
+    const userId = String(
+      req.query.user_id || ""
+    ).trim();
 
-    const chart = await fetchDeezer(
-      `/chart/0/tracks?limit=${limit}&index=${recommendationOffset}`
-    );
+    const refresh =
+      String(req.query.refresh || "false") ===
+      "true";
 
-    const recommendations = (chart.data || []).map((track) =>
-      createFeedItem(track, "recommendation")
-    );
+    if (!userId) {
+      return res.status(400).json({
+        ok: false,
+        recommendations: [],
+        error: "user_id is required.",
+      });
+    }
+
+    const recommendations =
+      await buildPersonalizedRecommendations({
+        userId,
+        limit,
+        offset,
+        refresh,
+      });
 
     return res.json({
       ok: true,
       recommendations,
       limit,
       offset,
+      personalized: true,
     });
   } catch (error) {
-    console.error("GET /users/recommendations error:", error);
+    console.error(
+      "GET /users/recommendations error:",
+      error
+    );
 
     return res.status(502).json({
       ok: false,
       recommendations: [],
+      error: error.message,
+    });
+  }
+});
+
+app.post("/users/recommendations", async (req, res) => {
+  try {
+    const {
+      user_id,
+      music_id,
+      type = "track",
+      name = "",
+      artist_name = "",
+      reason = "like",
+    } = req.body || {};
+
+    const userId = String(user_id || "").trim();
+    const musicId = String(music_id || "").trim();
+    const musicType = String(type || "track");
+
+    if (!userId || !musicId) {
+      return res.status(400).json({
+        ok: false,
+        error:
+          "user_id and music_id are required.",
+      });
+    }
+
+    const seedId =
+      `${userId}_${musicType}_${musicId}`;
+
+    await db
+      .collection("recommendationSeeds")
+      .doc(seedId)
+      .set(
+        {
+          userId,
+          musicId,
+          type: musicType,
+          name: String(name || ""),
+          artistName: String(
+            artist_name || ""
+          ),
+          reason: String(reason || "like"),
+          createdAt:
+            FieldValue.serverTimestamp(),
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        {
+          merge: true,
+        }
+      );
+
+    return res.status(201).json({
+      ok: true,
+      saved: true,
+      musicId,
+      type: musicType,
+    });
+  } catch (error) {
+    console.error(
+      "POST /users/recommendations error:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
       error: error.message,
     });
   }
@@ -401,7 +920,13 @@ app.get("/users/recommended-songs", async (req, res) => {
 
 app.post("/users/like", async (req, res) => {
   try {
-    const { user_id, music_id, type = "track" } = req.body || {};
+    const {
+      user_id,
+      music_id,
+      type = "track",
+      name = "",
+      artist_name = "",
+    } = req.body || {};
 
     if (!user_id || !music_id) {
       return res.status(400).json({
@@ -417,6 +942,8 @@ app.post("/users/like", async (req, res) => {
         userId: user_id,
         musicId: String(music_id),
         type,
+        name: String(name || ""),
+        artistName: String(artist_name || ""),
         createdAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -427,6 +954,8 @@ app.post("/users/like", async (req, res) => {
       liked: true,
       musicId: String(music_id),
       type,
+      name: String(name || ""),
+      artistName: String(artist_name || ""),
     });
   } catch (error) {
     console.error("POST /users/like error:", error);
@@ -458,6 +987,8 @@ app.post("/users/unlike", async (req, res) => {
       liked: false,
       musicId: String(music_id),
       type,
+      name: String(name || ""),
+      artistName: String(artist_name || ""),
     });
   } catch (error) {
     console.error("POST /users/unlike error:", error);
@@ -492,6 +1023,8 @@ app.get("/users/like", async (req, res) => {
       liked: snapshot.exists,
       musicId: String(music_id),
       type,
+      name: String(name || ""),
+      artistName: String(artist_name || ""),
     });
   } catch (error) {
     console.error("GET /users/like error:", error);
@@ -1216,6 +1749,190 @@ app.get("/review/reviewSong", async (req, res) => {
     console.error("GET /review/reviewSong error:", error);
 
     return res.status(502).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+});
+
+// -------------------------------------------------------------------------
+// Recently Viewed
+// -------------------------------------------------------------------------
+
+app.post("/users/recently-viewed", async (req, res) => {
+  try {
+    const {
+      user_id,
+      item_id,
+      listenable_id,
+      type = "track",
+      name = "",
+      title = "",
+      artist = null,
+      album = null,
+      image = "",
+      coverArt = "",
+      preview = "",
+    } = req.body || {};
+
+    const userId = String(user_id || "").trim();
+    const itemId = String(item_id || listenable_id || "").trim();
+    const itemType = String(type || "track").toLowerCase();
+
+    if (!userId || !itemId) {
+      return res.status(400).json({
+        ok: false,
+        error: "user_id and item_id are required.",
+      });
+    }
+
+    if (!["track", "album", "artist"].includes(itemType)) {
+      return res.status(400).json({
+        ok: false,
+        error: "type must be track, album, or artist.",
+      });
+    }
+
+    const recentlyViewedId = `${userId}_${itemType}_${itemId}`;
+
+    await db
+      .collection("recentlyViewed")
+      .doc(recentlyViewedId)
+      .set(
+        {
+          userId,
+          itemId,
+          listenableId: itemId,
+          type: itemType,
+
+          name: String(name || title || "Unknown Item"),
+          title: String(title || name || "Unknown Item"),
+
+          artist: artist || null,
+          album: album || null,
+
+          image: String(image || coverArt || ""),
+          coverArt: String(coverArt || image || ""),
+          preview: String(preview || ""),
+
+          viewedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+    return res.status(201).json({
+      ok: true,
+      saved: true,
+      itemId,
+      type: itemType,
+    });
+  } catch (error) {
+    console.error("POST /users/recently-viewed error:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+});
+
+app.get("/users/:uid/recently-viewed", async (req, res) => {
+  try {
+    const userId = String(req.params.uid || "").trim();
+
+    const parsedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Math.min(
+      Math.max(Number.isNaN(parsedLimit) ? 30 : parsedLimit, 1),
+      100
+    );
+
+    if (!userId) {
+      return res.status(400).json({
+        ok: false,
+        error: "User ID is required.",
+      });
+    }
+
+    const snapshot = await db
+      .collection("recentlyViewed")
+      .where("userId", "==", userId)
+      .get();
+
+    const recentlyViewed = snapshot.docs
+      .map((document) => {
+        const data = document.data();
+
+        return {
+          record_id: document.id,
+
+          id: String(data.itemId || data.listenableId || ""),
+          itemId: String(data.itemId || data.listenableId || ""),
+          listenableId: String(data.listenableId || data.itemId || ""),
+
+          type: data.type || "track",
+
+          name: data.name || data.title || "Unknown Item",
+          title: data.title || data.name || "Unknown Item",
+
+          artist: data.artist || null,
+          album: data.album || null,
+
+          image: data.image || data.coverArt || "",
+          coverArt: data.coverArt || data.image || "",
+          preview: data.preview || "",
+
+          viewedAt: serializeTimestamp(data.viewedAt),
+        };
+      })
+      .sort((a, b) => {
+        return (
+          new Date(b.viewedAt || 0).getTime() -
+          new Date(a.viewedAt || 0).getTime()
+        );
+      })
+      .slice(0, limit);
+
+    return res.json({
+      ok: true,
+      recentlyViewed,
+    });
+  } catch (error) {
+    console.error("GET /users/:uid/recently-viewed error:", error);
+
+    return res.status(500).json({
+      ok: false,
+      recentlyViewed: [],
+      error: error.message,
+    });
+  }
+});
+
+app.delete("/users/:uid/recently-viewed", async (req, res) => {
+  try {
+    const userId = String(req.params.uid || "").trim();
+
+    const snapshot = await db
+      .collection("recentlyViewed")
+      .where("userId", "==", userId)
+      .get();
+
+    const batch = db.batch();
+
+    snapshot.docs.forEach((document) => {
+      batch.delete(document.ref);
+    });
+
+    await batch.commit();
+
+    return res.json({
+      ok: true,
+      cleared: true,
+      deletedCount: snapshot.size,
+    });
+  } catch (error) {
+    console.error("DELETE /users/:uid/recently-viewed error:", error);
+
+    return res.status(500).json({
       ok: false,
       error: error.message,
     });

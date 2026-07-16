@@ -34,36 +34,34 @@ const ReviewCard = ({
   const [loading, setLoading] = useState(false); // To manage loading state while posting a reply
   const [refresh, setRefresh] = useState(false);  // Add the refresh state
 
+  const reviewMessage =
+    item?.message ||
+    item?.text ||
+    "";
+
+  const reviewRating = Number(
+    item?.rating || 0
+  );
+
+  const reviewHearted = Boolean(
+    item?.hearted
+  );
+
+  const reviewEmojis = Array.isArray(item?.emoji)
+    ? item.emoji
+    : Array.isArray(item?.userSelectedEmojis)
+      ? item.userSelectedEmojis
+      : [];
+
   useEffect(() => {
-    async function fetchComments() {
-      try {
-      const currentUser = auth.currentUser;
-      // Fetch user data from your backend
-      const orientRes = await getUser(currentUser.uid);
-      if (!orientRes.ok) {
-        throw new Error('Failed to fetch user data from backend.');
-      }
-      const userData = await orientRes.json();
-        const response = await getComments(item.id, userData.rid);
-        const responseText = await response.text();
-        console.log("Raw response:", responseText);
-
-        if (response.ok) {
-          const data = JSON.parse(responseText);
-          console.log("Fetched comments data:", data);
-          setComments(data || []);
-        } else {
-          console.error("Error: Received non-OK response");
-          console.log("Error details:", responseText);
-          setComments([]);
-        }
-      } catch (error) {
-        console.error("Error fetching comments:", error);
-      }
-    }
-
-    fetchComments();
-  }, [item.id, refresh]); // Fetch comments when the item ID changes
+    /*
+    * Threaded replies are temporarily disabled because the
+    * Firebase backend does not yet have:
+    *
+    * POST /post/getPostsByReview
+    */
+    setComments([]);
+  }, [item.id, refresh]);
 
   // Format createdAt to show only the date (no time)
   const createdAtText = item.createdAt
@@ -187,23 +185,28 @@ const ReviewCard = ({
               {/* Inline container for username, heart and emojis */}
               <View style={styles.inlineContainer}>
                 <Text style={styles.username}>{capitalize(item.username)}</Text>
-                {item.hearted && (
+                {reviewHearted && (
                   <Image
                     source={require("../images/whiteFullHeart.png")}
                     style={styles.heartEmoji}
                   />
                 )}
-                {item.userSelectedEmojis && item.userSelectedEmojis.length > 0 ? (
-                  item.userSelectedEmojis.map((emo, i) => (
-                    <Text key={i} style={styles.reviewEmoji}>
-                      {emo.replaceAll("'", "")}
+                {reviewEmojis.length > 0 ? (
+                  reviewEmojis.map((emoji, index) => (
+                    <Text
+                      key={`${emoji}-${index}`}
+                      style={styles.reviewEmoji}
+                    >
+                      {String(emoji).replaceAll("'", "")}
                     </Text>
                   ))
                 ) : (
                   <Text style={styles.emptyEmojiSpace}> </Text>
                 )}
               </View>
-              <Text style={styles.reviewText}>{item.text}</Text>
+              <Text style={styles.reviewText}>
+                {reviewMessage}
+              </Text>
             </View>
               <View style={styles.reviewInfoContainer}>
                 <View style={[styles.row, styles.rateAndAction]}>
@@ -212,7 +215,7 @@ const ReviewCard = ({
                       <Image
                         key={index}
                         source={
-                          index < item.rating
+                          index < reviewRating
                             ? require("../images/starFullIcon.png")
                             : require("../images/starEmptyIcon.png")
                         }

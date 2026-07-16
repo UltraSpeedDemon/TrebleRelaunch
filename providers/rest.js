@@ -19,20 +19,39 @@ export async function serverGet(endpoint, params = null) {
   }
 }
 
-export async function serverPost(endpoint, body) {
-  try {
-    return await fetch(`${getServerEndpointBase()}/${endpoint}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "ngrok-skip-browser-warning": "true",
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    console.error(e);
+  export async function serverPost(endpoint, body) {
+    const url = `${getServerEndpointBase()}/${endpoint}`;
+
+    console.log("[serverPost] URL:", url);
+    console.log("[serverPost] Endpoint:", endpoint);
+    console.log("[serverPost] Body:", body);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify(body),
+      });
+
+      console.log(
+        "[serverPost] Response:",
+        endpoint,
+        response.status
+      );
+
+      return response;
+    } catch (error) {
+      console.error(
+        `[serverPost] Request failed for ${endpoint}:`,
+        error
+      );
+
+      throw error;
+    }
   }
-}
 
 export async function serverPut(endpoint, body) {
   try {
@@ -142,20 +161,50 @@ export async function getLike(userId, musicId, type) {
   return await serverGet("users/like", { user_id: userId, music_id: musicId, type: type });
 }
 
-export async function postRecommendations(userId, musicId, type, name, artistName) {
-  try {
-    const response = await serverPost("users/recommendations", {
-      user_id: userId,
-      music_id: musicId,
-      type: type,
-      name: name,
-      artist_name: artistName
-    });
-    return response;
-  } catch (error) {
-    console.error("postRecommendations error:", error);
-    throw error;
+export async function getRecommendations(
+  userId,
+  {
+    limit = 20,
+    offset = 0,
+    refresh = false,
+  } = {}
+) {
+  if (!userId) {
+    throw new Error(
+      "getRecommendations requires a user ID."
+    );
   }
+
+  return await serverGet(
+    "users/recommendations",
+    {
+      user_id: userId,
+      offset,
+      limit,
+      refresh: refresh ? "true" : "false",
+    }
+  );
+}
+
+export async function postRecommendations(
+  userId,
+  musicId,
+  type,
+  name,
+  artistName,
+  reason = "like"
+) {
+  return await serverPost(
+    "users/recommendations",
+    {
+      user_id: userId,
+      music_id: String(musicId),
+      type: type || "track",
+      name: name || "",
+      artist_name: artistName || "",
+      reason,
+    }
+  );
 }
 
 // New endpoints for the four review sections:
@@ -175,18 +224,7 @@ export async function getUserActivity(userId) {
   return serverGet(`users/${userId}/activity`);
 }
 
-export async function getRecommendations(userId, { limit = 20, offset = 0, refresh = false } = {}) {
-  try {
-    return await serverGet("users/recommendations", { 
-      user_id: userId, 
-      offset, 
-      limit,
-      refresh
-    });
-  } catch (error) {
-    console.error("Error fetching my recommendations:", error);
-  }
-}
+
 
 export async function share(userId, item_rid, item_id, comment, type) {
   return await serverPost("users/share", { 
@@ -229,6 +267,74 @@ export async function getTimeline(userId, { limit = 20, offset = 0, refresh = fa
   }
 }
 
+export async function saveRecentlyViewed(userId, item) {
+  const itemInfo = item?.item_info || item || {};
+
+  const itemId =
+    itemInfo.id ||
+    itemInfo.listenableId ||
+    itemInfo.listenable_id;
+
+  if (!userId || !itemId) {
+    throw new Error(
+      "saveRecentlyViewed requires a user ID and item ID."
+    );
+  }
+
+  return await serverPost("users/recently-viewed", {
+    user_id: userId,
+    item_id: String(itemId),
+    listenable_id: String(itemId),
+    type: itemInfo.type || "track",
+
+    name:
+      itemInfo.name ||
+      itemInfo.title ||
+      "Unknown Item",
+
+    title:
+      itemInfo.title ||
+      itemInfo.name ||
+      "Unknown Item",
+
+    artist: itemInfo.artist || null,
+    album: itemInfo.album || null,
+
+    image:
+      itemInfo.image ||
+      itemInfo.coverArt ||
+      itemInfo.album?.cover_xl ||
+      itemInfo.album?.cover_big ||
+      "",
+
+    coverArt:
+      itemInfo.coverArt ||
+      itemInfo.image ||
+      itemInfo.album?.cover_xl ||
+      itemInfo.album?.cover_big ||
+      "",
+
+    preview:
+      itemInfo.preview ||
+      itemInfo.previewUrl ||
+      itemInfo.playbackUrl ||
+      "",
+  });
+}
+
+export async function getRecentlyViewed(userId, limit = 30) {
+  return await serverGet(
+    `users/${encodeURIComponent(userId)}/recently-viewed`,
+    { limit }
+  );
+}
+
+export async function clearRecentlyViewed(userId) {
+  return await serverDelete(
+    `users/${encodeURIComponent(userId)}/recently-viewed`
+  );
+}
+
 // #region Follow Request endpoints
 export async function requestFollow(follower_id, followed_id) {
   // Notice the POST to /users/requestFollow
@@ -259,46 +365,110 @@ export async function populateMetadata(reviewType, id) {
 // #endregion
 
 //#region Review endpoints
+async function getCurrentUserIdToken() {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    throw new Error(
+      "Cannot submit review because the user is not logged in."
+    );
+  }
+
+  console.log(
+    "[Reviews] Authenticated user:",
+    currentUser.uid
+  );
+
+  const idToken = await currentUser.getIdToken(true);
+
+  if (!idToken) {
+    throw new Error(
+      "Firebase did not return an authentication token."
+    );
+  }
+
+  return idToken;
+}
+
 export async function createReview(review) {
-  // decoded_token = auth.verify_id_token(request['id_token'])
-  // listenable_id = request['track_id']
-  // emoji = request['emoji'] or None
-  // hearted = request['hearted'] or False
-  // message = request['message']
-  // rating = request['rating']
-  id_token = await auth.currentUser.getIdToken()
-  return await serverPost("review", {...review, id_token })
+  console.log("[createReview] Started:", review);
+
+  const idToken = await getCurrentUserIdToken();
+
+  console.log(
+    "[createReview] Token received. Sending request."
+  );
+
+  return await serverPost("review", {
+    ...review,
+    id_token: idToken,
+  });
 }
 
-export async function getReviews(listenable_id) {
-  id_token = await auth.currentUser.getIdToken()
-  return await serverPost("review/reviews", { listenable_id, id_token })
+export async function getReviews(listenableId) {
+  const idToken = await getCurrentUserIdToken();
+
+  return await serverPost("review/reviews", {
+    listenable_id: String(listenableId),
+    id_token: idToken,
+  });
 }
 
-export async function getUserReview(user_id) {
-  id_token = await auth.currentUser.getIdToken()
-  return await serverPost("review/user", { user_id, id_token })
+export async function getUserReview(userId) {
+  const idToken = await getCurrentUserIdToken();
+
+  return await serverPost("review/user", {
+    user_id: userId,
+    id_token: idToken,
+  });
 }
 
 export async function upvoteReview(rid) {
-  id_token = await auth.currentUser.getIdToken()
-  return await serverPost("review/upvote", { rid, id_token })
+  const idToken = await getCurrentUserIdToken();
+
+  return await serverPost("review/upvote", {
+    rid,
+    id_token: idToken,
+  });
 }
 
 export async function removeUpvoteFromReview(rid) {
-  id_token = await auth.currentUser.getIdToken()
-  return await serverPost("review/removeUpvote", { rid, id_token })
+  const idToken = await getCurrentUserIdToken();
+
+  return await serverPost("review/removeUpvote", {
+    rid,
+    id_token: idToken,
+  });
 }
 
 export async function deleteReview(rid) {
-  id_token = await auth.currentUser.getIdToken()
-  return await serverDelete("review", { rid, id_token })
+  const idToken = await getCurrentUserIdToken();
+
+  return await serverDelete("review", {
+    rid,
+    id_token: idToken,
+  });
 }
 
-export async function updateReview(rid, emoji, hearted, message, rating) {
-  id_token = await auth.currentUser.getIdToken()
-  return await serverPut("review/update", { rid, id_token, emoji, hearted, message, rating })
+export async function updateReview(
+  rid,
+  emoji,
+  hearted,
+  message,
+  rating
+) {
+  const idToken = await getCurrentUserIdToken();
+
+  return await serverPut("review/update", {
+    rid,
+    id_token: idToken,
+    emoji,
+    hearted,
+    message,
+    rating,
+  });
 }
+
 
 export async function getReviewById(rid) {
   return await serverGet("review/getReview", { rid })

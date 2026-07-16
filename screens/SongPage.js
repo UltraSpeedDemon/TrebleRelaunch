@@ -21,7 +21,24 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { getUser, populateMetadata, like, getLike, unlike, postRecommendations, createReview, getReviews, upvoteReview, removeUpvoteFromReview, deleteReview, getSongFromDeezer, getFriends, share } from "../providers/rest";
+import {
+  getUser,
+  populateMetadata,
+  like,
+  getLike,
+  unlike,
+  postRecommendations,
+  createReview,
+  getReviews,
+  upvoteReview,
+  removeUpvoteFromReview,
+  deleteReview,
+  updateReview,
+  getSongFromDeezer,
+  getFriends,
+  share,
+  saveRecentlyViewed,
+} from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 
@@ -39,6 +56,7 @@ export default function SongPage({ route, navigation }) {
   const [selectedEmojis, setSelectedEmojis] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [users, setUsers] = useState([]);
+  const [existingReviewId, setExistingReviewId] = useState(null);
 
   // Share modal
   const [modalVisible, setModalVisible] = useState(false);
@@ -178,7 +196,41 @@ export default function SongPage({ route, navigation }) {
   const [albumName, setAlbumName] = useState("");
   const [trackName, setTrackName] = useState("");
   const [track, setTrack] = useState(route.params.track);
+    useEffect(() => {
+      const recordRecentlyViewed = async () => {
+        const currentUser = auth.currentUser;
 
+        if (!currentUser || !track?.id) {
+          return;
+        }
+
+        try {
+          const response = await saveRecentlyViewed(
+            currentUser.uid,
+            {
+              ...track,
+              type: "track",
+            }
+          );
+
+          if (!response?.ok) {
+            const data = await response?.json();
+
+            console.warn(
+              "[SongPage] Failed to save recently viewed:",
+              data
+            );
+          }
+        } catch (error) {
+          console.error(
+            "[SongPage] Recently viewed error:",
+            error
+          );
+        }
+      };
+
+      recordRecentlyViewed();
+    }, [track?.id]);
 
   // Fetch current user data
   useEffect(() => {
@@ -225,10 +277,54 @@ export default function SongPage({ route, navigation }) {
   }, [navigation, isFocused]);
 
   async function populateReviews() {
-    let reqReviews = await (await getReviews(track.id)).json()
-    setReviews(reqReviews.reviews)
-    setUsers(reqReviews.users)
+  try {
+    const response = await getReviews(track.id);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error || "Failed to load reviews."
+      );
+    }
+
+    const loadedReviews = Array.isArray(data)
+      ? data
+      : data.reviews || [];
+
+    setReviews(loadedReviews);
+    setUsers([]);
+
+    const myExistingReview = loadedReviews.find(
+      (item) => item.isUser === true
+    );
+
+    if (myExistingReview) {
+      setExistingReviewId(myExistingReview.id);
+      setFavourite(Boolean(myExistingReview.hearted));
+      setReviewRating(Number(myExistingReview.rating || 0));
+      setSelectedEmojis(
+        Array.isArray(myExistingReview.emoji)
+          ? myExistingReview.emoji
+          : []
+      );
+      setReview(myExistingReview.message || "");
+    } else {
+      setExistingReviewId(null);
+      setFavourite(false);
+      setReviewRating(0);
+      setSelectedEmojis([]);
+      setReview("");
+    }
+  } catch (error) {
+    console.error(
+      "[SongPage] Error loading reviews:",
+      error
+    );
+
+    setReviews([]);
+    setUsers([]);
   }
+}
 
   useEffect(() => {
     async function checkLikeStatus() {
@@ -331,7 +427,9 @@ export default function SongPage({ route, navigation }) {
   };
 
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
-  const handleToggleFavourite = () => setFavourite(!favourite);
+  const handleToggleFavourite = () => {
+    setFavourite((currentValue) => !currentValue);
+  };
   const handleShare = () => console.log("Song shared!");
 
   const handleSelectEmoji = (emoji) => {
@@ -341,50 +439,214 @@ export default function SongPage({ route, navigation }) {
   };
 
   const handleAddReview = () => {
-    if (!review.trim()) return;
+  if (!review.trim()) {
     Alert.alert(
-      "Confirm",
-      "Are you sure you want to post?",
-      [
-        { text: "No", style: "cancel" },
-        { text: "Yes", style: "default", onPress: () => actuallyAddReview() },
-      ],
-      { cancelable: true }
+      "Review required",
+      "Please enter a review before posting."
     );
-  };
+
+    return;
+  }
+
+  Alert.alert(
+    existingReviewId
+      ? "Update Review?"
+      : "Want to Post?",
+    existingReviewId
+      ? "Do you want to update your existing review?"
+      : "Are you sure you want to post this review?",
+    [
+      {
+        text: "No",
+        style: "cancel",
+      },
+      {
+        text: "Yes",
+        onPress: actuallyAddReview,
+      },
+    ],
+    {
+      cancelable: true,
+    }
+  );
+};
 
   async function actuallyAddReview() {
-    const newReview = {
-      id: Date.now().toString(),
-      listenable_id: track.id,
-      hearted: favourite,
-      message: review.trim(),
-      rating: reviewRating,
-      emoji: [...selectedEmojis],
-    };
+    try {
+      const reviewText = review.trim();
 
-    await createReview(newReview);
-    await populateReviews();
+      if (!reviewText) {
+        return;
+      }
 
-    setReview("");
-    setReviewRating(0);
-    setSelectedEmojis([]);
+      const reviewPayload = {
+        listenable_id: String(track.id),
+        type: "track",
+        hearted: Boolean(favourite),
+        message: reviewText,
+        rating: Number(reviewRating),
+        emoji: [...selectedEmojis],
+      };
+
+      console.log(
+        "[SongPage] Sending review:",
+        reviewPayload
+      );
+
+      const response = existingReviewId
+        ? await updateReview(
+            existingReviewId,
+            [...selectedEmojis],
+            Boolean(favourite),
+            reviewText,
+            Number(reviewRating)
+          )
+        : await createReview(reviewPayload);
+
+      if (!response) {
+        throw new Error(
+          "The backend did not return a response."
+        );
+      }
+
+      const responseText = await response.text();
+
+      let data = {};
+
+      try {
+        data = responseText
+          ? JSON.parse(responseText)
+          : {};
+      } catch {
+        data = {
+          error:
+            responseText ||
+            "Invalid backend response.",
+        };
+      }
+
+      console.log(
+        "[SongPage] Review response:",
+        response.status,
+        data
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          `Backend returned HTTP ${response.status}`
+        );
+      }
+
+      /*
+      * Store the generated ID after the first post.
+      * Later posts update this same document.
+      */
+      setExistingReviewId(
+        data.id || existingReviewId
+      );
+
+      if (
+        favourite ||
+        Number(reviewRating) >= 4
+      ) {
+        try {
+          await postRecommendations(
+            auth.currentUser.uid,
+            String(track.id),
+            "track",
+            track.title ||
+              track.name ||
+              "",
+            typeof track.artist === "string"
+              ? track.artist
+              : track.artist?.name || "",
+            favourite
+              ? "favourite"
+              : "high-rating"
+          );
+        } catch (recommendationError) {
+          console.warn(
+            "[SongPage] Review saved, but recommendation seed failed:",
+            recommendationError
+          );
+        }
+      }
+
+      await populateReviews();
+
+      /*
+      * Do NOT clear favourite, rating, emojis, or review.
+      * These remain populated with the saved values.
+      */
+
+      Toast.show({
+        type: "success",
+        text1: existingReviewId
+          ? "Review updated"
+          : "Review posted",
+      });
+    } catch (error) {
+      console.error(
+        "[SongPage] Error posting review:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to save review",
+        error.message
+      );
+    }
   }
 
   const handleUpvote = async (id) => {
-    let rev = reviews.find((r) => r.id === id);
-    if (!rev.upvoted) {
-      await upvoteReview(id);
-    } else {
-      await removeUpvoteFromReview(id);
-    }
-    setReviews((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? { ...c, upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1, upvoted: !c.upvoted }
-          : c
-      )
+    const existingReview = reviews.find(
+      (item) => item.id === id
     );
+
+    if (!existingReview) {
+      return;
+    }
+
+    try {
+      const response = existingReview.upvoted
+        ? await removeUpvoteFromReview(id)
+        : await upvoteReview(id);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Unable to update upvote."
+        );
+      }
+
+      setReviews((previousReviews) =>
+        previousReviews.map((item) => {
+          if (item.id !== id) {
+            return item;
+          }
+
+          return {
+            ...item,
+            upvoted: !item.upvoted,
+            upvotes: item.upvoted
+              ? Math.max(0, item.upvotes - 1)
+              : item.upvotes + 1,
+          };
+        })
+      );
+    } catch (error) {
+      console.error(
+        "[SongPage] Upvote error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to update review",
+        error.message
+      );
+    }
   };
 
   // Handle song preview playback
@@ -444,11 +706,45 @@ export default function SongPage({ route, navigation }) {
   }, [isFocused, sound]);
 
   const handleDelete = async (id) => {
-    let rev = reviews.find((r) => r.id === id);
-    if (rev.isUser) {
-      await deleteReview(id);
+    const existingReview = reviews.find(
+      (item) => item.id === id
+    );
+
+    if (!existingReview?.isUser) {
+      Alert.alert(
+        "Unable to delete",
+        "You can only delete your own reviews."
+      );
+
+      return;
     }
-    setReviews((prev) => prev.filter((r) => r.id !== id));
+
+    try {
+      const response = await deleteReview(id);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Unable to delete review."
+        );
+      }
+
+      setReviews((previousReviews) =>
+        previousReviews.filter(
+          (item) => item.id !== id
+        )
+      );
+    } catch (error) {
+      console.error(
+        "[SongPage] Delete review error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to delete review",
+        error.message
+      );
+    }
   };
 
   if (!track) {
@@ -664,13 +960,36 @@ export default function SongPage({ route, navigation }) {
 
                 {showEmojiDropdown && (
                   <View style={styles.emojiDropdownRow}>
-                    <TouchableOpacity onPress={() => handleSelectEmoji("❤️")}>
+                    <TouchableOpacity
+                      onPress={() => handleSelectEmoji("❤️")}
+                      style={
+                        selectedEmojis.includes("❤️")
+                          ? styles.selectedEmojiChoice
+                          : styles.emojiChoice
+                      }
+                    >
                       <Text style={styles.reviewEmoji}>❤️</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleSelectEmoji("🔥")}>
+
+                    <TouchableOpacity
+                      onPress={() => handleSelectEmoji("🔥")}
+                      style={
+                        selectedEmojis.includes("🔥")
+                          ? styles.selectedEmojiChoice
+                          : styles.emojiChoice
+                      }
+                    >
                       <Text style={styles.reviewEmoji}>🔥</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleSelectEmoji("👏")}>
+
+                    <TouchableOpacity
+                      onPress={() => handleSelectEmoji("👏")}
+                      style={
+                        selectedEmojis.includes("👏")
+                          ? styles.selectedEmojiChoice
+                          : styles.emojiChoice
+                      }
+                    >
                       <Text style={styles.reviewEmoji}>👏</Text>
                     </TouchableOpacity>
                   </View>
@@ -684,9 +1003,16 @@ export default function SongPage({ route, navigation }) {
                     value={review}
                     onChangeText={setReview}
                   />
-                  <TouchableOpacity style={styles.reviewButton} onPress={handleAddReview}>
-                    <Text style={styles.reviewButtonText}>Post</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity
+                  style={[
+                    styles.reviewButton,
+                    !review.trim() && { opacity: 0.5 },
+                  ]}
+                  onPress={handleAddReview}
+                  disabled={!review.trim()}
+                >
+                  <Text style={styles.reviewButtonText}>Post</Text>
+                </TouchableOpacity>
                 </View>
 
                 {selectedEmojis.length > 0 && (
@@ -714,6 +1040,8 @@ export default function SongPage({ route, navigation }) {
               handleUpvote={handleUpvote}
               handleDelete={handleDelete}
               navigation={navigation}
+              showComments={false}
+              showReplyInput={false}
             />
           );
         }}
