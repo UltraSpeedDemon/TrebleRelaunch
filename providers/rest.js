@@ -10,10 +10,14 @@ export async function serverGet(endpoint, params = null) {
       url += `?${urlParams}`;
     }
     return await fetch(url, {
+      method: "GET",
+      cache: "no-store",
       headers: {
         "ngrok-skip-browser-warning": "true",
+        "Cache-Control": "no-cache, no-store",
+        Pragma: "no-cache",
       },
-  });
+    });
   } catch (e) {
     console.error(e);
   }
@@ -159,6 +163,18 @@ export async function unlike(userId, musicId, type) {
 
 export async function getLike(userId, musicId, type) {
   return await serverGet("users/like", { user_id: userId, music_id: musicId, type: type });
+}
+
+export async function getUserLikes(userId) {
+  if (!userId) {
+    throw new Error(
+      "getUserLikes requires a user ID."
+    );
+  }
+
+  return await serverGet(
+    `users/${encodeURIComponent(userId)}/likes`
+  );
 }
 
 export async function getRecommendations(

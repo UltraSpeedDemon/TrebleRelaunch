@@ -26,7 +26,7 @@ import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
 
 import {
-  getUserFavorites,
+  getUserLikes,
 } from "../providers/rest";
 
 export default function Favourites({ navigation }) {
@@ -37,7 +37,7 @@ export default function Favourites({ navigation }) {
     new Animated.Value(0)
   );
 
-  const [favourites, setFavourites] = useState([]);
+  const [likedItems, setLikedItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -67,157 +67,128 @@ export default function Favourites({ navigation }) {
     outputRange: [0, 1],
   });
 
-  const loadFavourites = useCallback(
-    async (isRefresh = false) => {
-      const currentUser = auth.currentUser;
+  const loadLikedItems = useCallback(
+  async (isRefresh = false) => {
+    const currentUser = auth.currentUser;
 
-      if (!currentUser) {
-        setFavourites([]);
-        setLoading(false);
-        setRefreshing(false);
+    if (!currentUser) {
+      setLikedItems([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
-        return;
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
+
+      console.log(
+        "[LikedSongs] Loading likes for:",
+        currentUser.uid
+      );
+
+      const response = await getUserLikes(
+        currentUser.uid
+      );
+
+      if (!response) {
+        throw new Error(
+          "The backend returned no response."
+        );
+      }
+
+      const responseText =
+        await response.text();
+
+      let data = {};
 
       try {
-        if (isRefresh) {
-          setRefreshing(true);
-        } else {
-          setLoading(true);
-        }
-
-        console.log(
-          "[Favourites] Loading favourites for:",
-          currentUser.uid
+        data = responseText
+          ? JSON.parse(responseText)
+          : {};
+      } catch {
+        throw new Error(
+          responseText ||
+          "The backend returned invalid JSON."
         );
-
-        const response = await getUserFavorites(
-          currentUser.uid
-        );
-
-        if (!response) {
-          throw new Error(
-            "The backend returned no response."
-          );
-        }
-
-        const responseText = await response.text();
-
-        let data = {};
-
-        try {
-          data = responseText
-            ? JSON.parse(responseText)
-            : {};
-        } catch {
-          data = {
-            error:
-              responseText ||
-              "The backend returned invalid JSON.",
-          };
-        }
-
-        console.log(
-          "[Favourites] Response:",
-          response.status,
-          data
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            data?.error ||
-            `Unable to load favourites. HTTP ${response.status}`
-          );
-        }
-
-        /*
-         * Supports any of these backend response formats:
-         *
-         * [...]
-         * { favourites: [...] }
-         * { favorites: [...] }
-         * { reviews: [...] }
-         */
-        const loadedFavourites = Array.isArray(data)
-          ? data
-          : Array.isArray(data.favourites)
-            ? data.favourites
-            : Array.isArray(data.favorites)
-              ? data.favorites
-              : Array.isArray(data.reviews)
-                ? data.reviews
-                : [];
-
-        setFavourites(loadedFavourites);
-      } catch (error) {
-        console.error(
-          "[Favourites] Load error:",
-          error
-        );
-
-        setFavourites([]);
-
-        Alert.alert(
-          "Unable to load favourites",
-          error.message
-        );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
       }
-    },
-    []
-  );
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          `Unable to load liked items. HTTP ${response.status}`
+        );
+      }
+
+      setLikedItems(
+        Array.isArray(data.likes)
+          ? data.likes
+          : []
+      );
+    } catch (error) {
+      console.error(
+        "[LikedSongs] Load error:",
+        error
+      );
+
+      setLikedItems([]);
+
+      Alert.alert(
+        "Unable to load liked music",
+        error.message
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  },
+  []
+);
 
   useFocusEffect(
     useCallback(() => {
-      loadFavourites(false);
-    }, [loadFavourites])
+      loadLikedItems(false);
+    }, [loadLikedItems])
   );
 
-  const filteredFavourites = useMemo(() => {
-    const query = searchText
-      .trim()
-      .toLowerCase();
+  const filteredLikedItems = useMemo(() => {
+  const query = searchText
+    .trim()
+    .toLowerCase();
 
-    if (!query) {
-      return favourites;
-    }
+  if (!query) {
+    return likedItems;
+  }
 
-    return favourites.filter((item) => {
-      const song = item.song || item.item_info || item;
+  return likedItems.filter((item) => {
+    const title = String(
+      item.title ||
+      item.name ||
+      ""
+    ).toLowerCase();
 
-      const title = String(
-        song.title ||
-        song.name ||
-        item.title ||
-        item.name ||
-        ""
-      ).toLowerCase();
+    const artist = String(
+      typeof item.artist === "string"
+        ? item.artist
+        : item.artist?.name ||
+          item.artistName ||
+          ""
+    ).toLowerCase();
 
-      const artist = String(
-        song.artist?.name ||
-        song.artistName ||
-        song.artist ||
-        item.artist?.name ||
-        item.artistName ||
-        item.artist ||
-        ""
-      ).toLowerCase();
+    const type = String(
+      item.type || ""
+    ).toLowerCase();
 
-      const reviewMessage = String(
-        item.message ||
-        item.text ||
-        ""
-      ).toLowerCase();
-
-      return (
-        title.includes(query) ||
-        artist.includes(query) ||
-        reviewMessage.includes(query)
-      );
-    });
-  }, [favourites, searchText]);
+    return (
+      title.includes(query) ||
+      artist.includes(query) ||
+      type.includes(query)
+    );
+  });
+}, [likedItems, searchText]);
 
   const getSongFromFavourite = (item) => {
     const song =
@@ -308,22 +279,36 @@ export default function Favourites({ navigation }) {
     };
   };
 
-  const openFavourite = (item) => {
-    const song = getSongFromFavourite(item);
+  const openLikedItem = (item) => {
+  if (!item?.id) {
+    Alert.alert(
+      "Unable to open item",
+      "This liked item does not have an ID."
+    );
 
-    if (!song.id) {
-      Alert.alert(
-        "Unable to open song",
-        "This favourite does not include a song ID."
-      );
+    return;
+  }
 
-      return;
-    }
-
-    navigation.navigate("SongPage", {
-      track: song,
+  if (item.type === "artist") {
+    navigation.navigate("ArtistPage", {
+      artist: item,
     });
-  };
+
+    return;
+  }
+
+  if (item.type === "album") {
+    navigation.navigate("AlbumPage", {
+      album: item,
+    });
+
+    return;
+  }
+
+  navigation.navigate("SongPage", {
+    track: item,
+  });
+};
 
   const getArtistName = (item) => {
     const song = getSongFromFavourite(item);
@@ -351,102 +336,87 @@ export default function Favourites({ navigation }) {
     );
   };
 
-  const renderFavourite = ({ item }) => {
-    const song = getSongFromFavourite(item);
-    const imageUri = getImage(item);
+  const renderLikedItem = ({ item }) => {
+  const imageUri =
+    item.image ||
+    item.coverArt ||
+    item.album?.cover_xl ||
+    item.album?.cover_big ||
+    "";
 
-    const rating = Number(
-      item.rating || 0
-    );
+  const title =
+    item.title ||
+    item.name ||
+    "Unknown Item";
 
-    const emojis = Array.isArray(item.emoji)
-      ? item.emoji
-      : Array.isArray(item.userSelectedEmojis)
-        ? item.userSelectedEmojis
-        : [];
+  const artistName =
+    typeof item.artist === "string"
+      ? item.artist
+      : item.artist?.name ||
+        item.artistName ||
+        "";
 
-    return (
-      <TouchableOpacity
-        style={styles.favouriteCard}
-        activeOpacity={0.8}
-        onPress={() => openFavourite(item)}
-      >
-        {imageUri ? (
+  const typeLabel =
+    item.type === "artist"
+      ? "Artist"
+      : item.type === "album"
+        ? "Album"
+        : "Song";
+
+  return (
+    <TouchableOpacity
+      style={styles.favouriteCard}
+      activeOpacity={0.8}
+      onPress={() =>
+        openLikedItem(item)
+      }
+    >
+      {imageUri ? (
+        <Image
+          source={{ uri: imageUri }}
+          style={styles.albumImage}
+        />
+      ) : (
+        <View style={styles.imagePlaceholder}>
+          <Text style={styles.placeholderIcon}>
+            ♪
+          </Text>
+        </View>
+      )}
+
+      <View style={styles.favouriteDetails}>
+        <View style={styles.titleRow}>
+          <Text
+            style={styles.songTitle}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+
           <Image
-            source={{ uri: imageUri }}
-            style={styles.albumImage}
+            source={require("../images/whiteFullHeart.png")}
+            style={styles.heartIcon}
           />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <Text style={styles.placeholderIcon}>
-              ♪
-            </Text>
-          </View>
-        )}
+        </View>
 
-        <View style={styles.favouriteDetails}>
-          <View style={styles.titleRow}>
-            <Text
-              style={styles.songTitle}
-              numberOfLines={1}
-            >
-              {song.title || song.name}
-            </Text>
-
-            <Image
-              source={require("../images/whiteFullHeart.png")}
-              style={styles.heartIcon}
-            />
-          </View>
-
+        {!!artistName && (
           <Text
             style={styles.artistName}
             numberOfLines={1}
           >
-            {getArtistName(item)}
+            {artistName}
           </Text>
+        )}
 
-          <View style={styles.ratingRow}>
-            {[...Array(5)].map((_, index) => (
-              <Image
-                key={index}
-                source={
-                  index < rating
-                    ? require("../images/starFullIcon.png")
-                    : require("../images/starEmptyIcon.png")
-                }
-                style={styles.starIcon}
-              />
-            ))}
-          </View>
+        <Text style={styles.typeLabel}>
+          {typeLabel}
+        </Text>
+      </View>
 
-          {emojis.length > 0 && (
-            <View style={styles.emojiRow}>
-              {emojis.map((emoji, index) => (
-                <Text
-                  key={`${emoji}-${index}`}
-                  style={styles.emoji}
-                >
-                  {String(emoji).replaceAll("'", "")}
-                </Text>
-              ))}
-            </View>
-          )}
-
-          {!!(item.message || item.text) && (
-            <Text
-              style={styles.reviewText}
-              numberOfLines={2}
-            >
-              {item.message || item.text}
-            </Text>
-          )}
-        </View>
-
-        <Text style={styles.arrow}>›</Text>
-      </TouchableOpacity>
-    );
-  };
+      <Text style={styles.arrow}>›</Text>
+    </TouchableOpacity>
+  );
+};
 
   return (
     <View style={styles.container}>
@@ -470,7 +440,7 @@ export default function Favourites({ navigation }) {
       >
         <TextInput
           style={styles.searchInput}
-          placeholder="Search favourites..."
+          placeholder="Search liked music..."
           placeholderTextColor="#aaa"
           value={searchText}
           onChangeText={setSearchText}
@@ -496,11 +466,11 @@ export default function Favourites({ navigation }) {
 
       <View style={styles.content}>
         <Text style={styles.header}>
-          Favourites
+          Liked Songs
         </Text>
 
         <Text style={styles.subText}>
-          Songs you marked as a favourite in your reviews.
+          Songs, albums, and artists you have liked.
         </Text>
 
         {loading ? (
@@ -511,29 +481,28 @@ export default function Favourites({ navigation }) {
             />
 
             <Text style={styles.loadingText}>
-              Loading favourites...
+              Loading liked songs...
             </Text>
           </View>
         ) : (
           <FlatList
-            data={filteredFavourites}
-            renderItem={renderFavourite}
+            data={filteredLikedItems}
+            renderItem={renderLikedItem}
             keyExtractor={(item, index) =>
-              item.id ||
-              item.reviewId ||
-              `${item.listenableId || item.listenable_id}-${index}`
+              item.likeId ||
+              `${item.type}-${item.id}-${index}`
             }
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               styles.listContent,
-              filteredFavourites.length === 0 &&
+              filteredLikedItems.length === 0 &&
                 styles.emptyListContent,
             ]}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={() =>
-                  loadFavourites(true)
+                  loadLikedItems(true)
                 }
                 tintColor="#FFFFFF"
               />
@@ -546,11 +515,11 @@ export default function Favourites({ navigation }) {
                 />
 
                 <Text style={styles.emptyTitle}>
-                  No favourites yet
+                  No liked songs yet
                 </Text>
 
                 <Text style={styles.emptyText}>
-                  Mark Favourite when writing a review and the song will appear here.
+                  Like songs to see them here.
                 </Text>
               </View>
             }
@@ -566,6 +535,15 @@ export default function Favourites({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+
+  typeLabel: {
+    color: colours.lightblue,
+    fontSize: 12,
+    fontWeight: "bold",
+    marginTop: 6,
+    textTransform: "uppercase",
+  },
+
   container: {
     flex: 1,
     backgroundColor: colours.bluegrey,

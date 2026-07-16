@@ -629,36 +629,84 @@ const handleLikeSong = (item, isDoubleTap = false) => {
   };
 
   const getCardBorderStyle = (item) => {
+  // Friend reviews
+  if (
+    item.class === "friend_review" ||
+    item.author?.is_friend
+  ) {
+    return {
+      borderColor: "green",
+      borderWidth: 2,
+    };
+  }
 
-    // If the review is a friend review, border green.
+  // Following reviews
+  if (item.class === "following_review") {
+    return {
+      borderColor: "lightblue",
+      borderWidth: 2,
+    };
+  }
 
-    if (item.class === "friend_review" || (item.author && item.author.is_friend)) {
+  // Music shared by a friend
+  if (
+    item.class === "share" ||
+    item.shared_by
+  ) {
+    return {
+      borderColor: "yellow",
+      borderWidth: 2,
+    };
+  }
 
-      return { borderColor: "green", borderWidth: 2 };
+  const origin =
+    item?.origin ||
+    item?.item_info?.origin ||
+    null;
 
-    }
+  // Recommendations specifically based on a Like
+  if (origin?.type === "like") {
+    return {
+      borderColor: "red",
+      borderWidth: 2,
+    };
+  }
 
-    // If it's a following review.
+  // General recommendations, new music, discovery, timeline
+  if (
+    origin?.type === "feed" ||
+    origin?.type === "discovery" ||
+    item?.source === "timeline" ||
+    !origin
+  ) {
+    return {
+      borderColor: "green",
+      borderWidth: 2,
+    };
+  }
 
-    if (item.class === "following_review") {
+  // Favourite-based recommendations
+  if (origin?.type === "favourite") {
+    return {
+      borderColor: "red",
+      borderWidth: 2,
+    };
+  }
 
-      return { borderColor: "lightblue", borderWidth: 2 };
+  // Rating-based recommendations
+  if (origin?.type === "high-rating") {
+    return {
+      borderColor: "red",
+      borderWidth: 2,
+    };
+  }
 
-    }
-
-    // If it's a shared item (indicated by a shared_by field).
-
-    if (item.shared_by) {
-
-      return { borderColor: "yellow", borderWidth: 2 };
-
-    }
-
-    // Otherwise, treat it as a recommendation.
-
-    return { borderColor: "red", borderWidth: 2 };
-
+  // Safe fallback
+  return {
+    borderColor: "green",
+    borderWidth: 2,
   };
+};
 
   const DOUBLE_TAP_DELAY = 300;
   const tapTimerRef = useRef(null);
@@ -1055,14 +1103,62 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
         : ""
       : item.artist?.name || "Unknown Artist";
     const imageUri = item.image || item.coverArt || "https://via.placeholder.com/250";
-    let postContext = "";
-    if (item.origin && typeof item.origin === "object") {
-      if (isSong) {
-        postContext = `${item.origin.title} by ${item.origin.artist}`;
-      } else if (isArtist) {
-        postContext = `Because you like ${item.origin.name}`;
-      }
-    }
+    const origin =
+  item?.origin ||
+  item?.item_info?.origin ||
+  null;
+
+let heading = "Recommended for you";
+let postContext = "";
+
+if (origin && typeof origin === "object") {
+  switch (origin.type) {
+    case "like":
+      heading = "Because you like";
+      postContext = [
+        origin.title || origin.name,
+        origin.artist || origin.artistName,
+      ]
+        .filter(Boolean)
+        .join(" by ");
+      break;
+
+    case "favourite":
+      heading = "Because you favourited";
+      postContext = [
+        origin.title || origin.name,
+        origin.artist || origin.artistName,
+      ]
+        .filter(Boolean)
+        .join(" by ");
+      break;
+
+    case "high-rating":
+      heading = "Because you rated highly";
+      postContext = [
+        origin.title || origin.name,
+        origin.artist || origin.artistName,
+      ]
+        .filter(Boolean)
+        .join(" by ");
+      break;
+
+    case "feed":
+      heading = "Recommended for you";
+      postContext = "New music for your feed";
+      break;
+
+    case "discovery":
+      heading = "Recommended for you";
+      postContext = "Discover something new";
+      break;
+
+    default:
+      heading = "Recommended for you";
+      postContext = "";
+      break;
+  }
+}
   
     return (
       <TouchableWithoutFeedback onPress={() => handleTap(item)}>
@@ -1070,8 +1166,11 @@ const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
           <View style={styles.cardInformation}>
             <View style={styles.postContextContainer}>
               <Text style={styles.postContext}>
-                <Text style={styles.boldPostContext}>{`Because you like:\n`}</Text>
-                {postContext}
+                <Text style={styles.boldPostContext}>
+                  {heading}
+                </Text>
+
+                {postContext ? `\n${postContext}` : ""}
               </Text>
             </View>
             <View style={styles.actionButtons}>

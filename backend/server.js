@@ -20,8 +20,23 @@ const serviceAccount = require("./firebase-service-account.json");
 const app = express();
 const port = Number(process.env.PORT || 5000);
 
+// API responses must always include fresh JSON.
+// Prevent Express from replying with 304 and an empty response body.
+app.disable("etag");
+
 app.use(cors());
 app.use(express.json());
+
+app.use((req, res, next) => {
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+    "Surrogate-Control": "no-store",
+  });
+
+  next();
+});
 
 app.use((req, res, next) => {
   console.log(`\n==========================`);
@@ -226,6 +241,103 @@ async function getUserLikedTrackIds(userId) {
       return secondTime - firstTime;
     })
     .map((item) => String(item.musicId));
+}
+
+const FEED_COOLDOWN_HOURS = 6;
+
+async function getRecentlyServedTrackIds(userId) {
+  if (!userId) {
+    return new Set();
+  }
+
+  const cooldownStart = new Date(
+    Date.now() -
+      FEED_COOLDOWN_HOURS *
+        60 *
+        60 *
+        1000
+  );
+
+  const snapshot = await db
+    .collection("feedServed")
+    .where("userId", "==", userId)
+    .get();
+
+  const recentlyServedIds = new Set();
+
+  snapshot.docs.forEach((document) => {
+    const data = document.data();
+
+    const servedDate =
+      data.servedAt?.toDate?.() ||
+      null;
+
+    if (
+      data.musicId &&
+      servedDate &&
+      servedDate >= cooldownStart
+    ) {
+      recentlyServedIds.add(
+        String(data.musicId)
+      );
+    }
+  });
+
+  return recentlyServedIds;
+}
+
+async function markFeedItemsServed(
+  userId,
+  items,
+  source
+) {
+  if (
+    !userId ||
+    !Array.isArray(items) ||
+    items.length === 0
+  ) {
+    return;
+  }
+
+  const batch = db.batch();
+
+  items.forEach((item) => {
+    const musicId = String(
+      item.id ||
+      item.listenableId ||
+      item.listenable_id ||
+      item.item_info?.id ||
+      ""
+    );
+
+    if (!musicId) {
+      return;
+    }
+
+    const documentId =
+      `${userId}_track_${musicId}`;
+
+    const documentRef = db
+      .collection("feedServed")
+      .doc(documentId);
+
+    batch.set(
+      documentRef,
+      {
+        userId,
+        musicId,
+        type: "track",
+        source,
+        servedAt:
+          FieldValue.serverTimestamp(),
+      },
+      {
+        merge: true,
+      }
+    );
+  });
+
+  await batch.commit();
 }
 
 async function getUserReviewSeeds(userId) {
@@ -462,12 +574,26 @@ async function buildPersonalizedRecommendations({
   offset,
   refresh,
 }) {
-  const likedTrackIds = new Set(
-    await getUserLikedTrackIds(userId)
-  );
+  const [
+  likedTrackIdList,
+  recentlyServedTrackIds,
+  seedTracks,
+] = await Promise.all([
+  getUserLikedTrackIds(userId),
+  getRecentlyServedTrackIds(userId),
+  getRecommendationSeedTracks(
+    userId
+  ),
+]);
 
-  const seedTracks =
-    await getRecommendationSeedTracks(userId);
+const likedTrackIds = new Set(
+  likedTrackIdList
+);
+
+const excludedTrackIds = new Set([
+  ...likedTrackIds,
+  ...recentlyServedTrackIds,
+]);
 
   /*
    * New users still receive a fallback feed.
@@ -529,7 +655,9 @@ async function buildPersonalizedRecommendations({
     /*
      * Exclude songs the user has already liked.
      */
-    if (likedTrackIds.has(candidateId)) {
+    if (
+      excludedTrackIds.has(candidateId)
+    ) {
       continue;
     }
 
@@ -560,7 +688,7 @@ async function buildPersonalizedRecommendations({
       const trackId = String(track.id);
 
       if (
-        likedTrackIds.has(trackId) ||
+        excludedTrackIds.has(trackId) ||
         usedRecommendationIds.has(trackId)
       ) {
         continue;
@@ -583,17 +711,94 @@ async function buildPersonalizedRecommendations({
     }
   }
 
-  return Promise.all(
-    page.map(({ track, origin }) =>
-      createFeedItem(
-        track,
-        "recommendation",
-        userId,
-        origin
-      )
-    )
-  );
+  /*
+ * Final safety fallback:
+ * cooldown can be relaxed, but liked songs remain excluded.
+ */
+if (page.length < limit) {
+  const emergencyChart =
+    await fetchDeezer(
+      `/chart/0/tracks?limit=100&index=${
+        Math.floor(Math.random() * 100)
+      }`
+    );
+
+  for (
+    const track of emergencyChart.data || []
+  ) {
+    const trackId = String(
+      track.id || ""
+    );
+
+    if (
+      !trackId ||
+      likedTrackIds.has(trackId) ||
+      usedRecommendationIds.has(trackId)
+    ) {
+      continue;
+    }
+
+    usedRecommendationIds.add(trackId);
+
+    page.push({
+      track,
+      origin: {
+        type: "discovery",
+        title: "New music for you",
+        artist: "",
+      },
+    });
+
+    if (page.length >= limit) {
+      break;
+    }
+  }
 }
+
+/*
+ * Absolute fallback. Recommendations should never be empty,
+ * even when the user has exhausted every filtered candidate.
+ */
+if (page.length === 0) {
+  const emergencyChart =
+    await fetchDeezer(
+      `/chart/0/tracks?limit=${limit}&index=0`
+    );
+
+  for (
+    const track of emergencyChart.data || []
+  ) {
+    page.push({
+      track,
+      origin: {
+        type: "discovery",
+        title: "Recommended for you",
+        artist: "",
+      },
+    });
+  }
+}
+
+  const recommendations =
+    await Promise.all(
+      page.map(({ track, origin }) =>
+        createFeedItem(
+          track,
+          "recommendation",
+          userId,
+          origin
+        )
+      )
+    );
+
+  await markFeedItemsServed(
+    userId,
+    recommendations,
+    "recommendation"
+  );
+
+  return recommendations;
+  }
 
 app.get("/test", (req, res) => {
   res.json({
@@ -641,32 +846,219 @@ app.get("/users/timeline", async (req, res) => {
   try {
     const { limit, offset } = getPagination(req);
 
-    const chart = await fetchDeezer(
-      `/chart/0/tracks?limit=${limit}&index=${offset}`
+    const userId = String(
+      req.query.user_id || ""
+    ).trim();
+
+    const refresh =
+      String(req.query.refresh || "false") === "true";
+
+    const [
+      likedTrackIdList,
+      recentlyServedTrackIds,
+    ] = await Promise.all([
+      userId
+        ? getUserLikedTrackIds(userId)
+        : Promise.resolve([]),
+
+      userId
+        ? getRecentlyServedTrackIds(userId)
+        : Promise.resolve(new Set()),
+    ]);
+
+    const likedTrackIds = new Set(
+      likedTrackIdList
     );
 
-    const userId = req.query.user_id;
+    const excludedTrackIds = new Set([
+      ...likedTrackIds,
+      ...recentlyServedTrackIds,
+    ]);
+
+    const selectedTracks = [];
+    const selectedTrackIds = new Set();
+
+    /*
+     * Try several Deezer chart regions so the feed does not
+     * become empty when the first chart page is exhausted.
+     */
+    const offsetsToTry = refresh
+      ? [
+          Math.floor(Math.random() * 50),
+          50 + Math.floor(Math.random() * 50),
+          100 + Math.floor(Math.random() * 50),
+          0,
+        ]
+      : [
+          offset,
+          offset + 30,
+          offset + 60,
+          offset + 90,
+        ];
+
+    for (const chartOffset of offsetsToTry) {
+      if (selectedTracks.length >= limit) {
+        break;
+      }
+
+      const chart = await fetchDeezer(
+        `/chart/0/tracks?limit=50&index=${chartOffset}`
+      );
+
+      for (const track of chart.data || []) {
+        const trackId = String(
+          track.id || ""
+        );
+
+        if (
+          !trackId ||
+          excludedTrackIds.has(trackId) ||
+          selectedTrackIds.has(trackId)
+        ) {
+          continue;
+        }
+
+        selectedTracks.push(track);
+        selectedTrackIds.add(trackId);
+
+        if (selectedTracks.length >= limit) {
+          break;
+        }
+      }
+    }
+
+    /*
+     * Cooldown fallback:
+     * allow songs that were shown previously, but continue
+     * excluding songs the user already liked.
+     */
+    if (selectedTracks.length < limit) {
+      const fallback = await fetchDeezer(
+        `/chart/0/tracks?limit=100&index=${
+          Math.floor(Math.random() * 100)
+        }`
+      );
+
+      for (const track of fallback.data || []) {
+        const trackId = String(
+          track.id || ""
+        );
+
+        if (
+          !trackId ||
+          likedTrackIds.has(trackId) ||
+          selectedTrackIds.has(trackId)
+        ) {
+          continue;
+        }
+
+        selectedTracks.push(track);
+        selectedTrackIds.add(trackId);
+
+        if (selectedTracks.length >= limit) {
+          break;
+        }
+      }
+    }
+
+    /*
+     * Absolute emergency fallback:
+     * the feed must never be empty. This only runs if the user
+     * has somehow liked nearly everything returned by Deezer.
+     */
+    if (selectedTracks.length === 0) {
+      const emergencyChart =
+        await fetchDeezer(
+          "/chart/0/tracks?limit=20&index=0"
+        );
+
+      selectedTracks.push(
+        ...(emergencyChart.data || []).slice(
+          0,
+          limit
+        )
+      );
+    }
 
     const timeline = await Promise.all(
-      (chart.data || []).map((track) =>
-        createFeedItem(track, "timeline", userId)
+      selectedTracks.map((track) =>
+        createFeedItem(
+          track,
+          "timeline",
+          userId,
+          {
+            type: "feed",
+            title: "Recommended for you",
+            artist: "",
+          }
+        )
       )
     );
 
-    return res.json({
+    await markFeedItemsServed(
+      userId,
+      timeline,
+      "timeline"
+    );
+
+    console.log(
+      `[Timeline] Returning ${timeline.length} items`
+    );
+
+    return res.status(200).json({
       ok: true,
       timeline,
       limit,
       offset,
+      refresh,
     });
   } catch (error) {
-    console.error("GET /users/timeline error:", error);
+    console.error(
+      "GET /users/timeline error:",
+      error
+    );
 
-    return res.status(502).json({
-      ok: false,
-      timeline: [],
-      error: error.message,
-    });
+    /*
+     * Even if personalized timeline generation fails,
+     * return a basic Deezer feed.
+     */
+    try {
+      const { limit } = getPagination(req);
+
+      const emergencyChart =
+        await fetchDeezer(
+          `/chart/0/tracks?limit=${limit}&index=0`
+        );
+
+      const timeline = await Promise.all(
+        (emergencyChart.data || []).map(
+          (track) =>
+            createFeedItem(
+              track,
+              "timeline",
+              req.query.user_id,
+              {
+                type: "feed",
+                title:
+                  "Recommended for you",
+                artist: "",
+              }
+            )
+        )
+      );
+
+      return res.status(200).json({
+        ok: true,
+        timeline,
+        fallback: true,
+      });
+    } catch (fallbackError) {
+      return res.status(502).json({
+        ok: false,
+        timeline: [],
+        error: fallbackError.message,
+      });
+    }
   }
 });
 
@@ -1934,6 +2326,217 @@ app.delete("/users/:uid/recently-viewed", async (req, res) => {
 
     return res.status(500).json({
       ok: false,
+      error: error.message,
+    });
+  }
+});
+
+app.get("/users/:uid/likes", async (req, res) => {
+  try {
+    const userId = String(req.params.uid || "").trim();
+
+    if (!userId) {
+      return res.status(400).json({
+        ok: false,
+        likes: [],
+        error: "User ID is required.",
+      });
+    }
+
+    const snapshot = await db
+      .collection("likes")
+      .where("userId", "==", userId)
+      .get();
+
+    const likedItems = await Promise.all(
+      snapshot.docs.map(async (document) => {
+        const likeData = document.data();
+
+        const itemId = String(
+          likeData.musicId || ""
+        );
+
+        const itemType = String(
+          likeData.type || "track"
+        ).toLowerCase();
+
+        if (!itemId) {
+          return null;
+        }
+
+        try {
+          if (itemType === "track") {
+            const track = await fetchDeezer(
+              `/track/${encodeURIComponent(itemId)}`
+            );
+
+            return {
+              likeId: document.id,
+              likedAt: serializeTimestamp(
+                likeData.createdAt
+              ),
+              ...normalizeDeezerTrack(track),
+            };
+          }
+
+          if (itemType === "album") {
+            const album = await fetchDeezer(
+              `/album/${encodeURIComponent(itemId)}`
+            );
+
+            const image =
+              album.cover_xl ||
+              album.cover_big ||
+              album.cover_medium ||
+              album.cover ||
+              "";
+
+            return {
+              likeId: document.id,
+              likedAt: serializeTimestamp(
+                likeData.createdAt
+              ),
+
+              id: String(album.id),
+              listenableId: String(album.id),
+              type: "album",
+
+              title:
+                album.title ||
+                "Unknown Album",
+
+              name:
+                album.title ||
+                "Unknown Album",
+
+              artist:
+                album.artist || {
+                  name: "Unknown Artist",
+                },
+
+              artistName:
+                album.artist?.name ||
+                "Unknown Artist",
+
+              image,
+              coverArt: image,
+
+              album: {
+                id: String(album.id),
+                title:
+                  album.title ||
+                  "Unknown Album",
+                cover_xl: image,
+                cover_big: image,
+              },
+            };
+          }
+
+          if (itemType === "artist") {
+            const artist = await fetchDeezer(
+              `/artist/${encodeURIComponent(itemId)}`
+            );
+
+            const image =
+              artist.picture_xl ||
+              artist.picture_big ||
+              artist.picture_medium ||
+              artist.picture ||
+              "";
+
+            return {
+              likeId: document.id,
+              likedAt: serializeTimestamp(
+                likeData.createdAt
+              ),
+
+              id: String(artist.id),
+              listenableId: String(artist.id),
+              type: "artist",
+
+              title:
+                artist.name ||
+                "Unknown Artist",
+
+              name:
+                artist.name ||
+                "Unknown Artist",
+
+              artist: {
+                id: String(artist.id),
+                name:
+                  artist.name ||
+                  "Unknown Artist",
+                picture: image,
+              },
+
+              artistName:
+                artist.name ||
+                "Unknown Artist",
+
+              image,
+              coverArt: image,
+            };
+          }
+
+          return null;
+        } catch (metadataError) {
+          console.warn(
+            `[Likes] Unable to hydrate ${itemType} ${itemId}:`,
+            metadataError.message
+          );
+
+          // Keep the like visible even if Deezer lookup fails.
+          return {
+            likeId: document.id,
+            likedAt: serializeTimestamp(
+              likeData.createdAt
+            ),
+
+            id: itemId,
+            listenableId: itemId,
+            type: itemType,
+
+            title:
+              likeData.name ||
+              `Liked ${itemType}`,
+
+            name:
+              likeData.name ||
+              `Liked ${itemType}`,
+
+            artistName:
+              likeData.artistName || "",
+
+            image: "",
+            coverArt: "",
+          };
+        }
+      })
+    );
+
+    const likes = likedItems
+      .filter(Boolean)
+      .sort((first, second) => {
+        return (
+          new Date(second.likedAt || 0).getTime() -
+          new Date(first.likedAt || 0).getTime()
+        );
+      });
+
+    return res.json({
+      ok: true,
+      likes,
+    });
+  } catch (error) {
+    console.error(
+      "GET /users/:uid/likes error:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+      likes: [],
       error: error.message,
     });
   }
