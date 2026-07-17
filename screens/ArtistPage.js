@@ -40,7 +40,7 @@ import {
 } from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
-import { Icon, ListItem } from "@rneui/base";
+import { Icon } from "@rneui/base";
 
 export default function ArtistPage({ route, navigation }) {
   const { artist } = route.params;
@@ -904,52 +904,52 @@ export default function ArtistPage({ route, navigation }) {
             <Image source={artistImage} style={styles.image} />
             <Text style={styles.title}>{artist.name || "Unknown Artist"}</Text>
             
-            <TouchableOpacity onPress={() => {navigateToListenablePage("track")}}>
-              <ListItem
-                containerStyle={{
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  marginTop: 20,
-                }}
-              >
-                <Icon
-                  key="songs-icon"
-                  name="audiotrack"
-                  size={20}
-                />
+            <TouchableOpacity
+              style={styles.artistLinkRow}
+              activeOpacity={0.8}
+              onPress={() =>
+                navigateToListenablePage("track")
+              }
+            >
+              <Icon
+                name="audiotrack"
+                size={24}
+                color="#000"
+              />
 
-                <ListItem.Content key="songs-content">
-                  <ListItem.Title>
-                    Songs
-                  </ListItem.Title>
-                </ListItem.Content>
+              <Text style={styles.artistLinkText}>
+                Songs
+              </Text>
 
-                <ListItem.Chevron key="songs-chevron" />
-              </ListItem>
+              <Icon
+                name="chevron-right"
+                size={28}
+                color="#777"
+              />
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => {navigateToListenablePage("album")}}>
-              <ListItem
-                containerStyle={{
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  marginTop: 20,
-                }}
-              >
-                <Icon
-                  key="albums-icon"
-                  name="album"
-                  size={20}
-                />
+            <TouchableOpacity
+              style={styles.artistLinkRow}
+              activeOpacity={0.8}
+              onPress={() =>
+                navigateToListenablePage("album")
+              }
+            >
+              <Icon
+                name="album"
+                size={24}
+                color="#000"
+              />
 
-                <ListItem.Content key="albums-content">
-                  <ListItem.Title>
-                    Albums
-                  </ListItem.Title>
-                </ListItem.Content>
+              <Text style={styles.artistLinkText}>
+                Albums
+              </Text>
 
-                <ListItem.Chevron key="albums-chevron" />
-              </ListItem>
+              <Icon
+                name="chevron-right"
+                size={28}
+                color="#777"
+              />
             </TouchableOpacity>
 
             {/* Add Review Section */}
@@ -1116,6 +1116,24 @@ export default function ArtistPage({ route, navigation }) {
 
 const styles = StyleSheet.create({
   ...StyleSheet.create({
+    artistLinkRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      width: "100%",
+      backgroundColor: "#FFFFFF",
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      marginTop: 20,
+    },
+
+    artistLinkText: {
+      flex: 1,
+      marginLeft: 12,
+      color: "#000000",
+      fontSize: 16,
+      fontWeight: "600",
+    },
     emojiChoice: {
       borderRadius: 8,
       padding: 4,

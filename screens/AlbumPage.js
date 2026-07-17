@@ -44,7 +44,9 @@ import {
 } from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
-import { Avatar, Icon, ListItem } from "@rneui/base";
+import {
+  Icon
+} from "@rneui/base";
 import { Audio } from "expo-av";
 import { AnimatedCircularProgress } from "react-native-circular-progress";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
@@ -253,15 +255,43 @@ export default function AlbumPage({ route, navigation }) {
         getAlbumSummary(album.id),
       ]);
 
-      const [
-        reviewsData,
-        songsData,
-        summaryData,
-      ] = await Promise.all([
-        reviewsResponse.json(),
-        songsResponse.json(),
-        summaryResponse.json(),
-      ]);
+      const parseJsonResponse = async (
+  response,
+  label
+) => {
+  const text = await response.text();
+
+  try {
+    return text
+      ? JSON.parse(text)
+      : {};
+  } catch {
+    throw new Error(
+      `${label} returned invalid JSON. ` +
+      `HTTP ${response.status}: ` +
+      text.slice(0, 120)
+    );
+  }
+};
+
+    const [
+      reviewsData,
+      songsData,
+      summaryData,
+    ] = await Promise.all([
+      parseJsonResponse(
+        reviewsResponse,
+        "Reviews"
+      ),
+      parseJsonResponse(
+        songsResponse,
+        "Album songs"
+      ),
+      parseJsonResponse(
+        summaryResponse,
+        "Album summary"
+      ),
+    ]);
 
       if (!reviewsResponse.ok) {
         throw new Error(
@@ -1142,77 +1172,137 @@ export default function AlbumPage({ route, navigation }) {
               }
 
               <View style={styles.songAccordion}>
-                {
-                  !songsLoading 
-                  ?
-                    <View style={styles.roundedWrapper}>
-                      <ListItem.Accordion
-                        content={
-                          <>
-                            <Icon name="audiotrack" size={20} style={{ borderRadius: 10, marginRight: 10}} />
-                            <ListItem.Content>
-                              <ListItem.Title>Songs</ListItem.Title>
-                            </ListItem.Content>
-                          </>
+                {songsLoading ? (
+                  <ActivityIndicator
+                    size="large"
+                    color="white"
+                  />
+                ) : (
+                  <View style={styles.roundedWrapper}>
+                    <TouchableOpacity
+                      style={styles.accordionButton}
+                      activeOpacity={0.8}
+                      onPress={() =>
+                        setSongExpanded(
+                          (currentValue) => !currentValue
+                        )
+                      }
+                    >
+                      <View style={styles.accordionHeader}>
+                        <Icon
+                          name="audiotrack"
+                          size={20}
+                          color="#000"
+                        />
+
+                        <Text style={styles.accordionTitle}>
+                          Songs ({albumSongs.length})
+                        </Text>
+                      </View>
+
+                      <Icon
+                        name={
+                          songExpanded
+                            ? "keyboard-arrow-up"
+                            : "keyboard-arrow-down"
                         }
-                        isExpanded={songExpanded}
-                        onPress={() => {
-                          setSongExpanded(!songExpanded);
-                        }}
-                        style={{ marginTop: 20 }}
-                      >
-                        {albumSongs.map((song, i) => (
-                          <ListItem 
-                            id={song.listenableId} 
-                            key={song.listenableId}
-                            bottomDivider 
-                            onPress={() => { navigateToSong(song) }}
-                            Component={TouchableHighlight}
-                          >
-                            <View style={styles.songRow}>
-                              {/* Song Number */}
-                              <Text style={styles.songNumber}>{i + 1}</Text>
+                        size={26}
+                        color="#000"
+                      />
+                    </TouchableOpacity>
 
-                              {/* Song Title */}
-                              <Text style={styles.songTitle}>{song.title}</Text>
+                    {songExpanded && (
+                      <View style={styles.songList}>
+                        {albumSongs.length > 0 ? (
+                          albumSongs.map((song, index) => {
+                            const songId = String(
+                              song.listenableId ||
+                              song.listenable_id ||
+                              song.id ||
+                              index
+                            );
 
-                              {/* Preview Button */}
-                              {song.preview && (
-                                <TouchableOpacity
-                                  onPress={() => handlePlayPreview(song.preview)}
-                                  style={styles.playButton}
-                                >
-                                  <AnimatedCircularProgress
-                                    size={40}
-                                    width={4}
-                                    fill={currentPreview === song.preview ? progress : 0}
-                                    tintColor={colours.secondaryblue}
-                                    backgroundColor={colours.bluegrey}
-                                    rotation={0}
+                            const songTitle =
+                              song.title ||
+                              song.name ||
+                              "Unknown Track";
+
+                            return (
+                              <TouchableOpacity
+                                key={`album-song-${songId}-${index}`}
+                                style={styles.songListItem}
+                                activeOpacity={0.8}
+                                onPress={() =>
+                                  navigateToSong(song)
+                                }
+                              >
+                                <View style={styles.songRow}>
+                                  <Text style={styles.songNumber}>
+                                    {index + 1}
+                                  </Text>
+
+                                  <Text
+                                    style={styles.songTitle}
+                                    numberOfLines={1}
                                   >
-                                    {() => (
-                                      <MaterialIcons
-                                        name={
-                                          currentPreview === song.preview && isPlaying
-                                            ? "stop"
-                                            : "play-arrow"
+                                    {songTitle}
+                                  </Text>
+
+                                  {!!song.preview && (
+                                    <TouchableOpacity
+                                      style={styles.playButton}
+                                      onPress={(event) => {
+                                        event.stopPropagation();
+
+                                        handlePlayPreview(
+                                          song.preview
+                                        );
+                                      }}
+                                    >
+                                      <AnimatedCircularProgress
+                                        size={40}
+                                        width={4}
+                                        fill={
+                                          currentPreview === song.preview
+                                            ? progress
+                                            : 0
                                         }
-                                        size={24}
-                                        color="#fff"
-                                      />
-                                    )}
-                                  </AnimatedCircularProgress>
-                                </TouchableOpacity>
-                              )}
-                            </View>
-                          </ListItem>
-                        ))}
-                      </ListItem.Accordion>
-                    </View>
-                  :
-                    <ActivityIndicator size="large" color="white" />
-                }
-                  
+                                        tintColor={
+                                          colours.secondaryblue
+                                        }
+                                        backgroundColor={
+                                          colours.bluegrey
+                                        }
+                                        rotation={0}
+                                      >
+                                        {() => (
+                                          <MaterialIcons
+                                            name={
+                                              currentPreview === song.preview &&
+                                              isPlaying
+                                                ? "stop"
+                                                : "play-arrow"
+                                            }
+                                            size={24}
+                                            color="#fff"
+                                          />
+                                        )}
+                                      </AnimatedCircularProgress>
+                                    </TouchableOpacity>
+                                  )}
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })
+                        ) : (
+                          <Text style={styles.noSongsText}>
+                            No songs were found for this album.
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
               {/* Review Input Section (same as SongPage) */}
               <View style={styles.reviewInputContainer}>
@@ -1378,6 +1468,61 @@ export default function AlbumPage({ route, navigation }) {
 
 const styles = StyleSheet.create({
   ...StyleSheet.create({
+    songAccordion: {
+        marginTop: 20,
+      },
+
+      accordionButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        backgroundColor: "#FFFFFF",
+        paddingHorizontal: 15,
+        paddingVertical: 14,
+      },
+
+      accordionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        flex: 1,
+      },
+
+      accordionTitle: {
+        marginLeft: 10,
+        fontSize: 16,
+        color: "#000",
+        fontWeight: "600",
+      },
+
+      songList: {
+        backgroundColor: "#FFFFFF",
+      },
+
+      songListItem: {
+        backgroundColor: "#FFFFFF",
+        borderTopWidth: 1,
+        borderTopColor: "#DDDDDD",
+        paddingHorizontal: 10,
+      },
+
+      noSongsText: {
+        color: "#333333",
+        fontSize: 15,
+        textAlign: "center",
+        padding: 20,
+      },
+    accordionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      flex: 1,
+    },
+
+    accordionTitle: {
+      marginLeft: 10,
+      fontSize: 16,
+      color: "#000",
+      fontWeight: "500",
+    },
     emojiChoice: {
       borderRadius: 8,
       padding: 4,

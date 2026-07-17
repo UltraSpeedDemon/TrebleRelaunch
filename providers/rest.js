@@ -492,12 +492,26 @@ export async function getReviewById(rid) {
 // #endregion
 
 //#region Album endpoints
-export async function getAlbumSongs(listenable_id) {
-  return await serverGet("album/songs", { listenable_id })
+export async function getAlbumSongs(
+  albumId
+) {
+  return await serverGet(
+    "album/songs",
+    {
+      listenable_id: String(albumId),
+    }
+  );
 }
 
-export async function getAlbumSummary(listenable_id) {
-  return await serverGet("album/summary", { listenable_id })
+export async function getAlbumSummary(
+  albumId
+) {
+  return await serverGet(
+    "album/summary",
+    {
+      listenable_id: String(albumId),
+    }
+  );
 }
 
 export async function getReviewSong(userId, rid) {

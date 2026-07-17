@@ -1374,13 +1374,11 @@ app.post("/users/unlike", async (req, res) => {
 
     await db.collection("likes").doc(likeId).delete();
 
-    return res.json({
+    return res.status(200).json({
       ok: true,
       liked: false,
       musicId: String(music_id),
-      type,
-      name: String(name || ""),
-      artistName: String(artist_name || ""),
+      type: String(type).toLowerCase(),
     });
   } catch (error) {
     console.error("POST /users/unlike error:", error);
@@ -1394,35 +1392,55 @@ app.post("/users/unlike", async (req, res) => {
 
 app.get("/users/like", async (req, res) => {
   try {
-    const { user_id, music_id, type = "track" } = req.query;
+    const userId = String(
+      req.query.user_id || ""
+    ).trim();
 
-    if (!user_id || !music_id) {
+    const musicId = String(
+      req.query.music_id || ""
+    ).trim();
+
+    const type = String(
+      req.query.type || "track"
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!userId || !musicId) {
       return res.status(400).json({
         ok: false,
-        error: "user_id and music_id are required.",
+        liked: false,
+        error:
+          "user_id and music_id are required.",
       });
     }
 
-    const likeId = `${user_id}_${type}_${music_id}`;
+    const likeId =
+      `${userId}_${type}_${musicId}`;
 
     const snapshot = await db
       .collection("likes")
       .doc(likeId)
       .get();
 
-    return res.json({
+    return res.status(200).json({
       ok: true,
       liked: snapshot.exists,
-      musicId: String(music_id),
+      likeId: snapshot.exists
+        ? snapshot.id
+        : null,
+      musicId,
       type,
-      name: String(name || ""),
-      artistName: String(artist_name || ""),
     });
   } catch (error) {
-    console.error("GET /users/like error:", error);
+    console.error(
+      "GET /users/like error:",
+      error
+    );
 
     return res.status(500).json({
       ok: false,
+      liked: false,
       error: error.message,
     });
   }
@@ -1785,6 +1803,108 @@ app.post("/review", async (req, res) => {
 
     return res.status(
       error.code?.startsWith("auth/") ? 401 : 500
+    ).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+});
+
+app.put("/review/update", async (req, res) => {
+  try {
+    const decodedUser =
+      await verifyFirebaseUser(req);
+
+    const userId = decodedUser.uid;
+
+    const {
+      rid,
+      emoji = [],
+      hearted = false,
+      message = "",
+      rating = 0,
+    } = req.body || {};
+
+    if (!rid) {
+      return res.status(400).json({
+        ok: false,
+        error: "Review ID is required.",
+      });
+    }
+
+    if (!String(message).trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: "Review message is required.",
+      });
+    }
+
+    const reviewRef = db
+      .collection("reviews")
+      .doc(String(rid));
+
+    const reviewSnapshot =
+      await reviewRef.get();
+
+    if (!reviewSnapshot.exists) {
+      return res.status(404).json({
+        ok: false,
+        error: "Review not found.",
+      });
+    }
+
+    const existingReview =
+      reviewSnapshot.data();
+
+    if (existingReview.userId !== userId) {
+      return res.status(403).json({
+        ok: false,
+        error:
+          "You cannot update another user's review.",
+      });
+    }
+
+    const updatedReview = {
+      message: String(message).trim(),
+
+      rating: Math.min(
+        Math.max(
+          Number(rating) || 0,
+          0
+        ),
+        5
+      ),
+
+      hearted: Boolean(hearted),
+
+      emoji: Array.isArray(emoji)
+        ? emoji
+        : [],
+
+      updatedAt:
+        FieldValue.serverTimestamp(),
+    };
+
+    await reviewRef.update(
+      updatedReview
+    );
+
+    return res.status(200).json({
+      ok: true,
+      updated: true,
+      id: reviewSnapshot.id,
+      rid: reviewSnapshot.id,
+    });
+  } catch (error) {
+    console.error(
+      "PUT /review/update error:",
+      error
+    );
+
+    return res.status(
+      error.code?.startsWith("auth/")
+        ? 401
+        : 500
     ).json({
       ok: false,
       error: error.message,
@@ -2703,6 +2823,195 @@ app.get("/artists/:artistId/albums", async (req, res) => {
     return res.status(502).json({
       ok: false,
       albums: [],
+      error: error.message,
+    });
+  }
+});
+
+app.get("/album/songs", async (req, res) => {
+  try {
+    const albumId = String(
+      req.query.listenable_id ||
+      req.query.album_id ||
+      ""
+    ).trim();
+
+    if (!albumId) {
+      return res.status(400).json({
+        ok: false,
+        songs: [],
+        error: "listenable_id is required.",
+      });
+    }
+
+    const albumData = await fetchDeezer(
+      `/album/${encodeURIComponent(albumId)}`
+    );
+
+    const tracks =
+      albumData?.tracks?.data || [];
+
+    const albumImage =
+      albumData.cover_xl ||
+      albumData.cover_big ||
+      albumData.cover_medium ||
+      albumData.cover ||
+      "";
+
+    const songs = tracks.map((track) => {
+      const normalized =
+        normalizeDeezerTrack(track);
+
+      return {
+        ...normalized,
+
+        id: String(track.id),
+        listenableId: String(track.id),
+        listenable_id: String(track.id),
+        type: "track",
+
+        title:
+          track.title ||
+          track.title_short ||
+          "Unknown Track",
+
+        name:
+          track.title ||
+          track.title_short ||
+          "Unknown Track",
+
+        artist:
+          track.artist ||
+          albumData.artist ||
+          null,
+
+        artistName:
+          track.artist?.name ||
+          albumData.artist?.name ||
+          "Unknown Artist",
+
+        album: {
+          id: String(albumData.id),
+          title:
+            albumData.title ||
+            "Unknown Album",
+          cover: albumImage,
+          coverArt: albumImage,
+          cover_xl: albumImage,
+          cover_big: albumImage,
+        },
+
+        image:
+          normalized.image ||
+          albumImage,
+
+        coverArt:
+          normalized.coverArt ||
+          albumImage,
+
+        preview:
+          track.preview || "",
+      };
+    });
+
+    console.log(
+      `[Album Songs] ${albumId}: ${songs.length}`
+    );
+
+    return res.status(200).json({
+      ok: true,
+      songs,
+    });
+  } catch (error) {
+    console.error(
+      "GET /album/songs error:",
+      error
+    );
+
+    return res.status(502).json({
+      ok: false,
+      songs: [],
+      error: error.message,
+    });
+  }
+});
+
+app.get("/album/summary", async (req, res) => {
+  try {
+    const albumId = String(
+      req.query.listenable_id ||
+      req.query.album_id ||
+      ""
+    ).trim();
+
+    if (!albumId) {
+      return res.status(400).json({
+        ok: false,
+        summary: "",
+        error: "listenable_id is required.",
+      });
+    }
+
+    const albumData = await fetchDeezer(
+      `/album/${encodeURIComponent(albumId)}`
+    );
+
+    const pieces = [];
+
+    if (albumData.release_date) {
+      pieces.push(
+        `Released ${albumData.release_date}`
+      );
+    }
+
+    if (albumData.nb_tracks) {
+      pieces.push(
+        `${albumData.nb_tracks} tracks`
+      );
+    }
+
+    if (albumData.duration) {
+      const totalMinutes = Math.round(
+        Number(albumData.duration) / 60
+      );
+
+      pieces.push(
+        `${totalMinutes} minutes`
+      );
+    }
+
+    if (albumData.genres?.data?.length) {
+      pieces.push(
+        albumData.genres.data
+          .map((genre) => genre.name)
+          .filter(Boolean)
+          .join(", ")
+      );
+    }
+
+    return res.status(200).json({
+      ok: true,
+      summary: pieces.join(" • "),
+      album: {
+        id: String(albumData.id),
+        title: albumData.title || "",
+        artist:
+          albumData.artist?.name || "",
+        releaseDate:
+          albumData.release_date || "",
+        trackCount:
+          Number(albumData.nb_tracks || 0),
+      },
+    });
+  } catch (error) {
+    console.error(
+      "GET /album/summary error:",
+      error
+    );
+
+    return res.status(502).json({
+      ok: false,
+      summary: "",
       error: error.message,
     });
   }
