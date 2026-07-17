@@ -12,9 +12,9 @@ import BottomNavbar from "../components/BottomNavbar";
 import SectionDivider from "../components/SectionDivider";
 import MusicCard from "../components/MusicCard";
 import {
-    getArtistSongs,
-    getArtistAlbums,
-} from "../providers/rest"; // REMOVED getFollowers, getFriends
+  getArtistTracks,
+  getArtistAlbums,
+} from "../providers/rest";
 import colours from "../styles/colours";
 
 export default function ArtistListenables({ navigation, route }) {
@@ -26,55 +26,277 @@ export default function ArtistListenables({ navigation, route }) {
     const { type, artist } = route.params;
 
     function renderListenableItem({ item }) {
-        if (item.type == "track") {
-            let track = { ...item, artist: artist.name }
+        if (item.type === "track") {
+            const artistName =
+                artist?.name ||
+                artist?.title ||
+                item.artistName ||
+                item.artist?.name ||
+                "Unknown Artist";
+
+            const albumTitle =
+                typeof item.album === "string"
+                ? item.album
+                : item.album?.title || "";
+
+            const track = {
+                ...item,
+
+                id: String(item.id),
+                listenableId: String(
+                item.listenableId ||
+                item.id
+                ),
+
+                type: "track",
+
+                title:
+                item.title ||
+                item.name ||
+                "Unknown Track",
+
+                name:
+                item.name ||
+                item.title ||
+                "Unknown Track",
+
+                artist: {
+                id: String(
+                    artist?.id ||
+                    item.artist?.id ||
+                    ""
+                ),
+                name: artistName,
+                },
+
+                artistName,
+
+                album: {
+                ...(typeof item.album === "object"
+                    ? item.album
+                    : {}),
+                title: albumTitle,
+                },
+
+                image:
+                item.image ||
+                item.coverArt ||
+                item.album?.cover_xl ||
+                item.album?.cover_big ||
+                "",
+
+                coverArt:
+                item.coverArt ||
+                item.image ||
+                item.album?.cover_xl ||
+                item.album?.cover_big ||
+                "",
+
+                preview:
+                item.preview ||
+                item.previewUrl ||
+                "",
+            };
+
             return (
                 <MusicCard
-                    key={item.id}
-                    id={item.id}
-                    image={item.image}
-                    name={item.name}
-                    artist={artist.name}
-                    album={item.album}
-                    onPressCard={() =>
-                        navigation.navigate("SongPage", { track })
-                    }
+                id={track.id}
+                image={track.image}
+                name={track.title}
+                artist={artistName}
+                album={albumTitle}
+                onPressCard={() =>
+                    navigation.navigate(
+                    "SongPage",
+                    { track }
+                    )
+                }
                 />
             );
-        }
+            }
         else {
-            let album = { ...item, artist: artist.name }
-            return (
+            const artistName =
+                artist?.name ||
+                artist?.title ||
+                item.artistName ||
+                item.artist?.name ||
+                "Unknown Artist";
+
+                const album = {
+                ...item,
+
+                id: String(item.id),
+                listenableId: String(
+                    item.listenableId ||
+                    item.id
+                ),
+
+                type: "album",
+
+                title:
+                    item.title ||
+                    item.name ||
+                    "Unknown Album",
+
+                name:
+                    item.name ||
+                    item.title ||
+                    "Unknown Album",
+
+                artist:
+                    item.artist &&
+                    typeof item.artist === "object"
+                    ? item.artist
+                    : {
+                        id: String(
+                            artist?.id || ""
+                        ),
+                        name: artistName,
+                        },
+
+                artistName,
+
+                image:
+                    item.image ||
+                    item.coverArt ||
+                    item.cover_xl ||
+                    item.cover_big ||
+                    "",
+
+                coverArt:
+                    item.coverArt ||
+                    item.image ||
+                    item.cover_xl ||
+                    item.cover_big ||
+                    "",
+                };
+
+                return (
                 <MusicCard
-                    key={item.id}
-                    id={item.id}
-                    image={item.image}
-                    name={item.name}
-                    artist={artist.name}
+                    id={album.id}
+                    image={album.image}
+                    name={album.title}
+                    artist={artistName}
                     onPressCard={() =>
-                        navigation.navigate("AlbumPage", { album })
+                    navigation.navigate(
+                        "AlbumPage",
+                        { album }
+                    )
                     }
                 />
-            );
+                );
         }
     }
 
     useEffect(() => {
+        setPage(0);
+        setListenableData([]);
         loadNextListenables();
-    }, [])
+        }, [artist?.id, type]);
 
     async function loadNextListenables() {
-        if (type == "track") {
-            const songs = await (await getArtistSongs(artist.id, page)).json()
-            setListenableData([...listenableData, ...songs])
+        if (loading && page > 0) {
+            return;
         }
-        else {
-            const albums = await (await getArtistAlbums(artist.id, page)).json()
-            setListenableData([...listenableData, ...albums])
+
+        try {
+            setLoading(true);
+
+            const artistId = String(
+            artist?.id ||
+            artist?.listenableId ||
+            ""
+            );
+
+            if (!artistId) {
+            throw new Error(
+                "This artist does not have a valid ID."
+            );
+            }
+
+            const response =
+            type === "track"
+                ? await getArtistTracks(
+                    artistId,
+                    50
+                )
+                : await getArtistAlbums(
+                    artistId,
+                    50
+                );
+
+            const responseText =
+            await response.text();
+
+            let data = {};
+
+            try {
+            data = responseText
+                ? JSON.parse(responseText)
+                : {};
+            } catch {
+            throw new Error(
+                responseText ||
+                "The backend returned invalid JSON."
+            );
+            }
+
+            if (!response.ok) {
+            throw new Error(
+                data?.error ||
+                `Backend returned HTTP ${response.status}`
+            );
+            }
+
+            const newItems =
+            type === "track"
+                ? Array.isArray(data.tracks)
+                ? data.tracks
+                : []
+                : Array.isArray(data.albums)
+                ? data.albums
+                : [];
+
+            setListenableData((previousItems) => {
+            const existingIds = new Set(
+                previousItems.map((item) =>
+                String(item.id)
+                )
+            );
+
+            const uniqueNewItems =
+                newItems.filter(
+                (item) =>
+                    !existingIds.has(
+                    String(item.id)
+                    )
+                );
+
+            return [
+                ...previousItems,
+                ...uniqueNewItems,
+            ];
+            });
+
+            setPage(
+            (previousPage) =>
+                previousPage + 1
+            );
+
+            console.log(
+            `[ArtistListenables] Loaded ${newItems.length} ${type}s`
+            );
+        } catch (error) {
+            console.error(
+            "[ArtistListenables] Load error:",
+            error
+            );
+
+            setListenableData([]);
+        } finally {
+            setLoading(false);
         }
-        setPage(page + 1)
-        setLoading(false);
-    }
+        }
 
     return (
         <View style={styles.container}>
@@ -95,17 +317,14 @@ export default function ArtistListenables({ navigation, route }) {
                     <FlatList
                         data={listenableData}
                         renderItem={renderListenableItem}
-                        keyExtractor={(item, index) => index.toString()}
+                        keyExtractor={(item, index) =>
+                        `${item.type || type}-${item.id}-${index}`
+                        }
                         contentContainerStyle={styles.feedList}
                         onMomentumScrollBegin={() => {
                             setOnEndReachedCalledDuringMomentum(false);
                         }}
-                        onEndReached={() => {
-                            if (!onEndReachedCalledDuringMomentum) {
-                                loadNextListenables();
-                                setOnEndReachedCalledDuringMomentum(true);
-                            }
-                        }}
+                        onEndReached={() => {}}
                         onEndReachedThreshold={0.01}
                         showsVerticalScrollIndicator={false}
                     />

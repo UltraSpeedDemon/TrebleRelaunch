@@ -466,7 +466,7 @@ export default function Favourites({ navigation }) {
 
       <View style={styles.content}>
         <Text style={styles.header}>
-          Liked Songs
+          Liked
         </Text>
 
         <Text style={styles.subText}>
@@ -481,7 +481,7 @@ export default function Favourites({ navigation }) {
             />
 
             <Text style={styles.loadingText}>
-              Loading liked songs...
+              Loading liked...
             </Text>
           </View>
         ) : (

@@ -244,7 +244,7 @@ const Sidebar = () => {
             source={require("../images/favouritesIcon2.png")}
             style={styles.favouritesIcon}
           />
-          <Text style={styles.menuText}>Liked Songs</Text>
+          <Text style={styles.menuText}>Liked</Text>
         </TouchableOpacity>
         {/* Additional Menu Items */}
         <TouchableOpacity

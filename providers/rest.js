@@ -508,11 +508,47 @@ export async function getReviewSong(userId, rid) {
 export async function getArtistSongs(artist_id, page) {
   return await serverGet("artist/songs", { artist_id, page })
 }
-
-export async function getArtistAlbums(artist_id, page) {
-  return await serverGet("artist/albums", { artist_id, page })
-}
 //#endregion
+
+export async function getArtistTracks(
+  artistId,
+  limit = 50
+) {
+  if (!artistId) {
+    throw new Error(
+      "getArtistTracks requires an artist ID."
+    );
+  }
+
+  return await serverGet(
+    `artists/${encodeURIComponent(
+      artistId
+    )}/tracks`,
+    {
+      limit,
+    }
+  );
+}
+
+export async function getArtistAlbums(
+  artistId,
+  limit = 50
+) {
+  if (!artistId) {
+    throw new Error(
+      "getArtistAlbums requires an artist ID."
+    );
+  }
+
+  return await serverGet(
+    `artists/${encodeURIComponent(
+      artistId
+    )}/albums`,
+    {
+      limit,
+    }
+  );
+}
 
 export function getServerEndpointBase() {
   const tunnelUrl = process.env.EXPO_PUBLIC_API_TUNNEL_URL;

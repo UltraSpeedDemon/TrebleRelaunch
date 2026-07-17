@@ -2542,6 +2542,172 @@ app.get("/users/:uid/likes", async (req, res) => {
   }
 });
 
+
+app.get("/artists/:artistId/tracks", async (req, res) => {
+  try {
+    const artistId = String(
+      req.params.artistId || ""
+    ).trim();
+
+    const parsedLimit = Number.parseInt(
+      req.query.limit,
+      10
+    );
+
+    const limit = Math.min(
+      Math.max(
+        Number.isNaN(parsedLimit)
+          ? 50
+          : parsedLimit,
+        1
+      ),
+      100
+    );
+
+    if (!artistId) {
+      return res.status(400).json({
+        ok: false,
+        tracks: [],
+        error: "Artist ID is required.",
+      });
+    }
+
+    const result = await fetchDeezer(
+      `/artist/${encodeURIComponent(
+        artistId
+      )}/top?limit=${limit}`
+    );
+
+    const tracks = (result.data || []).map(
+      (track) => normalizeDeezerTrack(track)
+    );
+
+    console.log(
+      `[Artist Tracks] ${artistId}: ${tracks.length}`
+    );
+
+    return res.status(200).json({
+      ok: true,
+      tracks,
+    });
+  } catch (error) {
+    console.error(
+      "GET /artists/:artistId/tracks error:",
+      error
+    );
+
+    return res.status(502).json({
+      ok: false,
+      tracks: [],
+      error: error.message,
+    });
+  }
+});
+
+app.get("/artists/:artistId/albums", async (req, res) => {
+  try {
+    const artistId = String(
+      req.params.artistId || ""
+    ).trim();
+
+    const parsedLimit = Number.parseInt(
+      req.query.limit,
+      10
+    );
+
+    const limit = Math.min(
+      Math.max(
+        Number.isNaN(parsedLimit)
+          ? 50
+          : parsedLimit,
+        1
+      ),
+      100
+    );
+
+    if (!artistId) {
+      return res.status(400).json({
+        ok: false,
+        albums: [],
+        error: "Artist ID is required.",
+      });
+    }
+
+    const result = await fetchDeezer(
+      `/artist/${encodeURIComponent(
+        artistId
+      )}/albums?limit=${limit}`
+    );
+
+    const albums = (result.data || []).map(
+      (album) => {
+        const image =
+          album.cover_xl ||
+          album.cover_big ||
+          album.cover_medium ||
+          album.cover ||
+          "";
+
+        return {
+          id: String(album.id),
+          listenableId: String(album.id),
+          type: "album",
+
+          title:
+            album.title ||
+            "Unknown Album",
+
+          name:
+            album.title ||
+            "Unknown Album",
+
+          artist:
+            album.artist || {
+              id: artistId,
+              name: "Unknown Artist",
+            },
+
+          artistName:
+            album.artist?.name ||
+            "Unknown Artist",
+
+          image,
+          coverArt: image,
+          cover: image,
+
+          releaseDate:
+            album.release_date || "",
+
+          recordType:
+            album.record_type || "",
+
+          link: album.link || "",
+        };
+      }
+    );
+
+    console.log(
+      `[Artist Albums] ${artistId}: ${albums.length}`
+    );
+
+    return res.status(200).json({
+      ok: true,
+      albums,
+    });
+  } catch (error) {
+    console.error(
+      "GET /artists/:artistId/albums error:",
+      error
+    );
+
+    return res.status(502).json({
+      ok: false,
+      albums: [],
+      error: error.message,
+    });
+  }
+});
+
 app.get("/users/:uid", async (req, res) => {
   try {
     const { uid } = req.params;

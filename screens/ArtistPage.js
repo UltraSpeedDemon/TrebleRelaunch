@@ -21,7 +21,23 @@ import Toast from 'react-native-toast-message';
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { getUser, populateMetadata, getLike, unlike, like, postRecommendations, createReview, getReviews, upvoteReview, removeUpvoteFromReview, deleteReview, getFriends, share } from "../providers/rest";
+import {
+  getUser,
+  populateMetadata,
+  getLike,
+  unlike,
+  like,
+  postRecommendations,
+  createReview,
+  updateReview,
+  getReviews,
+  upvoteReview,
+  removeUpvoteFromReview,
+  deleteReview,
+  getFriends,
+  share,
+  saveRecentlyViewed,
+} from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 import { Icon, ListItem } from "@rneui/base";
@@ -37,6 +53,8 @@ export default function ArtistPage({ route, navigation }) {
   const [selectedEmojis, setSelectedEmojis] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [users, setUsers] = useState([]);
+  const [existingReviewId, setExistingReviewId] =
+    useState(null);
 
   // Like, Save, Favourite states
   const [liked, setLiked] = useState(false);
@@ -48,7 +66,62 @@ export default function ArtistPage({ route, navigation }) {
   const isFocused = useIsFocused();
 
   useEffect(() => {
-    console.log("SongPage mounted with track:", artist);
+  const recordRecentlyViewed = async () => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser || !artist?.id) {
+      return;
+    }
+
+    try {
+      const response = await saveRecentlyViewed(
+        currentUser.uid,
+        {
+          ...artist,
+          id: String(artist.id),
+          type: "artist",
+          title:
+            artist.title ||
+            artist.name ||
+            "Unknown Artist",
+          name:
+            artist.name ||
+            artist.title ||
+            "Unknown Artist",
+          image:
+            artist.image ||
+            artist.picture ||
+            artist.coverArt ||
+            "",
+          coverArt:
+            artist.coverArt ||
+            artist.image ||
+            artist.picture ||
+            "",
+        }
+      );
+
+      if (!response?.ok) {
+        const data = await response?.json();
+
+        console.warn(
+          "[ArtistPage] Failed to save recently viewed:",
+          data
+        );
+      }
+    } catch (error) {
+      console.error(
+        "[ArtistPage] Recently viewed error:",
+        error
+      );
+    }
+  };
+
+  recordRecentlyViewed();
+}, [artist?.id]);
+
+  useEffect(() => {
+    console.log("[ArtistPage] Mounted with artist:", artist);
     try {
       populateMetadata(artist.type, artist.id);
     } catch (error) {
@@ -77,10 +150,77 @@ export default function ArtistPage({ route, navigation }) {
   }, [navigation, isFocused]);
 
   async function populateReviews() {
-    let reqReviews = await (await getReviews(artist.id)).json();
-    setReviews(reqReviews.reviews);
-    setUsers(reqReviews.users);
+  try {
+    const response = await getReviews(
+      artist.id
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+        "Failed to load artist reviews."
+      );
+    }
+
+    const loadedReviews = Array.isArray(data)
+      ? data
+      : Array.isArray(data.reviews)
+        ? data.reviews
+        : [];
+
+    setReviews(loadedReviews);
+    setUsers([]);
+
+    const myExistingReview =
+      loadedReviews.find(
+        (item) => item.isUser === true
+      );
+
+    if (myExistingReview) {
+      setExistingReviewId(
+        myExistingReview.id
+      );
+
+      setFavourite(
+        Boolean(myExistingReview.hearted)
+      );
+
+      setReviewRating(
+        Number(
+          myExistingReview.rating || 0
+        )
+      );
+
+      setSelectedEmojis(
+        Array.isArray(
+          myExistingReview.emoji
+        )
+          ? myExistingReview.emoji
+          : []
+      );
+
+      setReview(
+        myExistingReview.message || ""
+      );
+    } else {
+      setExistingReviewId(null);
+      setFavourite(false);
+      setReviewRating(0);
+      setSelectedEmojis([]);
+      setReview("");
+    }
+  } catch (error) {
+    console.error(
+      "[ArtistPage] Error loading reviews:",
+      error
+    );
+
+    setReviews([]);
+    setUsers([]);
   }
+}
 
   const tapTimerRef = useRef(null);
   const DOUBLE_TAP_DELAY = 300; // ms
@@ -112,7 +252,11 @@ export default function ArtistPage({ route, navigation }) {
       try {
         const currentUser = auth.currentUser;
         if (!currentUser) return;
-        const response = await getLike(currentUser.uid, artist.id, artist.type);
+        const response = await getLike(
+          currentUser.uid,
+          String(artist.id),
+          "artist"
+        );
         if (!response.ok) {
           setLiked(false);
           return;
@@ -124,7 +268,7 @@ export default function ArtistPage({ route, navigation }) {
       }
     }
     checkLikeStatus();
-  }, [artist.id]);
+  }, [artist.id, isFocused]);
 
   const getSortedReviews = () => {
     return [...reviews].sort((a, b) => b.upvotes - a.upvotes);
@@ -133,48 +277,108 @@ export default function ArtistPage({ route, navigation }) {
   const handleLikeArtist = async () => {
     try {
       const currentUser = auth.currentUser;
+
       if (!currentUser) {
-        Alert.alert("Error", "User not logged in");
+        Alert.alert(
+          "Error",
+          "User not logged in"
+        );
+
         return;
       }
+
+      const artistId = String(artist.id);
+
       if (!liked) {
-        const response = await like(currentUser.uid, artist.id, artist.type);
-        if (!response.ok) throw new Error("Failed to like the artist");
+        const response = await like(
+          currentUser.uid,
+          artistId,
+          "artist"
+        );
+
         const data = await response.json();
-        console.log("Artist liked successfully:", data);
-        setLiked(true);
-        try {
-          const recResponse = await postRecommendations(
-            currentUser.uid,
-            artist.id,
-            artist.type,
-            "",
-            artist.name
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            "Failed to like the artist."
           );
-          if (recResponse.ok) {
-            const recData = await recResponse.json();
-            console.log("Recommendations result:", recData);
-          } else {
-            console.error("Failed to create recommendations:", recResponse.status);
+        }
+
+        setLiked(true);
+
+        console.log(
+          "[ArtistPage] Artist liked:",
+          artistId
+        );
+
+        /*
+        * Store the artist as a recommendation seed.
+        */
+        try {
+          const recommendationResponse =
+            await postRecommendations(
+              currentUser.uid,
+              artistId,
+              "artist",
+              artist.name || "",
+              artist.name || "",
+              "like"
+            );
+
+          if (!recommendationResponse?.ok) {
+            console.warn(
+              "[ArtistPage] Artist liked, but recommendation seed failed."
+            );
           }
-        } catch (err) {
-          console.error("Error calling postRecommendations:", err);
+        } catch (recommendationError) {
+          console.warn(
+            "[ArtistPage] Recommendation seed error:",
+            recommendationError
+          );
         }
       } else {
-        const response = await unlike(currentUser.uid, artist.id, artist.type);
-        if (!response.ok) throw new Error("Failed to unlike the artist");
+        const response = await unlike(
+          currentUser.uid,
+          artistId,
+          "artist"
+        );
+
         const data = await response.json();
-        console.log("Artist unliked successfully:", data);
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            "Failed to unlike the artist."
+          );
+        }
+
         setLiked(false);
+
+        console.log(
+          "[ArtistPage] Artist unliked:",
+          artistId
+        );
       }
     } catch (error) {
-      console.error("Error toggling like status:", error);
-      Alert.alert("Error", "Unable to toggle like status");
+      console.error(
+        "[ArtistPage] Like error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to update Like",
+        error.message
+      );
     }
   };
 
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
-  const handleToggleFavourite = () => setFavourite(!favourite);
+  const handleToggleFavourite = () => {
+    setFavourite(
+      (currentValue) => !currentValue
+    );
+  };
    // Share modal
     const [modalVisible, setModalVisible] = useState(false);
     const [friendsList, setFriendsList] = useState([]);
@@ -304,56 +508,260 @@ export default function ArtistPage({ route, navigation }) {
   };
 
   const handleAddReview = () => {
-    if (!review.trim()) return;
-    Alert.alert(
-      "Confirm",
-      "Are you sure you want to post?",
-      [
-        { text: "No", style: "cancel" },
-        { text: "Yes", style: "default", onPress: () => actuallyAddReview() },
-      ],
-      { cancelable: true }
-    );
-  };
+    if (!review.trim()) {
+      Alert.alert(
+        "Review required",
+        "Please enter a review before posting."
+      );
 
-  const actuallyAddReview = async () => {
-    const newReview = {
-      id: Date.now().toString(),
-      listenable_id: artist.id,
-      hearted: favourite,
-      message: review.trim(),
-      rating: reviewRating,
-      emoji: [...selectedEmojis],
-    };
-    await createReview(newReview);
-    await populateReviews();
-    setReview("");
-    setReviewRating(0);
-    setSelectedEmojis([]);
-  };
-
-  const handleUpvote = async (id) => {
-    let rev = reviews.find((r) => r.id === id);
-    if (!rev.upvoted) {
-      await upvoteReview(id);
-    } else {
-      await removeUpvoteFromReview(id);
+      return;
     }
-    setReviews((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? { ...c, upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1, upvoted: !c.upvoted }
-          : c
-      )
+
+    Alert.alert(
+      existingReviewId
+        ? "Update Review?"
+        : "Want to Post?",
+      existingReviewId
+        ? "Do you want to update your existing artist review?"
+        : "Are you sure you want to post this artist review?",
+      [
+        {
+          text: "No",
+          style: "cancel",
+        },
+        {
+          text: "Yes",
+          onPress: actuallyAddReview,
+        },
+      ],
+      {
+        cancelable: true,
+      }
     );
+  };
+
+  async function actuallyAddReview() {
+    try {
+      const reviewText = review.trim();
+
+      if (!reviewText) {
+        return;
+      }
+
+      const reviewPayload = {
+        listenable_id: String(artist.id),
+        type: "artist",
+        hearted: Boolean(favourite),
+        message: reviewText,
+        rating: Number(reviewRating),
+        emoji: [...selectedEmojis],
+      };
+
+      console.log(
+        "[ArtistPage] Sending review:",
+        reviewPayload
+      );
+
+      const response = existingReviewId
+        ? await updateReview(
+            existingReviewId,
+            [...selectedEmojis],
+            Boolean(favourite),
+            reviewText,
+            Number(reviewRating)
+          )
+        : await createReview(reviewPayload);
+
+      if (!response) {
+        throw new Error(
+          "The backend did not return a response."
+        );
+      }
+
+      const responseText =
+        await response.text();
+
+      let data = {};
+
+      try {
+        data = responseText
+          ? JSON.parse(responseText)
+          : {};
+      } catch {
+        data = {
+          error:
+            responseText ||
+            "Invalid backend response.",
+        };
+      }
+
+      console.log(
+        "[ArtistPage] Review response:",
+        response.status,
+        data
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          `Backend returned HTTP ${response.status}`
+        );
+      }
+
+      setExistingReviewId(
+        data.id || existingReviewId
+      );
+
+      /*
+      * Favourite and high-rating artist reviews
+      * also influence recommendations.
+      */
+      if (
+        favourite ||
+        Number(reviewRating) >= 4
+      ) {
+        try {
+          await postRecommendations(
+            auth.currentUser.uid,
+            String(artist.id),
+            "artist",
+            artist.name || "",
+            artist.name || "",
+            favourite
+              ? "favourite"
+              : "high-rating"
+          );
+        } catch (recommendationError) {
+          console.warn(
+            "[ArtistPage] Review saved, but recommendation seed failed:",
+            recommendationError
+          );
+        }
+      }
+
+      await populateReviews();
+
+      Toast.show({
+        type: "success",
+        text1: existingReviewId
+          ? "Review updated"
+          : "Review posted",
+      });
+    } catch (error) {
+      console.error(
+        "[ArtistPage] Error saving review:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to save review",
+        error.message
+      );
+    }
+  }
+
+ const handleUpvote = async (id) => {
+    const existingReview = reviews.find(
+      (item) => item.id === id
+    );
+
+    if (!existingReview) {
+      return;
+    }
+
+    try {
+      const response =
+        existingReview.upvoted
+          ? await removeUpvoteFromReview(id)
+          : await upvoteReview(id);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          "Unable to update upvote."
+        );
+      }
+
+      setReviews((previousReviews) =>
+        previousReviews.map((item) => {
+          if (item.id !== id) {
+            return item;
+          }
+
+          return {
+            ...item,
+            upvoted: !item.upvoted,
+            upvotes: item.upvoted
+              ? Math.max(
+                  0,
+                  Number(item.upvotes || 0) - 1
+                )
+              : Number(item.upvotes || 0) + 1,
+          };
+        })
+      );
+    } catch (error) {
+      console.error(
+        "[ArtistPage] Upvote error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to update review",
+        error.message
+      );
+    }
   };
 
   const handleDelete = async (id) => {
-    let rev = reviews.find((r) => r.id === id);
-    if (rev.isUser) {
-      await deleteReview(id);
+    const existingReview = reviews.find(
+      (item) => item.id === id
+    );
+
+    if (!existingReview?.isUser) {
+      Alert.alert(
+        "Unable to delete",
+        "You can only delete your own reviews."
+      );
+
+      return;
     }
-    setReviews((prev) => prev.filter((r) => r.id !== id));
+
+    try {
+      const response = await deleteReview(id);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          "Unable to delete review."
+        );
+      }
+
+      setReviews((previousReviews) =>
+        previousReviews.filter(
+          (item) => item.id !== id
+        )
+      );
+
+      setExistingReviewId(null);
+      setFavourite(false);
+      setReviewRating(0);
+      setSelectedEmojis([]);
+      setReview("");
+    } catch (error) {
+      console.error(
+        "[ArtistPage] Delete error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to delete review",
+        error.message
+      );
+    }
   };
 
   const navigateToListenablePage = (type) => {
@@ -497,30 +905,50 @@ export default function ArtistPage({ route, navigation }) {
             <Text style={styles.title}>{artist.name || "Unknown Artist"}</Text>
             
             <TouchableOpacity onPress={() => {navigateToListenablePage("track")}}>
-              <ListItem containerStyle={{
-                borderRadius: 10,
-                overflow: 'hidden',
-                marginTop: 20
-                }}>
-                <Icon name="audiotrack" size={20} />
-                <ListItem.Content>
-                  <ListItem.Title style={{ borderRadius: 10}}>Songs</ListItem.Title>
+              <ListItem
+                containerStyle={{
+                  borderRadius: 10,
+                  overflow: "hidden",
+                  marginTop: 20,
+                }}
+              >
+                <Icon
+                  key="songs-icon"
+                  name="audiotrack"
+                  size={20}
+                />
+
+                <ListItem.Content key="songs-content">
+                  <ListItem.Title>
+                    Songs
+                  </ListItem.Title>
                 </ListItem.Content>
-                <ListItem.Chevron />
+
+                <ListItem.Chevron key="songs-chevron" />
               </ListItem>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => {navigateToListenablePage("album")}}>
-              <ListItem containerStyle={{
+              <ListItem
+                containerStyle={{
                   borderRadius: 10,
-                  overflow: 'hidden',
-                  marginTop: 20
-                  }}>
-                <Icon name="album" size={20} />
-                <ListItem.Content>
-                  <ListItem.Title>Albums</ListItem.Title>
+                  overflow: "hidden",
+                  marginTop: 20,
+                }}
+              >
+                <Icon
+                  key="albums-icon"
+                  name="album"
+                  size={20}
+                />
+
+                <ListItem.Content key="albums-content">
+                  <ListItem.Title>
+                    Albums
+                  </ListItem.Title>
                 </ListItem.Content>
-                <ListItem.Chevron />
+
+                <ListItem.Chevron key="albums-chevron" />
               </ListItem>
             </TouchableOpacity>
 
@@ -566,15 +994,50 @@ export default function ArtistPage({ route, navigation }) {
               </View>
               {showEmojiDropdown && (
                 <View style={styles.emojiDropdownRow}>
-                  <TouchableOpacity onPress={() => handleSelectEmoji("❤️")}>
-                    <Text style={styles.reviewEmoji}>❤️</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleSelectEmoji("🔥")}>
-                    <Text style={styles.reviewEmoji}>🔥</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleSelectEmoji("👏")}>
-                    <Text style={styles.reviewEmoji}>👏</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity
+                  onPress={() =>
+                    handleSelectEmoji("❤️")
+                  }
+                  style={
+                    selectedEmojis.includes("❤️")
+                      ? styles.selectedEmojiChoice
+                      : styles.emojiChoice
+                  }
+                >
+                  <Text style={styles.reviewEmoji}>
+                    ❤️
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() =>
+                    handleSelectEmoji("🔥")
+                  }
+                  style={
+                    selectedEmojis.includes("🔥")
+                      ? styles.selectedEmojiChoice
+                      : styles.emojiChoice
+                  }
+                >
+                  <Text style={styles.reviewEmoji}>
+                    🔥
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() =>
+                    handleSelectEmoji("👏")
+                  }
+                  style={
+                    selectedEmojis.includes("👏")
+                      ? styles.selectedEmojiChoice
+                      : styles.emojiChoice
+                  }
+                >
+                  <Text style={styles.reviewEmoji}>
+                    👏
+                  </Text>
+                </TouchableOpacity>
                 </View>
               )}
               <View style={{ flexDirection: "row", marginTop: 15 }}>
@@ -585,9 +1048,22 @@ export default function ArtistPage({ route, navigation }) {
                   value={review}
                   onChangeText={setReview}
                 />
-                <TouchableOpacity style={styles.reviewButton} onPress={handleAddReview}>
-                  <Text style={styles.reviewButtonText}>Post</Text>
-                </TouchableOpacity>
+                <TouchableOpacity
+                style={[
+                  styles.reviewButton,
+                  !review.trim() && {
+                    opacity: 0.5,
+                  },
+                ]}
+                onPress={handleAddReview}
+                disabled={!review.trim()}
+              >
+                <Text style={styles.reviewButtonText}>
+                  {existingReviewId
+                    ? "Update"
+                    : "Post"}
+                </Text>
+              </TouchableOpacity>
               </View>
               {selectedEmojis.length > 0 && (
                 <View style={styles.selectedEmojisSection}>
@@ -605,8 +1081,17 @@ export default function ArtistPage({ route, navigation }) {
           </View>
           </TouchableWithoutFeedback>
         }
-        renderItem={({ item }) => {
-          let avatar = users.filter((u) => u.userId === item.userId)[0].avatarLong;
+       renderItem={({ item }) => {
+          const user = users.find(
+            (userItem) =>
+              userItem.userId === item.userId
+          );
+
+          const avatar =
+            user?.avatarLong ||
+            user?.avatar ||
+            null;
+
           return (
             <ReviewCard
               item={item}
@@ -614,6 +1099,8 @@ export default function ArtistPage({ route, navigation }) {
               handleUpvote={handleUpvote}
               handleDelete={handleDelete}
               navigation={navigation}
+              showComments={false}
+              showReplyInput={false}
             />
           );
         }}
@@ -629,6 +1116,19 @@ export default function ArtistPage({ route, navigation }) {
 
 const styles = StyleSheet.create({
   ...StyleSheet.create({
+    emojiChoice: {
+      borderRadius: 8,
+      padding: 4,
+    },
+
+    selectedEmojiChoice: {
+      borderRadius: 8,
+      padding: 4,
+      backgroundColor:
+        "rgba(255,255,255,0.2)",
+      borderWidth: 1,
+      borderColor: colours.lightblue,
+    },
     container: {
       flex: 1,
       backgroundColor: colours.bluegrey,

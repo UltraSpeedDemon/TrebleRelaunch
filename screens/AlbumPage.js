@@ -22,8 +22,26 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { createReview, getReviews, getUser, populateMetadata, getLike, unlike, like, upvoteReview, removeUpvoteFromReview, deleteReview, getAlbumSongs, getAlbumSummary, getFriends, share } from "../providers/rest";
-import { getSongFromDeezer } from "../providers/rest"; // Add this import
+import {
+  createReview,
+  updateReview,
+  getReviews,
+  getUser,
+  populateMetadata,
+  getLike,
+  unlike,
+  like,
+  postRecommendations,
+  upvoteReview,
+  removeUpvoteFromReview,
+  deleteReview,
+  getAlbumSongs,
+  getAlbumSummary,
+  getFriends,
+  share,
+  getSongFromDeezer,
+  saveRecentlyViewed,
+} from "../providers/rest";
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 import { Avatar, Icon, ListItem } from "@rneui/base";
@@ -42,6 +60,8 @@ export default function AlbumPage({ route, navigation }) {
   const [selectedEmojis, setSelectedEmojis] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [users, setUsers] = useState([]);
+  const [existingReviewId, setExistingReviewId] =
+    useState(null);
 
   // Like, Save, Favourite states
   const [liked, setLiked] = useState(false);
@@ -55,6 +75,69 @@ export default function AlbumPage({ route, navigation }) {
   const [songsLoading, setSongsLoading] = useState(true);
   const [summary, setSummary] = useState("");
   const isFocused = useIsFocused();
+
+  useEffect(() => {
+    const recordRecentlyViewed = async () => {
+      const currentUser = auth.currentUser;
+
+      if (!currentUser || !album?.id) {
+        return;
+      }
+
+      try {
+        const artistName =
+          typeof album.artist === "string"
+            ? album.artist
+            : album.artist?.name || "";
+
+        const response = await saveRecentlyViewed(
+          currentUser.uid,
+          {
+            ...album,
+            id: String(album.id),
+            type: "album",
+            title:
+              album.title ||
+              album.name ||
+              "Unknown Album",
+            name:
+              album.name ||
+              album.title ||
+              "Unknown Album",
+            artist: artistName
+              ? { name: artistName }
+              : null,
+            image:
+              album.image ||
+              album.coverArt ||
+              album.cover ||
+              "",
+            coverArt:
+              album.coverArt ||
+              album.image ||
+              album.cover ||
+              "",
+          }
+        );
+
+        if (!response?.ok) {
+          const data = await response?.json();
+
+          console.warn(
+            "[AlbumPage] Failed to save recently viewed:",
+            data
+          );
+        }
+      } catch (error) {
+        console.error(
+          "[AlbumPage] Recently viewed error:",
+          error
+        );
+      }
+    };
+
+    recordRecentlyViewed();
+  }, [album?.id]);
 
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -157,38 +240,160 @@ export default function AlbumPage({ route, navigation }) {
   }, [navigation, isFocused]);
   
   async function populateReviewsAndSongs() {
-    setSongsLoading(true)
-    let promises = await Promise.all([
-      (await getReviews(album.id)).json(),
-      (await getAlbumSongs(album.id)).json(),
-      (await getAlbumSummary(album.id)).json()
-    ]);
+    setSongsLoading(true);
 
-    const reqReviews = promises[0]
-    const albumSongs = promises[1]
-    const summary = promises[2].summary
+    try {
+      const [
+        reviewsResponse,
+        songsResponse,
+        summaryResponse,
+      ] = await Promise.all([
+        getReviews(album.id),
+        getAlbumSongs(album.id),
+        getAlbumSummary(album.id),
+      ]);
 
-    // Fetch previews for each song
-    const fetchPreviewPromises = albumSongs.map(async (song) => {
-      try {
-        const response = await getSongFromDeezer(song.listenableId);
-        const deezerData = await response.json();
-        if (deezerData && deezerData.preview) {
-          song.preview = deezerData.preview;
-        }
-      } catch (error) {
-        console.warn(`[WARNING] Failed to fetch preview for song ID: ${song.listenableId}`, error);
+      const [
+        reviewsData,
+        songsData,
+        summaryData,
+      ] = await Promise.all([
+        reviewsResponse.json(),
+        songsResponse.json(),
+        summaryResponse.json(),
+      ]);
+
+      if (!reviewsResponse.ok) {
+        throw new Error(
+          reviewsData?.error ||
+          "Failed to load album reviews."
+        );
       }
-      return song;
-    });
 
-    const updatedSongs = await Promise.all(fetchPreviewPromises);
+      if (!songsResponse.ok) {
+        throw new Error(
+          songsData?.error ||
+          "Failed to load album songs."
+        );
+      }
 
-    setReviews(reqReviews.reviews);
-    setUsers(reqReviews.users);
-    setAlbumSongs(updatedSongs);
-    setSummary(summary);
-    setSongsLoading(false);
+      const loadedReviews =
+        Array.isArray(reviewsData)
+          ? reviewsData
+          : Array.isArray(reviewsData.reviews)
+            ? reviewsData.reviews
+            : [];
+
+      const loadedSongs =
+        Array.isArray(songsData)
+          ? songsData
+          : Array.isArray(songsData.songs)
+            ? songsData.songs
+            : Array.isArray(songsData.data)
+              ? songsData.data
+              : [];
+
+      const updatedSongs = await Promise.all(
+        loadedSongs.map(async (song) => {
+          const songId =
+            song.listenableId ||
+            song.listenable_id ||
+            song.id;
+
+          if (!songId || song.preview) {
+            return song;
+          }
+
+          try {
+            const response =
+              await getSongFromDeezer(songId);
+
+            const deezerData =
+              await response.json();
+
+            if (
+              response.ok &&
+              deezerData?.preview
+            ) {
+              return {
+                ...song,
+                preview: deezerData.preview,
+              };
+            }
+          } catch (error) {
+            console.warn(
+              `[AlbumPage] Preview failed for ${songId}:`,
+              error
+            );
+          }
+
+          return song;
+        })
+      );
+
+      setReviews(loadedReviews);
+      setUsers([]);
+      setAlbumSongs(updatedSongs);
+      setSummary(
+        summaryData?.summary || ""
+      );
+
+      const myExistingReview =
+        loadedReviews.find(
+          (item) => item.isUser === true
+        );
+
+      if (myExistingReview) {
+        setExistingReviewId(
+          myExistingReview.id
+        );
+
+        setFavourite(
+          Boolean(myExistingReview.hearted)
+        );
+
+        setReviewRating(
+          Number(
+            myExistingReview.rating || 0
+          )
+        );
+
+        setSelectedEmojis(
+          Array.isArray(
+            myExistingReview.emoji
+          )
+            ? myExistingReview.emoji
+            : []
+        );
+
+        setReview(
+          myExistingReview.message || ""
+        );
+      } else {
+        setExistingReviewId(null);
+        setFavourite(false);
+        setReviewRating(0);
+        setSelectedEmojis([]);
+        setReview("");
+      }
+    } catch (error) {
+      console.error(
+        "[AlbumPage] Loading error:",
+        error
+      );
+
+      setReviews([]);
+      setUsers([]);
+      setAlbumSongs([]);
+      setSummary("");
+
+      Alert.alert(
+        "Unable to load album",
+        error.message
+      );
+    } finally {
+      setSongsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -196,7 +401,11 @@ export default function AlbumPage({ route, navigation }) {
       try {
         const currentUser = auth.currentUser;
         if (!currentUser) return;
-        const response = await getLike(currentUser.uid, album.id, album.type);
+        const response = await getLike(
+          currentUser.uid,
+          String(album.id),
+          "album"
+        );
         if (!response.ok) {
           setLiked(false);
           return;
@@ -208,7 +417,7 @@ export default function AlbumPage({ route, navigation }) {
       }
     }
     checkLikeStatus();
-  }, [album.id]);
+  }, [album.id, isFocused]);
 
   const getSortedReviews = () => {
     return [...reviews].sort((a, b) => b.upvotes - a.upvotes);
@@ -242,31 +451,97 @@ export default function AlbumPage({ route, navigation }) {
   const handleLikeAlbum = async () => {
     try {
       const currentUser = auth.currentUser;
+
       if (!currentUser) {
-        Alert.alert("Error", "User not logged in");
+        Alert.alert(
+          "Error",
+          "User not logged in"
+        );
+
         return;
       }
+
+      const albumId = String(album.id);
+
+      const albumTitle =
+        album.title ||
+        album.name ||
+        "";
+
+      const artistName =
+        typeof album.artist === "string"
+          ? album.artist
+          : album.artist?.name || "";
+
       if (!liked) {
-        const response = await like(currentUser.uid, album.id, album.type);
-        if (!response.ok) throw new Error("Failed to like the album");
+        const response = await like(
+          currentUser.uid,
+          albumId,
+          "album"
+        );
+
         const data = await response.json();
-        console.log("Album liked successfully:", data);
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            "Failed to like the album."
+          );
+        }
+
         setLiked(true);
+
+        try {
+          await postRecommendations(
+            currentUser.uid,
+            albumId,
+            "album",
+            albumTitle,
+            artistName,
+            "like"
+          );
+        } catch (recommendationError) {
+          console.warn(
+            "[AlbumPage] Album liked, but recommendation seed failed:",
+            recommendationError
+          );
+        }
       } else {
-        const response = await unlike(currentUser.uid, album.id, album.type);
-        if (!response.ok) throw new Error("Failed to unlike the album");
+        const response = await unlike(
+          currentUser.uid,
+          albumId,
+          "album"
+        );
+
         const data = await response.json();
-        console.log("Album unliked successfully:", data);
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            "Failed to unlike the album."
+          );
+        }
+
         setLiked(false);
       }
     } catch (error) {
-      console.error("Error toggling like status:", error);
-      Alert.alert("Error", "Unable to toggle like status");
+      console.error(
+        "[AlbumPage] Like error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to update Like",
+        error.message
+      );
     }
   };
-
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
-  const handleToggleFavourite = () => setFavourite(!favourite);
+  const handleToggleFavourite = () => {
+      setFavourite(
+        (currentValue) => !currentValue
+      );
+    };
   
   // Share modal
     const [modalVisible, setModalVisible] = useState(false);
@@ -397,68 +672,322 @@ export default function AlbumPage({ route, navigation }) {
   };
 
   const handleAddReview = () => {
-    if (!review.trim()) return;
+    if (!review.trim()) {
+      Alert.alert(
+        "Review required",
+        "Please enter a review before posting."
+      );
+
+      return;
+    }
+
     Alert.alert(
-      "Confirm",
-      "Are you sure you want to post this review?",
+      existingReviewId
+        ? "Update Review?"
+        : "Want to Post?",
+      existingReviewId
+        ? "Do you want to update your existing album review?"
+        : "Are you sure you want to post this album review?",
       [
-        { text: "No", style: "cancel" },
-        { text: "Yes", style: "default", onPress: () => actuallyAddReview() },
+        {
+          text: "No",
+          style: "cancel",
+        },
+        {
+          text: "Yes",
+          onPress: actuallyAddReview,
+        },
       ],
-      { cancelable: true }
+      {
+        cancelable: true,
+      }
     );
   };
 
   async function actuallyAddReview() {
-    const newReview = {
-      id: Date.now().toString(),
-      listenable_id: album.id,
-      hearted: favourite,
-      message: review.trim(),
-      rating: reviewRating,
-      emoji: [...selectedEmojis],
-    };
-    await createReview(newReview);
-    await populateReviewsAndSongs();
-    setReview("");
-    setReviewRating(0);
-    setSelectedEmojis([]);
+    try {
+      const reviewText = review.trim();
+
+      if (!reviewText) {
+        return;
+      }
+
+      const reviewPayload = {
+        listenable_id: String(album.id),
+        type: "album",
+        hearted: Boolean(favourite),
+        message: reviewText,
+        rating: Number(reviewRating),
+        emoji: [...selectedEmojis],
+      };
+
+      console.log(
+        "[AlbumPage] Sending review:",
+        reviewPayload
+      );
+
+      const response = existingReviewId
+        ? await updateReview(
+            existingReviewId,
+            [...selectedEmojis],
+            Boolean(favourite),
+            reviewText,
+            Number(reviewRating)
+          )
+        : await createReview(reviewPayload);
+
+      if (!response) {
+        throw new Error(
+          "The backend did not return a response."
+        );
+      }
+
+      const responseText =
+        await response.text();
+
+      let data = {};
+
+      try {
+        data = responseText
+          ? JSON.parse(responseText)
+          : {};
+      } catch {
+        data = {
+          error:
+            responseText ||
+            "Invalid backend response.",
+        };
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          `Backend returned HTTP ${response.status}`
+        );
+      }
+
+      setExistingReviewId(
+        data.id || existingReviewId
+      );
+
+      const albumTitle =
+        album.title ||
+        album.name ||
+        "";
+
+      const artistName =
+        typeof album.artist === "string"
+          ? album.artist
+          : album.artist?.name || "";
+
+      if (
+        favourite ||
+        Number(reviewRating) >= 4
+      ) {
+        try {
+          await postRecommendations(
+            auth.currentUser.uid,
+            String(album.id),
+            "album",
+            albumTitle,
+            artistName,
+            favourite
+              ? "favourite"
+              : "high-rating"
+          );
+        } catch (recommendationError) {
+          console.warn(
+            "[AlbumPage] Review saved, but recommendation seed failed:",
+            recommendationError
+          );
+        }
+      }
+
+      await populateReviewsAndSongs();
+
+      Toast.show({
+        type: "success",
+        text1: existingReviewId
+          ? "Review updated"
+          : "Review posted",
+      });
+    } catch (error) {
+      console.error(
+        "[AlbumPage] Review error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to save review",
+        error.message
+      );
+    }
   }
 
   const handleUpvote = async (id) => {
-    let rev = reviews.find((r) => r.id === id);
-    if (!rev.upvoted) {
-      await upvoteReview(id);
-    } else {
-      await removeUpvoteFromReview(id);
-    }
-    setReviews((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? { ...c, upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1, upvoted: !c.upvoted }
-          : c
-      )
+    const existingReview = reviews.find(
+      (item) => item.id === id
     );
+
+    if (!existingReview) {
+      return;
+    }
+
+    try {
+      const response =
+        existingReview.upvoted
+          ? await removeUpvoteFromReview(id)
+          : await upvoteReview(id);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          "Unable to update upvote."
+        );
+      }
+
+      setReviews((previousReviews) =>
+        previousReviews.map((item) => {
+          if (item.id !== id) {
+            return item;
+          }
+
+          return {
+            ...item,
+            upvoted: !item.upvoted,
+            upvotes: item.upvoted
+              ? Math.max(
+                  0,
+                  Number(item.upvotes || 0) - 1
+                )
+              : Number(item.upvotes || 0) + 1,
+          };
+        })
+      );
+    } catch (error) {
+      console.error(
+        "[AlbumPage] Upvote error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to update review",
+        error.message
+      );
+    }
   };
 
   const handleDelete = async (id) => {
-    let rev = reviews.find((r) => r.id === id);
-    if (rev.isUser) {
-      await deleteReview(id);
+    const existingReview = reviews.find(
+      (item) => item.id === id
+    );
+
+    if (!existingReview?.isUser) {
+      Alert.alert(
+        "Unable to delete",
+        "You can only delete your own reviews."
+      );
+
+      return;
     }
-    setReviews((prev) => prev.filter((r) => r.id !== id));
+
+    try {
+      const response = await deleteReview(id);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+          "Unable to delete review."
+        );
+      }
+
+      setReviews((previousReviews) =>
+        previousReviews.filter(
+          (item) => item.id !== id
+        )
+      );
+
+      setExistingReviewId(null);
+      setFavourite(false);
+      setReviewRating(0);
+      setSelectedEmojis([]);
+      setReview("");
+    } catch (error) {
+      console.error(
+        "[AlbumPage] Delete error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to delete review",
+        error.message
+      );
+    }
   };
 
-  const navigateToSong = (song) => { 
-    navigation.navigate("SongPage", { 
+  const navigateToSong = (song) => {
+    const songId =
+      song.listenableId ||
+      song.listenable_id ||
+      song.id;
+
+    const artistName =
+      typeof album.artist === "string"
+        ? album.artist
+        : album.artist?.name || "";
+
+    navigation.navigate("SongPage", {
       track: {
-        id: parseInt(song.listenableId),
-        image: song.coverArt,
-        name: song.title,
-        artist: album.artist.name || album.artist,
-        album: album.name || album.title,
-        type: "track"
-      }
+        ...song,
+
+        id: String(songId),
+        listenableId: String(songId),
+        type: "track",
+
+        title:
+          song.title ||
+          song.name ||
+          "Unknown Track",
+
+        name:
+          song.name ||
+          song.title ||
+          "Unknown Track",
+
+        artist: {
+          name:
+            song.artist?.name ||
+            song.artist ||
+            artistName,
+        },
+
+        album: {
+          id: String(album.id),
+          title:
+            album.title ||
+            album.name ||
+            "Unknown Album",
+        },
+
+        image:
+          song.image ||
+          song.coverArt ||
+          album.image ||
+          album.coverArt ||
+          "",
+
+        coverArt:
+          song.coverArt ||
+          song.image ||
+          album.coverArt ||
+          album.image ||
+          "",
+
+        preview: song.preview || "",
+      },
     });
   };
 
@@ -600,7 +1129,12 @@ export default function AlbumPage({ route, navigation }) {
               <Text style={styles.title}>{(album.name || album.title) || "Unknown Album"}</Text>
               {/* Show artist if present */}
               <Text style={styles.artist}>
-                Artist: {(album.artist.name || album.artist )|| "Unknown"}
+                Artist: {
+                  typeof album.artist === "string"
+                    ? album.artist
+                    : album.artist?.name ||
+                      "Unknown"
+                }
               </Text>
 
               {summary &&
@@ -722,14 +1256,49 @@ export default function AlbumPage({ route, navigation }) {
                 </View>
                 {showEmojiDropdown && (
                   <View style={styles.emojiDropdownRow}>
-                    <TouchableOpacity onPress={() => handleSelectEmoji("❤️")}>
-                      <Text style={styles.reviewEmoji}>❤️</Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        handleSelectEmoji("❤️")
+                      }
+                      style={
+                        selectedEmojis.includes("❤️")
+                          ? styles.selectedEmojiChoice
+                          : styles.emojiChoice
+                      }
+                    >
+                      <Text style={styles.reviewEmoji}>
+                        ❤️
+                      </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleSelectEmoji("🔥")}>
-                      <Text style={styles.reviewEmoji}>🔥</Text>
+
+                    <TouchableOpacity
+                      onPress={() =>
+                        handleSelectEmoji("🔥")
+                      }
+                      style={
+                        selectedEmojis.includes("🔥")
+                          ? styles.selectedEmojiChoice
+                          : styles.emojiChoice
+                      }
+                    >
+                      <Text style={styles.reviewEmoji}>
+                        🔥
+                      </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleSelectEmoji("👏")}>
-                      <Text style={styles.reviewEmoji}>👏</Text>
+
+                    <TouchableOpacity
+                      onPress={() =>
+                        handleSelectEmoji("👏")
+                      }
+                      style={
+                        selectedEmojis.includes("👏")
+                          ? styles.selectedEmojiChoice
+                          : styles.emojiChoice
+                      }
+                    >
+                      <Text style={styles.reviewEmoji}>
+                        👏
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -741,9 +1310,22 @@ export default function AlbumPage({ route, navigation }) {
                     value={review}
                     onChangeText={setReview}
                   />
-                  <TouchableOpacity style={styles.reviewButton} onPress={handleAddReview}>
-                    <Text style={styles.reviewButtonText}>Post</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity
+                  style={[
+                    styles.reviewButton,
+                    !review.trim() && {
+                      opacity: 0.5,
+                    },
+                  ]}
+                  onPress={handleAddReview}
+                  disabled={!review.trim()}
+                >
+                  <Text style={styles.reviewButtonText}>
+                    {existingReviewId
+                      ? "Update"
+                      : "Post"}
+                  </Text>
+                </TouchableOpacity>
                 </View>
                 {selectedEmojis.length > 0 && (
                   <View style={styles.selectedEmojisSection}>
@@ -762,8 +1344,16 @@ export default function AlbumPage({ route, navigation }) {
           </TouchableWithoutFeedback>
         }
         renderItem={({ item }) => {
-          const user = users.find((u) => u.userId === item.userId);
-          const avatar = user ? user.avatarLong : null;
+          const user = users.find(
+            (userItem) =>
+              userItem.userId === item.userId
+          );
+
+          const avatar =
+            user?.avatarLong ||
+            user?.avatar ||
+            null;
+
           return (
             <ReviewCard
               item={item}
@@ -771,6 +1361,8 @@ export default function AlbumPage({ route, navigation }) {
               handleUpvote={handleUpvote}
               handleDelete={handleDelete}
               navigation={navigation}
+              showComments={false}
+              showReplyInput={false}
             />
           );
         }}
@@ -786,6 +1378,19 @@ export default function AlbumPage({ route, navigation }) {
 
 const styles = StyleSheet.create({
   ...StyleSheet.create({
+    emojiChoice: {
+      borderRadius: 8,
+      padding: 4,
+    },
+
+    selectedEmojiChoice: {
+      borderRadius: 8,
+      padding: 4,
+      backgroundColor:
+        "rgba(255,255,255,0.2)",
+      borderWidth: 1,
+      borderColor: colours.lightblue,
+    },
     container: {
       flex: 1,
       backgroundColor: colours.bluegrey,
