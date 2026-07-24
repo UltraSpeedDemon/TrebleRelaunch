@@ -15,7 +15,40 @@ const {
 
 const { getAuth } = require("firebase-admin/auth");
 
-const serviceAccount = require("./firebase-service-account.json");
+const firebaseProjectId = process.env.FIREBASE_PROJECT_ID;
+const firebaseClientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(
+  /\\n/g,
+  "\n"
+);
+
+const missingFirebaseVariables = [];
+
+if (!firebaseProjectId) {
+  missingFirebaseVariables.push("FIREBASE_PROJECT_ID");
+}
+
+if (!firebaseClientEmail) {
+  missingFirebaseVariables.push("FIREBASE_CLIENT_EMAIL");
+}
+
+if (!firebasePrivateKey) {
+  missingFirebaseVariables.push("FIREBASE_PRIVATE_KEY");
+}
+
+if (missingFirebaseVariables.length > 0) {
+  throw new Error(
+    `Missing Firebase environment variables: ${missingFirebaseVariables.join(
+      ", "
+    )}`
+  );
+}
+
+const serviceAccount = {
+  projectId: firebaseProjectId,
+  clientEmail: firebaseClientEmail,
+  privateKey: firebasePrivateKey,
+};
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
