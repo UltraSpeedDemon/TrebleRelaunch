@@ -112,7 +112,6 @@ export default function Register({ navigation }) {
         ]}
         placeholder="Enter your username"
         placeholderTextColor={colours.lightgrey}
-        color={colours.lightgrey}
         value={username}
         onChangeText={(text) => setUsername(text)}
       />
@@ -129,7 +128,6 @@ export default function Register({ navigation }) {
         ]}
         placeholder="Enter your email"
         placeholderTextColor={colours.lightgrey}
-        color={colours.lightgrey}
         value={email}
         onChangeText={(text) => setEmail(text)}
         keyboardType="email-address"
@@ -148,7 +146,6 @@ export default function Register({ navigation }) {
         ]}
         placeholder="Enter your password"
         placeholderTextColor={colours.lightgrey}
-        color={colours.lightgrey}
         secureTextEntry
         value={password}
         onChangeText={(text) => setPassword(text)}
@@ -192,14 +189,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   input: {
-    height: 40,
-    borderColor: colours.secondaryblue, // Primary blue color
+    height: 50,
+    width: 300,
+    borderColor: colours.secondaryblue,
     borderWidth: 1,
-    width: "100%",
-    fontFamily: 'Domine',
+    borderRadius: 10,
+    fontFamily: "Domine",
     marginBottom: 20,
     paddingHorizontal: 10,
     fontSize: 18,
+    color: "#FFFFFF",
+    backgroundColor: "transparent",
   },
   button: {
     backgroundColor: colours.navbarBlue, // Primary blue color
