@@ -1,35 +1,43 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  Image,
-  FlatList,
-  StyleSheet,
-  RefreshControl,
+  ActivityIndicator,
   Alert,
-  TextInput,
-  TouchableWithoutFeedback,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-  Keyboard,
   Animated,
-  ActivityIndicator
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  useWindowDimensions,
+  View,
 } from "react-native";
-import Toast from 'react-native-toast-message';
-import { TapGestureHandler, GestureHandlerRootView, State } from "react-native-gesture-handler";
-import Sidebar from "../components/Sidebar";
-import BottomNavbar from "../components/BottomNavbar";
-import colours from "../styles/colours";
-import SearchBar from "../components/SearchBar";
-import { auth } from "../utils/firebase";
+
+import Toast from "react-native-toast-message";
 import { Audio } from "expo-av";
 import { AnimatedCircularProgress } from "react-native-circular-progress";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useIsFocused } from "@react-navigation/native";
 
-// Import your API calls
+import Sidebar from "../components/Sidebar";
+import BottomNavbar from "../components/BottomNavbar";
+import SearchBar from "../components/SearchBar";
+
+import colours from "../styles/colours";
+import { auth } from "../utils/firebase";
+
 import {
   getRecommendations,
   postRecommendations,
@@ -40,128 +48,311 @@ import {
   setRecommendationServed,
   getTimeline,
   getSongFromDeezer,
-  getFollowRequests
+  getFollowRequests,
 } from "../providers/rest";
 
-export default function Feed({ navigation, route }) {
-  // -------------------------------------------------------------------------
-  //  State
-  // -------------------------------------------------------------------------
-  const [isLoading, setIsLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [combinedFeed, setCombinedFeed] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [notificationsCount, setNotificationsCount] = useState(0);
+const PAGE_SIZE = 5;
+const DOUBLE_TAP_DELAY = 300;
 
-  // Pagination
-  const [onEndReachedCalledDuringMomentum, setOnEndReachedCalledDuringMomentum] = useState(true);
-  const [offset, setOffset] = useState(0);
-  const [limit] = useState(5);
+const PLACEHOLDER_IMAGE = "https://via.placeholder.com/500";
+const PLACEHOLDER_AVATAR = "https://via.placeholder.com/100";
+
+export default function Feed({ navigation }) {
+  const { width } = useWindowDimensions();
+
+  const isWeb = Platform.OS === "web";
+  const isDesktopWeb = isWeb && width >= 900;
+  const isTablet = width >= 700 && width < 1100;
+  const isCompact = width < 700;
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const fetchedInitial = useRef(false);
 
-  // Share modal
+  const [combinedFeed, setCombinedFeed] = useState([]);
+  const [timelineOffset, setTimelineOffset] = useState(0);
+  const [recommendationsOffset, setRecommendationsOffset] = useState(0);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [notificationsCount, setNotificationsCount] = useState(0);
+
+  const [likeLoading, setLikeLoading] = useState({});
+
   const [modalVisible, setModalVisible] = useState(false);
   const [friendsList, setFriendsList] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [comment, setComment] = useState("");
   const [currentShareItem, setCurrentShareItem] = useState(null);
-  const [timelineOffset, setTimelineOffset] = useState(0);
-  const [recsOffset, setRecsOffset] = useState(0);
-  const [hasMoreTimeline, setHasMoreTimeline] = useState(true);
 
-  // Animated value for sliding the modal up when the keyboard is active.
+  const [sound, setSound] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentPreview, setCurrentPreview] = useState(null);
+
+  const fetchedInitial = useRef(false);
+  const tapTimerRef = useRef(null);
+  const viewedRecommendationIds = useRef(new Set());
   const slideAnim = useRef(new Animated.Value(0)).current;
 
-  const [sound, setSound] = useState(null); // State for managing the sound instance
-  const [isPlaying, setIsPlaying] = useState(false); // State for playback status
-  const [progress, setProgress] = useState(0); // State for playback progress
-  const [currentPreview, setCurrentPreview] = useState(null); // Track currently playing preview
+  const isFocused = useIsFocused();
 
-  const handlePlayPreview = async (previewUrl) => {
-    try {
-      if (currentPreview === previewUrl && sound) {
-        // Stop playback if the same preview is clicked again
+  const getItemInfo = useCallback((item) => {
+    return item?.item_info || item || {};
+  }, []);
+
+  const getItemId = useCallback((item) => {
+    return (
+      item?.id ||
+      item?.item_info?.id ||
+      item?.record_id ||
+      item?.rid ||
+      null
+    );
+  }, []);
+
+  const getRecordId = useCallback((item) => {
+    return (
+      item?.record_id ||
+      item?.item_info?.record_id ||
+      item?.rid ||
+      null
+    );
+  }, []);
+
+  const getItemType = useCallback((item) => {
+    return item?.item_info?.type || item?.type || "track";
+  }, []);
+
+  const getLikedStatus = useCallback((item) => {
+    if (typeof item?.liked === "boolean") {
+      return item.liked;
+    }
+
+    if (typeof item?.item_info?.liked === "boolean") {
+      return item.item_info.liked;
+    }
+
+    return false;
+  }, []);
+
+  const getPreviewUrl = useCallback((item) => {
+    return item?.preview || item?.item_info?.preview || null;
+  }, []);
+
+  const getImageUrl = useCallback((item) => {
+    const itemInfo = getItemInfo(item);
+
+    return (
+      itemInfo?.image ||
+      itemInfo?.coverArt ||
+      itemInfo?.album?.cover_medium ||
+      itemInfo?.album?.cover_big ||
+      PLACEHOLDER_IMAGE
+    );
+  }, [getItemInfo]);
+
+  const getDisplayName = useCallback((item) => {
+    const itemInfo = getItemInfo(item);
+
+    return (
+      itemInfo?.name ||
+      itemInfo?.title ||
+      "Unknown Title"
+    );
+  }, [getItemInfo]);
+
+  const getArtistName = useCallback((item) => {
+    const itemInfo = getItemInfo(item);
+
+    return (
+      itemInfo?.artist?.name ||
+      itemInfo?.artistName ||
+      ""
+    );
+  }, [getItemInfo]);
+
+  const getAlbumName = useCallback((item) => {
+    const itemInfo = getItemInfo(item);
+
+    return (
+      itemInfo?.album?.title ||
+      itemInfo?.albumTitle ||
+      ""
+    );
+  }, [getItemInfo]);
+
+  const getTimeAgo = useCallback((timestamp) => {
+    if (!timestamp) {
+      return "";
+    }
+
+    const currentTime = new Date();
+    const postTime = new Date(timestamp);
+
+    if (Number.isNaN(postTime.getTime())) {
+      return "";
+    }
+
+    const differenceSeconds = Math.max(
+      0,
+      Math.floor((currentTime - postTime) / 1000)
+    );
+
+    if (differenceSeconds < 60) {
+      return "Just now";
+    }
+
+    if (differenceSeconds < 3600) {
+      return `${Math.floor(differenceSeconds / 60)}m ago`;
+    }
+
+    if (differenceSeconds < 86400) {
+      return `${Math.floor(differenceSeconds / 3600)}h ago`;
+    }
+
+    return `${Math.floor(differenceSeconds / 86400)}d ago`;
+  }, []);
+
+  const stopCurrentPreview = useCallback(async () => {
+    if (sound) {
+      try {
         await sound.unloadAsync();
-        setSound(null);
-        setIsPlaying(false);
-        setProgress(0);
-        setCurrentPreview(null);
+      } catch (error) {
+        console.warn("[Feed] Could not unload preview:", error);
+      }
+    }
+
+    setSound(null);
+    setIsPlaying(false);
+    setProgress(0);
+    setCurrentPreview(null);
+  }, [sound]);
+
+  const handlePlayPreview = useCallback(
+    async (previewUrl) => {
+      if (!previewUrl) {
+        Alert.alert(
+          "Preview unavailable",
+          "This item does not have a music preview."
+        );
         return;
       }
 
-      // Stop any currently playing sound
-      if (sound) {
-        await sound.unloadAsync();
+      try {
+        if (currentPreview === previewUrl && sound) {
+          await stopCurrentPreview();
+          return;
+        }
+
+        await stopCurrentPreview();
+
+        const { sound: loadedSound } =
+          await Audio.Sound.createAsync(
+            {
+              uri: previewUrl,
+            },
+            {
+              shouldPlay: true,
+            }
+          );
+
+        setSound(loadedSound);
+        setCurrentPreview(previewUrl);
+        setIsPlaying(true);
+        setProgress(0);
+
+        loadedSound.setOnPlaybackStatusUpdate((status) => {
+          if (!status.isLoaded) {
+            return;
+          }
+
+          if (
+            status.durationMillis &&
+            status.positionMillis !== undefined
+          ) {
+            setProgress(
+              Math.min(
+                100,
+                (status.positionMillis / status.durationMillis) * 100
+              )
+            );
+          }
+
+          setIsPlaying(Boolean(status.isPlaying));
+
+          if (status.didJustFinish) {
+            setProgress(0);
+            setIsPlaying(false);
+            setCurrentPreview(null);
+
+            loadedSound
+              .unloadAsync()
+              .catch(() => {});
+          }
+        });
+      } catch (error) {
+        console.error("[Feed] Preview error:", error);
+
+        Alert.alert(
+          "Preview error",
+          "The music preview could not be played."
+        );
       }
-
-      // Load and play the new preview
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: previewUrl },
-        { shouldPlay: true }
-      );
-      setSound(newSound);
-      setIsPlaying(true);
-      setCurrentPreview(previewUrl);
-
-      // Update progress
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.isPlaying) {
-          setProgress((status.positionMillis / status.durationMillis) * 100);
-        }
-        if (status.didJustFinish) {
-          setProgress(0);
-          setIsPlaying(false);
-          setCurrentPreview(null);
-        }
-      });
-    } catch (error) {
-      console.error("[ERROR] handlePlayPreview ->", error);
-      Alert.alert("Error", "Unable to play the song preview.");
-    }
-  };
+    },
+    [
+      currentPreview,
+      sound,
+      stopCurrentPreview,
+    ]
+  );
 
   useEffect(() => {
-    // Cleanup the sound instance when the component unmounts
     return () => {
+      if (tapTimerRef.current) {
+        clearTimeout(tapTimerRef.current);
+      }
+
       if (sound) {
-        sound.unloadAsync();
+        sound.unloadAsync().catch(() => {});
       }
     };
   }, [sound]);
 
-  const isFocused = useIsFocused();
-
   useEffect(() => {
-    if (!isFocused && sound) {
-      sound.unloadAsync();
-      setSound(null);
-      setIsPlaying(false);
-      setProgress(0);
-      setCurrentPreview(null);
+    if (!isFocused) {
+      stopCurrentPreview();
     }
-  }, [isFocused]);
+  }, [isFocused, stopCurrentPreview]);
 
   useEffect(() => {
-    const keyboardShowEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const keyboardHideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showEvent =
+      Platform.OS === "ios"
+        ? "keyboardWillShow"
+        : "keyboardDidShow";
 
-    const keyboardShowListener = Keyboard.addListener(keyboardShowEvent, (event) => {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 1000,
-        useNativeDriver: true,
-      }).start();
-    });
+    const hideEvent =
+      Platform.OS === "ios"
+        ? "keyboardWillHide"
+        : "keyboardDidHide";
 
-    const keyboardHideListener = Keyboard.addListener(keyboardHideEvent, (event) => {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: event.duration || 250,
-        useNativeDriver: true,
-      }).start();
-    });
+    const keyboardShowListener =
+      Keyboard.addListener(showEvent, () => {
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      });
+
+    const keyboardHideListener =
+      Keyboard.addListener(hideEvent, () => {
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      });
 
     return () => {
       keyboardShowListener.remove();
@@ -169,2000 +360,2404 @@ export default function Feed({ navigation, route }) {
     };
   }, [slideAnim]);
 
-  // -------------------------------------------------------------------------
-  //  useEffect: Fetch data once on mount
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    if (!fetchedInitial.current) {
-      fetchedInitial.current = true;
-      fetchInitialFeed(false);
-    }
-  }, []);
+  const fetchPreviewForItem = useCallback(
+    async (item) => {
+      const itemType = getItemType(item);
+      const itemId = getItemId(item);
+      const existingPreview = getPreviewUrl(item);
 
-
-// -------------------------------------------------------------------------
-//  fetchInitialFeed
-// -------------------------------------------------------------------------
-const fetchInitialFeed = async (refresh) => {
-  try {
-    setIsLoading(true);
-    // Fetch timeline items and recommendations
-    const timelineItems = await fetchTimeline(0, refresh);
-    const recs = await fetchRecommendations(0, refresh);
-
-    // Debug log to inspect the feed data
-    console.log("[DEBUG] Timeline Items:", timelineItems);
-    console.log("[DEBUG] Recommendations:", recs);
-
-    // Fetch missing preview URLs for tracks
-    const fetchPreviewPromises = [...timelineItems, ...recs].map(async (item) => {
-      const trackId = item.item_info?.id || item.id;
-
-      // Log the item structure and conditions
-      console.log("[DEBUG] Conditions - type:", item.type || item.item_info?.type, "preview:", item.preview || item.item_info?.preview, "trackId:", trackId);
-
-      if ((item.type === "track" || item.item_info?.type === "track") && !item.preview && !(item.item_info?.preview) && trackId) {
-        console.log("[DEBUG] Fetching preview for track ID:", trackId);
-        try {
-          const response = await getSongFromDeezer(trackId);
-          const deezerData = await response.json(); // Parse the JSON response
-          if (deezerData && deezerData.preview) {
-            if (item.item_info) {
-              item.item_info.preview = deezerData.preview;
-            } else {
-              item.preview = deezerData.preview;
-            }
-            console.log("[DEBUG] Preview set for track:", trackId, deezerData.preview);
-          } else {
-            console.warn("[WARNING] No preview available for track ID:", trackId);
-          }
-        } catch (error) {
-          console.warn("[WARNING] Failed to fetch preview for track ID:", trackId, error);
-        }
-      } else {
-        console.log("[DEBUG] Skipping preview fetch for item:", item);
+      if (
+        itemType !== "track" ||
+        !itemId ||
+        existingPreview
+      ) {
+        return item;
       }
-      return item;
-    });
 
-    const updatedItems = await Promise.all(fetchPreviewPromises);
+      try {
+        const response = await getSongFromDeezer(itemId);
 
-    // Merge the two lists using your random insertion logic.
-    let combinedItems = [...updatedItems.slice(0, timelineItems.length)];
-    updatedItems.slice(timelineItems.length).forEach((rec) => {
-      // Only insert if this recommendation isn't already in the timeline.
-      const alreadyExists = combinedItems.some(
-        (item) => item.record_id === rec.record_id
+        if (!response?.ok) {
+          return item;
+        }
+
+        const deezerData = await response.json();
+
+        if (!deezerData?.preview) {
+          return item;
+        }
+
+        if (item.item_info) {
+          return {
+            ...item,
+            item_info: {
+              ...item.item_info,
+              preview: deezerData.preview,
+            },
+          };
+        }
+
+        return {
+          ...item,
+          preview: deezerData.preview,
+        };
+      } catch (error) {
+        console.warn(
+          `[Feed] Could not fetch preview for ${itemId}:`,
+          error
+        );
+
+        return item;
+      }
+    },
+    [
+      getItemId,
+      getItemType,
+      getPreviewUrl,
+    ]
+  );
+
+  const fetchTimelineItems = useCallback(
+    async (offset, refresh = false) => {
+      const currentUser = auth.currentUser;
+
+      if (!currentUser?.uid) {
+        return [];
+      }
+
+      try {
+        const response = await getTimeline(
+          currentUser.uid,
+          {
+            limit: PAGE_SIZE,
+            offset,
+            refresh,
+          }
+        );
+
+        if (!response?.ok) {
+          console.warn(
+            "[Feed] Timeline request failed:",
+            response?.status
+          );
+
+          return [];
+        }
+
+        const data = await response.json();
+
+        return Array.isArray(data?.timeline)
+          ? data.timeline
+          : [];
+      } catch (error) {
+        console.error("[Feed] Timeline error:", error);
+        return [];
+      }
+    },
+    []
+  );
+
+  const fetchRecommendationItems = useCallback(
+    async (offset, refresh = false) => {
+      const currentUser = auth.currentUser;
+
+      if (!currentUser?.uid) {
+        return [];
+      }
+
+      try {
+        const response = await getRecommendations(
+          currentUser.uid,
+          {
+            limit: PAGE_SIZE,
+            offset,
+            refresh,
+          }
+        );
+
+        if (!response?.ok) {
+          console.warn(
+            "[Feed] Recommendation request failed:",
+            response?.status
+          );
+
+          return [];
+        }
+
+        const data = await response.json();
+
+        return Array.isArray(data?.recommendations)
+          ? data.recommendations
+          : [];
+      } catch (error) {
+        console.error(
+          "[Feed] Recommendation error:",
+          error
+        );
+
+        return [];
+      }
+    },
+    []
+  );
+
+  const mergeFeedItems = useCallback(
+    (timelineItems, recommendationItems) => {
+      const result = [];
+      const usedIds = new Set();
+
+      const addItem = (item) => {
+        const itemId =
+          getRecordId(item) ||
+          getItemId(item) ||
+          JSON.stringify(item);
+
+        if (usedIds.has(itemId)) {
+          return;
+        }
+
+        usedIds.add(itemId);
+        result.push(item);
+      };
+
+      const maximumLength = Math.max(
+        timelineItems.length,
+        recommendationItems.length
       );
-      if (!alreadyExists) {
-        const randomIndex = Math.floor(Math.random() * (combinedItems.length + 1));
-        combinedItems.splice(randomIndex, 0, rec);
-      }
-    });
 
-    // Update offsets for timeline and recommendations
-    setTimelineOffset(timelineItems.length);
-    setRecsOffset(recs.length);
-    setCombinedFeed(combinedItems);
-  } catch (err) {
-    console.error("[ERROR] fetchInitialFeed ->", err);
-  } finally {
-    setIsLoading(false);
-  }
-};
+      for (let index = 0; index < maximumLength; index += 1) {
+        if (timelineItems[index]) {
+          addItem(timelineItems[index]);
+        }
 
-//notifications
-useEffect(() => {
-  async function fetchNotificationsCount() {
-    if (!auth.currentUser?.uid) return; // Wait until auth is ready
-    try {
-      const resp = await getFollowRequests(auth.currentUser.uid);
-      if (resp.ok) {
-        const requests = await resp.json();
-        setNotificationsCount(requests.length);
-      }
-    } catch (error) {
-      console.error("Error fetching notifications count:", error);
-    }
-  }
-  fetchNotificationsCount();
-}, [auth.currentUser]);  
-
-// -------------------------------------------------------------------------
-//  loadMoreTimeline: Load additional timeline items and recommendations
-// -------------------------------------------------------------------------
-const loadMoreTimeline = async () => {
-  if (loadingMore) return;
-  setLoadingMore(true);
-
-  try {
-    // Fetch the next page of timeline items and recommendations
-    const newTimelineItems = await fetchTimeline(timelineOffset, false);
-    const newRecs = await fetchRecommendations(recsOffset, false);
-
-    // Fetch missing preview URLs for tracks in the new items
-    const fetchPreviewPromises = [...newTimelineItems, ...newRecs].map(async (item) => {
-      const trackId = item.item_info?.id || item.id;
-
-      if ((item.type === "track" || item.item_info?.type === "track") && !item.preview && !(item.item_info?.preview) && trackId) {
-        try {
-          const response = await getSongFromDeezer(trackId);
-          const deezerData = await response.json();
-          if (deezerData && deezerData.preview) {
-            if (item.item_info) {
-              item.item_info.preview = deezerData.preview;
-            } else {
-              item.preview = deezerData.preview;
-            }
-          }
-        } catch (error) {
-          console.warn("[WARNING] Failed to fetch preview for track ID:", trackId, error);
+        if (recommendationItems[index]) {
+          addItem(recommendationItems[index]);
         }
       }
-      return item;
-    });
 
-    const updatedItems = await Promise.all(fetchPreviewPromises);
+      return result;
+    },
+    [
+      getItemId,
+      getRecordId,
+    ]
+  );
 
-    // Merge the new timeline items and recommendations
-    let newCombined = [...updatedItems.slice(0, newTimelineItems.length)];
-    updatedItems.slice(newTimelineItems.length).forEach((rec) => {
-      const alreadyExists = newCombined.some((item) => item.record_id === rec.record_id);
-      if (!alreadyExists) {
-        const randomIndex = Math.floor(Math.random() * (newCombined.length + 1));
-        newCombined.splice(randomIndex, 0, rec);
+  const fetchInitialFeed = useCallback(
+    async (refresh = false) => {
+      setIsLoading(true);
+
+      try {
+        const [
+          timelineItems,
+          recommendationItems,
+        ] = await Promise.all([
+          fetchTimelineItems(0, refresh),
+          fetchRecommendationItems(0, refresh),
+        ]);
+
+        const itemsWithPreviews =
+          await Promise.all(
+            [
+              ...timelineItems,
+              ...recommendationItems,
+            ].map(fetchPreviewForItem)
+          );
+
+        const updatedTimeline =
+          itemsWithPreviews.slice(
+            0,
+            timelineItems.length
+          );
+
+        const updatedRecommendations =
+          itemsWithPreviews.slice(
+            timelineItems.length
+          );
+
+        const mergedItems = mergeFeedItems(
+          updatedTimeline,
+          updatedRecommendations
+        );
+
+        setCombinedFeed(mergedItems);
+        setTimelineOffset(timelineItems.length);
+        setRecommendationsOffset(
+          recommendationItems.length
+        );
+
+        setHasMore(
+          timelineItems.length > 0 ||
+          recommendationItems.length > 0
+        );
+      } catch (error) {
+        console.error(
+          "[Feed] Initial feed error:",
+          error
+        );
+      } finally {
+        setIsLoading(false);
       }
-    });
+    },
+    [
+      fetchPreviewForItem,
+      fetchRecommendationItems,
+      fetchTimelineItems,
+      mergeFeedItems,
+    ]
+  );
 
-    // Append the new combined batch to the existing feed
-    setCombinedFeed((prevFeed) => [...prevFeed, ...newCombined]);
-
-    // Update the pagination offsets
-    setTimelineOffset((prev) => prev + newTimelineItems.length);
-    setRecsOffset((prev) => prev + newRecs.length);
-  } catch (error) {
-    console.error("[ERROR] loadMoreTimeline ->", error);
-  } finally {
-    setLoadingMore(false);
-  }
-};
-
-
-  // -------------------------------------------------------------------------
-  //  fetchTimeline: Get timeline items from your new timeline endpoint
-  // -------------------------------------------------------------------------
-  const fetchTimeline = async (currentOffset, refresh) => {
-    try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        console.warn("[WARNING] fetchTimeline: No current user found");
-        return [];
-      }
-      // Assume getTimeline is imported similarly to getRecommendations
-      const response = await getTimeline(currentUser.uid, { limit, offset: currentOffset, refresh });
-      if (response && response.ok) {
-        const data = await response.json();
-        return data.timeline || [];
-      } else {
-        console.warn("[WARNING] fetchTimeline: Response not ok", response?.status);
-      }
-    } catch (error) {
-      console.error("[ERROR] fetchTimeline ->", error);
+  const loadMoreFeed = useCallback(async () => {
+    if (
+      loadingMore ||
+      isLoading ||
+      !hasMore
+    ) {
+      return;
     }
-    return [];
-  };
 
-  // -------------------------------------------------------------------------
-  //  fetchRecommendations
-  // -------------------------------------------------------------------------
-  const fetchRecommendations = async (currentOffset, refresh) => {
+    setLoadingMore(true);
+
     try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        console.warn("[WARNING] fetchRecommendations: No current user found");
-        return [];
+      const [
+        timelineItems,
+        recommendationItems,
+      ] = await Promise.all([
+        fetchTimelineItems(
+          timelineOffset,
+          false
+        ),
+        fetchRecommendationItems(
+          recommendationsOffset,
+          false
+        ),
+      ]);
+
+      if (
+        timelineItems.length === 0 &&
+        recommendationItems.length === 0
+      ) {
+        setHasMore(false);
+        return;
       }
-      const response = await getRecommendations(currentUser.uid, { limit, offset: currentOffset, refresh });
-      if (response && response.ok) {
-        const data = await response.json();
-        return data.recommendations || [];
-      } else {
-        console.warn("[WARNING] fetchRecommendations: Response not ok:", response?.status);
-      }
+
+      const itemsWithPreviews =
+        await Promise.all(
+          [
+            ...timelineItems,
+            ...recommendationItems,
+          ].map(fetchPreviewForItem)
+        );
+
+      const updatedTimeline =
+        itemsWithPreviews.slice(
+          0,
+          timelineItems.length
+        );
+
+      const updatedRecommendations =
+        itemsWithPreviews.slice(
+          timelineItems.length
+        );
+
+      const newItems = mergeFeedItems(
+        updatedTimeline,
+        updatedRecommendations
+      );
+
+      setCombinedFeed((currentItems) => {
+        const existingIds = new Set(
+          currentItems.map(
+            (item) =>
+              getRecordId(item) ||
+              getItemId(item)
+          )
+        );
+
+        const uniqueNewItems =
+          newItems.filter((item) => {
+            const itemId =
+              getRecordId(item) ||
+              getItemId(item);
+
+            return !existingIds.has(itemId);
+          });
+
+        return [
+          ...currentItems,
+          ...uniqueNewItems,
+        ];
+      });
+
+      setTimelineOffset(
+        (currentOffset) =>
+          currentOffset + timelineItems.length
+      );
+
+      setRecommendationsOffset(
+        (currentOffset) =>
+          currentOffset +
+          recommendationItems.length
+      );
     } catch (error) {
-      console.error("[ERROR] fetchRecommendations ->", error);
+      console.error(
+        "[Feed] Load-more error:",
+        error
+      );
+    } finally {
+      setLoadingMore(false);
     }
-    return [];
-  };
-  
-  // -------------------------------------------------------------------------
-  //  Pull-to-refresh
-  // -------------------------------------------------------------------------
-  const onRefresh = async () => {
+  }, [
+    fetchPreviewForItem,
+    fetchRecommendationItems,
+    fetchTimelineItems,
+    getItemId,
+    getRecordId,
+    hasMore,
+    isLoading,
+    loadingMore,
+    mergeFeedItems,
+    recommendationsOffset,
+    timelineOffset,
+  ]);
+
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
+    setHasMore(true);
 
     try {
       await fetchInitialFeed(true);
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [fetchInitialFeed]);
 
-  const [likeLoading, setLikeLoading] = useState({}); // keys are song IDs
-
-  // Helper: Extract the ID from the item or its nested item_info.
-const getItemId = (item) => {
-  return item.id || (item.item_info && item.item_info.id);
-};
-
-// Helper to get the liked status consistently
-const getLikedStatus = (item) => {
-  if (typeof item.liked !== "undefined") {
-    return item.liked;
-  } else if (item.item_info && typeof item.item_info.liked !== "undefined") {
-    return item.item_info.liked;
-  }
-  return false;
-};
-
-const getItemType = (item) => {
-  if (item.item_info && typeof item.item_info.type !== "undefined") {
-    return item.item_info.type;
-  }
-  return item.type;
-};
-
-const handleLikeSong = (item, isDoubleTap = false) => {
-  console.debug("[DEBUG] handleLikeSong called", { item, isDoubleTap });
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    console.debug("[DEBUG] No current user found");
-    Alert.alert("Error", "User not logged in");
-    return;
-  }
-
-  // Use helper to get the unique ID.
-  const itemId = getItemId(item);
-  if (!itemId) {
-    console.error("[ERROR] Item id not found", { item });
-    return;
-  }
-
-  // Find the current item in the combined feed (source of truth)
-  const currentItem = combinedFeed.find(
-    (feedItem) => getItemId(feedItem) === itemId
-  );
-  if (!currentItem) {
-    console.debug("[DEBUG] Item not found in combinedFeed", { itemId });
-    return;
-  }
-  console.debug("[DEBUG] Found currentItem", currentItem);
-
-  // Prevent duplicate requests for this item
-  if (likeLoading[itemId]) {
-    console.debug("[DEBUG] Request already in progress for item", { itemId });
-    return;
-  }
-
-  // For a double tap, only trigger a like if the song is not already liked.
-  if (isDoubleTap && getLikedStatus(currentItem)) {
-    console.debug("[DEBUG] Double tap ignored because item is already liked", { itemId });
-    return;
-  }
-
-  // Mark the item as loading
-  setLikeLoading((prev) => {
-    const newState = { ...prev, [itemId]: true };
-    console.debug("[DEBUG] Updated likeLoading state", newState);
-    return newState;
-  });
-
-  // For optimistic UI update:
-  // For double tap, force liked=true.
-  // Otherwise, toggle the liked status.
-  const currentLiked = getLikedStatus(currentItem);
-  const newLiked = isDoubleTap ? true : !currentLiked;
-  console.debug("[DEBUG] newLiked value computed", { currentLiked, newLiked });
-
-  setCombinedFeed((prevFeed) =>
-    prevFeed.map((feedItem) => {
-      if (getItemId(feedItem) === itemId) {
-        console.debug("[DEBUG] Optimistically updating item", { itemId, newLiked });
-        // Update both top level and nested property if present.
-        return {
-          ...feedItem,
-          liked: newLiked,
-          ...(feedItem.item_info
-            ? { item_info: { ...feedItem.item_info, liked: newLiked } }
-            : {}),
-        };
-      }
-      return feedItem;
-    })
-  );
-
-  // Decide which API to call:
-  // If the song was not previously liked (or if it's a double tap), call like.
-  // Otherwise, toggle from liked to unliked.
-  console.debug("[DEBUG] wasLiked value", currentLiked);
-
-  if (!currentLiked || isDoubleTap) {
-    console.debug("[DEBUG] Calling like API", { itemId });
-    like(currentUser.uid, itemId, getItemType(item))
-      .then((response) => {
-        console.debug("[DEBUG] Like API response", response);
-        if (!response.ok) {
-          throw new Error("Failed to like the item");
-        }
-        return postRecommendations(
-          currentUser.uid,
-          itemId,
-          item.type,
-          item.name || "",
-          item.artist?.name || item.name
-        );
-      })
-      .catch((error) => {
-        console.error("[ERROR] handleLikeSong ->", error);
-        // Rollback UI update on error
-        setCombinedFeed((prevFeed) =>
-          prevFeed.map((feedItem) => {
-            if (getItemId(feedItem) === itemId) {
-              console.debug("[DEBUG] Rolling back optimistic update", { itemId });
-              return {
-                ...feedItem,
-                liked: currentLiked, // revert back
-                ...(feedItem.item_info
-                  ? { item_info: { ...feedItem.item_info, liked: currentLiked } }
-                  : {}),
-              };
-            }
-            return feedItem;
-          })
-        );
-        Alert.alert("Error", "Unable to toggle like status");
-      })
-      .finally(() => {
-        setLikeLoading((prev) => {
-          const newState = { ...prev };
-          delete newState[itemId];
-          console.debug("[DEBUG] Clearing likeLoading for item", { itemId, newState });
-          return newState;
-        });
-      });
-  } else {
-    console.debug("[DEBUG] Calling unlike API", { itemId });
-    unlike(currentUser.uid, itemId, getItemType(item))
-      .catch((error) => {
-        console.error("[ERROR] handleLikeSong ->", error);
-        // Rollback UI update on error
-        setCombinedFeed((prevFeed) =>
-          prevFeed.map((feedItem) => {
-            if (getItemId(feedItem) === itemId) {
-              console.debug("[DEBUG] Rolling back optimistic update after unlike error", { itemId });
-              return {
-                ...feedItem,
-                liked: currentLiked, // revert
-                ...(feedItem.item_info
-                  ? { item_info: { ...feedItem.item_info, liked: currentLiked } }
-                  : {}),
-              };
-            }
-            return feedItem;
-          })
-        );
-        Alert.alert("Error", "Unable to toggle like status");
-      })
-      .finally(() => {
-        setLikeLoading((prev) => {
-          const newState = { ...prev };
-          delete newState[itemId];
-          console.debug("[DEBUG] Clearing likeLoading after unlike", { itemId, newState });
-          return newState;
-        });
-      });
-  }
-};
-
-
-  
-
-  // -------------------------------------------------------------------------
-  //  handleModal (open share modal)
-  // -------------------------------------------------------------------------
-  const handleModal = async (item) => {
-    try {
-      const response = await getFriends(auth.currentUser.uid);
-      const json = await response.json();
-      setFriendsList(json);
-      setCurrentShareItem(item);
-      setModalVisible(true);
-    } catch (error) {
-      console.error("[ERROR] handleModal ->", error);
-      Alert.alert("Error", "Could not load friends list");
+  useEffect(() => {
+    if (!fetchedInitial.current) {
+      fetchedInitial.current = true;
+      fetchInitialFeed(false);
     }
-  };
+  }, [fetchInitialFeed]);
 
-  // -------------------------------------------------------------------------
-  //  closeModal
-  // -------------------------------------------------------------------------
-  const closeModal = () => {
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      const currentUser = auth.currentUser;
+
+      if (!currentUser?.uid) {
+        return;
+      }
+
+      try {
+        const response =
+          await getFollowRequests(
+            currentUser.uid
+          );
+
+        if (!response?.ok) {
+          return;
+        }
+
+        const requests =
+          await response.json();
+
+        setNotificationsCount(
+          Array.isArray(requests)
+            ? requests.length
+            : 0
+        );
+      } catch (error) {
+        console.error(
+          "[Feed] Notification error:",
+          error
+        );
+      }
+    };
+
+    fetchNotifications();
+  }, []);
+
+  const updateLikedState = useCallback(
+    (itemId, liked) => {
+      setCombinedFeed((items) =>
+        items.map((feedItem) => {
+          if (
+            getItemId(feedItem) !== itemId
+          ) {
+            return feedItem;
+          }
+
+          return {
+            ...feedItem,
+            liked,
+            ...(feedItem.item_info
+              ? {
+                  item_info: {
+                    ...feedItem.item_info,
+                    liked,
+                  },
+                }
+              : {}),
+          };
+        })
+      );
+    },
+    [getItemId]
+  );
+
+  const handleLikeSong = useCallback(
+    async (item, forceLike = false) => {
+      const currentUser = auth.currentUser;
+
+      if (!currentUser?.uid) {
+        Alert.alert(
+          "Sign in required",
+          "You must be signed in to like music."
+        );
+        return;
+      }
+
+      const itemId = getItemId(item);
+
+      if (!itemId || likeLoading[itemId]) {
+        return;
+      }
+
+      const currentLiked =
+        getLikedStatus(item);
+
+      const nextLiked = forceLike
+        ? true
+        : !currentLiked;
+
+      if (forceLike && currentLiked) {
+        return;
+      }
+
+      setLikeLoading((current) => ({
+        ...current,
+        [itemId]: true,
+      }));
+
+      updateLikedState(
+        itemId,
+        nextLiked
+      );
+
+      try {
+        let response;
+
+        if (nextLiked) {
+          response = await like(
+            currentUser.uid,
+            itemId,
+            getItemType(item)
+          );
+        } else {
+          response = await unlike(
+            currentUser.uid,
+            itemId,
+            getItemType(item)
+          );
+        }
+
+        if (!response?.ok) {
+          throw new Error(
+            `Like request failed with status ${response?.status}`
+          );
+        }
+
+        if (nextLiked) {
+          await postRecommendations(
+            currentUser.uid,
+            itemId,
+            getItemType(item),
+            getDisplayName(item),
+            getArtistName(item) ||
+              getDisplayName(item)
+          );
+        }
+      } catch (error) {
+        console.error(
+          "[Feed] Like error:",
+          error
+        );
+
+        updateLikedState(
+          itemId,
+          currentLiked
+        );
+
+        Alert.alert(
+          "Unable to update like",
+          "Please try again."
+        );
+      } finally {
+        setLikeLoading((current) => {
+          const updated = {
+            ...current,
+          };
+
+          delete updated[itemId];
+
+          return updated;
+        });
+      }
+    },
+    [
+      getArtistName,
+      getDisplayName,
+      getItemId,
+      getItemType,
+      getLikedStatus,
+      likeLoading,
+      updateLikedState,
+    ]
+  );
+
+  const handleSingleTap = useCallback(
+    (item) => {
+      const itemInfo = getItemInfo(item);
+      const itemType = getItemType(item);
+
+      if (itemType === "track") {
+        navigation.navigate(
+          "SongPage",
+          {
+            track: itemInfo,
+          }
+        );
+        return;
+      }
+
+      if (itemType === "artist") {
+        navigation.navigate(
+          "ArtistPage",
+          {
+            artist: itemInfo,
+          }
+        );
+        return;
+      }
+
+      if (itemType === "album") {
+        navigation.navigate(
+          "AlbumPage",
+          {
+            album: itemInfo,
+          }
+        );
+      }
+    },
+    [
+      getItemInfo,
+      getItemType,
+      navigation,
+    ]
+  );
+
+  const handleItemTap = useCallback(
+    (item) => {
+      if (tapTimerRef.current) {
+        clearTimeout(
+          tapTimerRef.current
+        );
+
+        tapTimerRef.current = null;
+
+        handleLikeSong(item, true);
+        return;
+      }
+
+      tapTimerRef.current =
+        setTimeout(() => {
+          tapTimerRef.current = null;
+          handleSingleTap(item);
+        }, DOUBLE_TAP_DELAY);
+    },
+    [
+      handleLikeSong,
+      handleSingleTap,
+    ]
+  );
+
+  const openShareModal = useCallback(
+    async (item) => {
+      const currentUser = auth.currentUser;
+
+      if (!currentUser?.uid) {
+        Alert.alert(
+          "Sign in required",
+          "You must be signed in to share music."
+        );
+        return;
+      }
+
+      try {
+        const response =
+          await getFriends(
+            currentUser.uid
+          );
+
+        if (!response?.ok) {
+          throw new Error(
+            `Friends request failed with status ${response?.status}`
+          );
+        }
+
+        const friends =
+          await response.json();
+
+        setFriendsList(
+          Array.isArray(friends)
+            ? friends
+            : []
+        );
+
+        setCurrentShareItem(item);
+        setSelectedUser(null);
+        setComment("");
+        setModalVisible(true);
+      } catch (error) {
+        console.error(
+          "[Feed] Friends error:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to load friends",
+          "Please try again."
+        );
+      }
+    },
+    []
+  );
+
+  const closeShareModal = useCallback(() => {
     setModalVisible(false);
     setSelectedUser(null);
     setComment("");
     setCurrentShareItem(null);
-  };
+  }, []);
 
-  // -------------------------------------------------------------------------
-  //  handleSelectUser
-  // -------------------------------------------------------------------------
-  const handleSelectUser = (user) => {
-    setSelectedUser((prevUser) =>
-      prevUser && prevUser.userId === user.userId ? null : user
-    );
-  };
-
-  // -------------------------------------------------------------------------
-  //  handleShareComment
-  // -------------------------------------------------------------------------
-  const handleShareComment = () => {
-    if (!selectedUser) {
-      Alert.alert("Error", "Please select a friend to share with");
+  const submitShare = useCallback(async () => {
+    if (
+      !selectedUser ||
+      !currentShareItem
+    ) {
       return;
     }
+
     try {
-      share(
+      const response = await share(
         selectedUser.userId,
-        currentShareItem.record_id,
-        currentShareItem.id,
-        comment,
-        currentShareItem.type
+        getRecordId(currentShareItem),
+        getItemId(currentShareItem),
+        comment.trim(),
+        getItemType(currentShareItem)
       );
+
+      if (
+        response &&
+        response.ok === false
+      ) {
+        throw new Error(
+          `Share failed with status ${response.status}`
+        );
+      }
+
       Toast.show({
-        type: 'success',
-        text1: 'Sent'
+        type: "success",
+        text1: "Sent",
+        text2: `Shared with ${selectedUser.username}`,
       });
+
+      closeShareModal();
     } catch (error) {
-      console.error("[ERROR] handleShareComment ->", error);
+      console.error(
+        "[Feed] Share error:",
+        error
+      );
+
+      Alert.alert(
+        "Unable to share",
+        "Please try again."
+      );
     }
-    closeModal();
-  };
+  }, [
+    closeShareModal,
+    comment,
+    currentShareItem,
+    getItemId,
+    getItemType,
+    getRecordId,
+    selectedUser,
+  ]);
 
-  const getCardBorderStyle = (item) => {
-  // Friend reviews
-  if (
-    item.class === "friend_review" ||
-    item.author?.is_friend
-  ) {
-    return {
-      borderColor: "green",
-      borderWidth: 2,
-    };
-  }
-
-  // Following reviews
-  if (item.class === "following_review") {
-    return {
-      borderColor: "lightblue",
-      borderWidth: 2,
-    };
-  }
-
-  // Music shared by a friend
-  if (
-    item.class === "share" ||
-    item.shared_by
-  ) {
-    return {
-      borderColor: "yellow",
-      borderWidth: 2,
-    };
-  }
-
-  const origin =
-    item?.origin ||
-    item?.item_info?.origin ||
-    null;
-
-  // Recommendations specifically based on a Like
-  if (origin?.type === "like") {
-    return {
-      borderColor: "red",
-      borderWidth: 2,
-    };
-  }
-
-  // General recommendations, new music, discovery, timeline
-  if (
-    origin?.type === "feed" ||
-    origin?.type === "discovery" ||
-    item?.source === "timeline" ||
-    !origin
-  ) {
-    return {
-      borderColor: "green",
-      borderWidth: 2,
-    };
-  }
-
-  // Favourite-based recommendations
-  if (origin?.type === "favourite") {
-    return {
-      borderColor: "red",
-      borderWidth: 2,
-    };
-  }
-
-  // Rating-based recommendations
-  if (origin?.type === "high-rating") {
-    return {
-      borderColor: "red",
-      borderWidth: 2,
-    };
-  }
-
-  // Safe fallback
-  return {
-    borderColor: "green",
-    borderWidth: 2,
-  };
-};
-
-  const DOUBLE_TAP_DELAY = 300;
-  const tapTimerRef = useRef(null);
-
-  // This function is called on every tap
-  const handleTap = (item) => {
-    if (tapTimerRef.current) {
-      // Second tap detected within the delay: it's a double tap.
-      clearTimeout(tapTimerRef.current);
-      tapTimerRef.current = null;
-      handleDoubleTap(item);
-    } else {
-      // First tap: start a timer that will trigger single tap if no second tap occurs.
-      tapTimerRef.current = setTimeout(() => {
-        tapTimerRef.current = null;
-        handleSingleTap(item);
-      }, DOUBLE_TAP_DELAY);
-    }
-  };
-
-  // Action for a single tap (e.g., play/pause video)
-  const handleSingleTap = (item) => {
-
-    const itemInfo = item.item_info || item;
-    if (item.class == "friend_review" || itemInfo) {
-      if (itemInfo.type === "track") {
-        navigation.navigate("SongPage", { track: itemInfo });
-      } else if (itemInfo.type === "artist") {
-        navigation.navigate("ArtistPage", { artist: itemInfo });
-      } else if (itemInfo.type === "album") {
-        navigation.navigate("AlbumPage", { album: itemInfo });
-      } 
-    }
-    else
-    {
-      if (item.type === "track") {
-        navigation.navigate("SongPage", { track: item });
-      } else if (item.type === "artist") {
-        navigation.navigate("ArtistPage", { artist: item });
-      } else if (item.type === "album") {
-        navigation.navigate("AlbumPage", { album: item });
-      } 
-    }
-  };
-
-  // Action for a double tap (e.g., like video)
-  const handleDoubleTap = (item) => {
-    handleLikeSong(item);
-  };
-
-  // -------------------------------------------------------------------------
-  //  View Tracking for Recommendation Cards
-  // -------------------------------------------------------------------------
-  // We'll use onViewableItemsChanged on the FlatList to detect when a recommendation card is viewed.
-  // We'll assume that if an item does not have a "class" property (i.e. not a friend_review)
-  // and has an "item_info" property, it's a recommendation card.
-  // When such an item becomes visible, we call setRecommendationServed with served:false.
-  const viewedRecIdsRef = useRef(new Set());
-const onViewableItemsChanged = useRef(({ viewableItems, changed }) => {
-  viewableItems.forEach(({ item }) => {
-    // Log the item to confirm its structure.
-    // Check if this is a recommendation card (adjust condition if needed)
-    if (!item.class && !item.item_info) {
-      const recId = item.record_id || (item.item_info && item.item_info.record_id);
-      if (recId && !viewedRecIdsRef.current.has(recId)) {
-        viewedRecIdsRef.current.add(recId);
-        // Call your API function (make sure setRecommendationServed returns a promise)
-         setRecommendationServed(auth.currentUser.uid, recId)
-           .then((res) => console.log(`[DEBUG] Marked rec ${recId} as served:true`))
-           .catch((err) =>
-             console.error(`[ERROR] setRecommendationServed failed for rec ${recId}:`, err)
-           );
+  const getRecommendationContext =
+    useCallback((item) => {
+      if (
+        item?.class === "friend_review"
+      ) {
+        return {
+          heading: "Friend Review",
+          description: `${
+            item?.author?.username || "Friend"
+          } ${
+            getTimeAgo(item?.createdAt)
+          }`,
+        };
       }
-    }
-  });
-}).current;
 
+      if (
+        item?.class ===
+        "following_review"
+      ) {
+        return {
+          heading: "Following Review",
+          description: `${
+            item?.author?.username ||
+            "User"
+          } ${
+            getTimeAgo(item?.createdAt)
+          }`,
+        };
+      }
 
-  // -------------------------------------------------------------------------
-  //  renderFriendItem
-  // -------------------------------------------------------------------------
-  const renderFriendItem = ({ item }) => {
-    const isSelected = selectedUser && selectedUser.userId === item.userId;
-    return (
-      <TouchableOpacity
-        onPress={() => handleSelectUser(item)}
-        style={[styles.friendItem, isSelected && styles.selectedFriendItem]}
-      >
-        <Image
-          source={{ uri: item.avatar ? item.avatar : "https://via.placeholder.com/50" }}
-          style={styles.avatar}
-        />
-        <Text style={styles.username}>{item.username}</Text>
-        {isSelected && (
-          <Image
-            source={require("../images/checkmarkIcon.png")}
-            style={styles.checkmarkIcon}
-          />
-        )}
-      </TouchableOpacity>
-    );
-  };
+      if (item?.class === "share") {
+        return {
+          heading: `${
+            item?.shared_by?.username ||
+            "A friend"
+          } shared this`,
+          description:
+            item?.comment ||
+            getTimeAgo(item?.createdAt),
+        };
+      }
 
-  // Helper: Get time ago string
-  const getTimeAgo = (timestamp) => {
-    const now = new Date();
-    const postDate = new Date(timestamp);
-    const diffInSeconds = Math.floor((now - postDate) / 1000);
-  
+      const origin =
+        item?.origin ||
+        item?.item_info?.origin;
 
-    const secondsInMinute = 60;
-    const secondsInHour = 3600;
-    const secondsInDay = 86400;
-  
-    if (diffInSeconds < secondsInMinute) {
-      return "Just now";
-    } else if (diffInSeconds < secondsInHour) {
-      const minutes = Math.floor(diffInSeconds / secondsInMinute);
-      return `${minutes}min ago`;
-    } else if (diffInSeconds < secondsInDay) {
-      const hours = Math.floor(diffInSeconds / secondsInHour);
-      return `${hours}h ago`;
-    } else {
-      const days = Math.floor(diffInSeconds / secondsInDay);
-      return `${days}d ago`;
-    }
-  };
+      if (origin?.type === "like") {
+        return {
+          heading: "Because You Like",
+          description: [
+            origin?.title ||
+              origin?.name,
+            origin?.artist ||
+              origin?.artistName,
+          ]
+            .filter(Boolean)
+            .join(" by "),
+        };
+      }
 
-  // -------------------------------------------------------------------------
-  //  renderFeedItem
-  // -------------------------------------------------------------------------
-  const renderFeedItem = ({ item }) => {
-    const handlePreview = () => {
-      const previewUrl = item.preview || item.item_info?.preview;
-      if (previewUrl) {
-        handlePlayPreview(previewUrl);
+      if (
+        origin?.type === "favourite"
+      ) {
+        return {
+          heading:
+            "Because You Favourited",
+          description: [
+            origin?.title ||
+              origin?.name,
+            origin?.artist ||
+              origin?.artistName,
+          ]
+            .filter(Boolean)
+            .join(" by "),
+        };
+      }
+
+      if (
+        origin?.type === "high-rating"
+      ) {
+        return {
+          heading:
+            "Because You Rated Highly",
+          description: [
+            origin?.title ||
+              origin?.name,
+            origin?.artist ||
+              origin?.artistName,
+          ]
+            .filter(Boolean)
+            .join(" by "),
+        };
+      }
+
+      if (
+        origin?.type === "discovery"
+      ) {
+        return {
+          heading:
+            "Discover Something New",
+          description:
+            "Recommended for your taste",
+        };
+      }
+
+      return {
+        heading:
+          "Recommended For You",
+        description:
+          "New music for your feed",
+      };
+    }, [getTimeAgo]);
+
+  const getCardAccent = useCallback(
+    (item) => {
+      if (
+        item?.class === "friend_review" ||
+        item?.author?.is_friend
+      ) {
+        return "#31c46c";
+      }
+
+      if (
+        item?.class ===
+        "following_review"
+      ) {
+        return "#3ca8ff";
+      }
+
+      if (
+        item?.class === "share" ||
+        item?.shared_by
+      ) {
+        return "#f0c419";
+      }
+
+      const origin =
+        item?.origin ||
+        item?.item_info?.origin;
+
+      if (
+        origin?.type === "like" ||
+        origin?.type === "favourite" ||
+        origin?.type === "high-rating"
+      ) {
+        return "#ff334f";
+      }
+
+      return "#31c46c";
+    },
+    []
+  );
+
+  const renderStars = useCallback(
+    (rating = 0) => {
+      return (
+        <View style={styles.ratingContainer}>
+          {[0, 1, 2, 3, 4].map(
+            (index) => (
+              <Image
+                key={index}
+                source={
+                  index < Number(rating || 0)
+                    ? require("../images/starFullIcon.png")
+                    : require("../images/starEmptyIcon.png")
+                }
+                style={styles.starIcon}
+              />
+            )
+          )}
+        </View>
+      );
+    },
+    []
+  );
+
+  const renderReview = useCallback(
+    (item) => {
+      let review = null;
+
+      if (
+        item?.class === "friend_review" ||
+        item?.class ===
+          "following_review"
+      ) {
+        review = {
+          username:
+            item?.author?.username,
+          avatar:
+            item?.author?.avatar,
+          message:
+            item?.message,
+          rating:
+            item?.rating,
+          likes:
+            item?.upvotes,
+          emoji:
+            item?.emoji,
+          hearted:
+            item?.hearted,
+        };
       } else {
-        Alert.alert("Preview not available", "This item does not have a preview.");
+        const itemInfo =
+          getItemInfo(item);
+
+        const topReview =
+          itemInfo?.topReview ||
+          item?.topReview;
+
+        if (
+          topReview &&
+          Object.keys(topReview).length > 0
+        ) {
+          review = {
+            username:
+              topReview?.author
+                ?.username,
+            avatar:
+              topReview?.author
+                ?.avatarLong ||
+              topReview?.author?.avatar,
+            message:
+              topReview?.review ||
+              topReview?.message,
+            rating:
+              topReview?.rating,
+            likes:
+              topReview?.upvotes,
+            emoji:
+              topReview?.emoji,
+            hearted:
+              topReview?.hearted,
+          };
+        }
       }
-    };
-  
-    // Debug log to verify item structure
-    console.log("[DEBUG] Rendering feed item:", item);
-  
-    // Add debug logs for the condition
-    console.log("[DEBUG] item.type:", item.type);
-    console.log("[DEBUG] item.item_info?.type", item.item_info?.type);
-    console.log("[DEBUG] item.preview:", item.preview);
-    console.log("[DEBUG] item.item_info?.preview:", item.item_info?.preview);
-  
-    // Branch 1: Friend or following reviews
-    if (item.class === "friend_review" || item.class === "following_review") {
-      const itemInfo = item.item_info || {};
-      const displayName = itemInfo.name || itemInfo.title || "Unknown Title";
-      const imageUri = itemInfo.image || itemInfo.coverArt || "https://via.placeholder.com/250";
-      if(itemInfo.type == "track")
-      {
-        console.log("Album Title for friend review: ", itemInfo.album.title)
+
+      if (!review) {
+        return null;
       }
-      return (
-        <TouchableWithoutFeedback onPress={() => handleTap(item)}>
-          <View style={[styles.card, getCardBorderStyle(item)]}>
-            <View style={styles.cardInformation}>
-              <View style={styles.postContextContainer}>
-                <Text style={styles.postContext}>
-                <Text style={styles.boldPostContext}>
-                  {item.class === "friend_review" ? "Friend Review" : "Following Review"} {getTimeAgo(item.createdAt)}:
-                </Text>
-                  {"\n"}
-                  {item.author?.username}
-                </Text>
-              </View>
-              <View style={styles.actionButtons}>
-                <TouchableOpacity onPress={() => handleLikeSong(item.item_info)} style={styles.actionButton}>
-                  <Image
-                    source={
-                      item.item_info.liked
-                        ? require("../images/whiteFullHeart.png")
-                        : require("../images/whiteOpenHeart.png")
-                    }
-                    style={styles.actionIcon}
-                  />
-                  <Text style={styles.actionText}>
-                    {item.item_info.liked ? "Liked" : "Like"}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleModal(item.item_info)} style={styles.actionButton}>
-                  <Image
-                    source={require("../images/shareIcon.png")}
-                    style={styles.actionIcon}
-                  />
-                  <Text style={styles.actionText}>Share</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={styles.imageContainer}>
-              <Image source={{ uri: imageUri || "https://via.placeholder.com/250" }} style={styles.postImage} />
-              {item.item_info?.type === "track" && (item.preview || item.item_info?.preview) && (
-                <TouchableOpacity
-                  onPress={handlePreview}
-                  style={styles.playButton}
-                >
-                  <AnimatedCircularProgress
-                    size={50}
-                    width={5}
-                    fill={currentPreview === (item.preview || item.item_info?.preview) ? progress : 0}
-                    tintColor={colours.secondaryblue}
-                    backgroundColor={colours.bluegrey}
-                    rotation={0}
-                  >
-                    {() => (
-                      <Icon
-                        name={currentPreview === (item.preview || item.item_info?.preview) && isPlaying ? "stop" : "play-arrow"}
-                        size={30}
-                        color="#fff"
-                      />
-                    )}
-                  </AnimatedCircularProgress>
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={styles.cardContent}>
-              <Text style={styles.postTitle}>{displayName}</Text>
-              {itemInfo.album && itemInfo.album.title && (
-                <Text style={styles.postAlbum}>{itemInfo.album.title}</Text>
-              )}
-              {itemInfo.artist && itemInfo.artist.name && (
-                <Text style={styles.postArtist}>{itemInfo.artist.name}</Text>
-              )}
-            </View>
-            <View style={styles.reviewContainer}>
-              <View style={styles.avatarContainer}>
-                <Image
-                  source={{ uri: item.author?.avatar || "https://via.placeholder.com/250" }}
-                  style={styles.avatar}
-                />
-              </View>
-              <View style={styles.reviewContent}>
-                <Text style={styles.username}>{item.author?.username} {item.emoji && (
-  <Text style={styles.reviewEmoji}>
-    {typeof item.emoji === "string"
-      ? item.emoji.replace(/^\[|\]$/g, "") // Remove leading/trailing brackets
-      : item.emoji}
-  </Text>
-)} {item.hearted && <Image source={require("../images/whiteFullHeart.png")} style={styles.heartEmoji} />}</Text>
-                
-                <Text style={styles.reviewText}>{item.message}</Text>
-                <View style={styles.ratingContainer}>
-                  {[...Array(5)].map((_, i) => (
-                    <Image
-                      key={i}
-                      source={
-                        i < item.rating
-                          ? require("../images/starFullIcon.png")
-                          : require("../images/starEmptyIcon.png")
-                      }
-                      style={styles.starIcon}
-                    />
-                  ))}
-                </View>
-                <Text style={styles.upvotes}>{item.upvotes || 0} Likes</Text>
-              </View>
-            </View>
-          </View>
-        </TouchableWithoutFeedback>
-      );
-    }
-  
-    // Branch 2: Share or enriched timeline items
-    if (item.class === "share") {
-      const itemInfo = item.item_info || {};
-      if(itemInfo.type == "track")
-      {
-        console.log("Album Title for share: ", itemInfo.album.title)
-      }
-      const topReview = itemInfo.topReview || {};
-      const displayName = itemInfo.name || itemInfo.title || "Unknown Title";
-      const imageUri = itemInfo.image || itemInfo.coverArt || "https://via.placeholder.com/250";
 
       return (
-        <TouchableWithoutFeedback onPress={() => handleTap(item)}>
-          <View style={[styles.card, getCardBorderStyle(item)]}>
-            <View style={styles.cardInformation}>
-              <View style={styles.postContextContainer}>
-                <Text style={styles.postContext}>
-                  <Text style={styles.boldPostContext}>
-                    {item.shared_by.username} shared {getTimeAgo(item.createdAt)}
-                  </Text>{" "}
-                  {item.comment ? `\n"${item.comment}"` : ""}
-                </Text>
-              </View>
-              <View style={styles.actionButtons}>
-                <TouchableOpacity onPress={() => handleLikeSong(item.item_info)} style={styles.actionButton}>
-                  <Image
-                    source={
-                      item.item_info.liked
-                        ? require("../images/whiteFullHeart.png")
-                        : require("../images/whiteOpenHeart.png")
-                    }
-                    style={styles.actionIcon}
-                  />
-                  <Text style={styles.actionText}>
-                    {item.item_info.liked ? "Liked" : "Like"}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleModal(item.item_info)} style={styles.actionButton}>
-                  <Image
-                    source={require("../images/shareIcon.png")}
-                    style={styles.actionIcon}
-                  />
-                  <Text style={styles.actionText}>Share</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={styles.imageContainer}>
-              <Image source={{ uri: imageUri }} style={styles.postImage} />
-              {item.item_info?.type === "track" && (item.preview || item.item_info?.preview) && (
-                <TouchableOpacity
-                  onPress={handlePreview}
-                  style={styles.playButton}
-                >
-                  <AnimatedCircularProgress
-                    size={50}
-                    width={5}
-                    fill={currentPreview === (item.preview || item.item_info?.preview) ? progress : 0}
-                    tintColor={colours.secondaryblue}
-                    backgroundColor={colours.bluegrey}
-                    rotation={0}
-                  >
-                    {() => (
-                      <Icon
-                        name={currentPreview === (item.preview || item.item_info?.preview) && isPlaying ? "stop" : "play-arrow"}
-                        size={30}
-                        color="#fff"
-                      />
-                    )}
-                  </AnimatedCircularProgress>
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={styles.cardContent}>
-              <Text style={styles.postTitle}>{displayName}</Text>
-              {itemInfo.album && itemInfo.album.title && (
-                <Text style={styles.postAlbum}>{itemInfo.album.title}</Text>
-              )}
-              {itemInfo.artist && itemInfo.artist.name && (
-                <Text style={styles.postArtist}>{itemInfo.artist.name}</Text>
-              )}
-            </View>
-            {topReview && Object.keys(topReview).length > 0 && (
-              <View style={styles.reviewContainer}>
-                <View style={styles.avatarContainer}>
-                  <Image
-                    source={{ uri: topReview.author?.avatarLong || "https://via.placeholder.com/250" }}
-                    style={styles.avatar}
-                  />
-                </View>
-                <View style={styles.reviewContent}>
-                  <Text style={styles.username}>{topReview.author?.username}</Text>
-                  <Text style={styles.reviewText}>{topReview.review}</Text>
-                  <View style={styles.ratingContainer}>
-                    {[...Array(5)].map((_, i) => (
-                      <Image
-                        key={i}
-                        source={
-                          i < topReview.rating
-                            ? require("../images/starFullIcon.png")
-                            : require("../images/starEmptyIcon.png")
-                        }
-                        style={styles.starIcon}
-                      />
-                    ))}
-                  </View>
-                  <Text style={styles.upvotes}>{topReview.upvotes || 0} Likes</Text>
-                </View>
-              </View>
-            )}
-          </View>
-        </TouchableWithoutFeedback>
-      );
-    }
-  
-    // Branch 3: Normal recommendation items
-    const isSong = item.type === "track";
-    const isArtist = item.type === "artist";
-    const displayName = item.name || "Unknown Title";
-    const topReview = item.topReview || {};
-    const albumName = isArtist
-      ? ''
-      : item.album.title
-    const subText = isArtist
-      ? item.artistId
-        ? `ID: ${item.artistId}`
-        : ""
-      : item.artist?.name || "Unknown Artist";
-    const imageUri = item.image || item.coverArt || "https://via.placeholder.com/250";
-    const origin =
-  item?.origin ||
-  item?.item_info?.origin ||
-  null;
+        <View style={styles.reviewContainer}>
+          <Image
+            source={{
+              uri:
+                review.avatar ||
+                PLACEHOLDER_AVATAR,
+            }}
+            style={styles.reviewAvatar}
+          />
 
-let heading = "Recommended for you";
-let postContext = "";
-
-if (origin && typeof origin === "object") {
-  switch (origin.type) {
-    case "like":
-      heading = "Because you like";
-      postContext = [
-        origin.title || origin.name,
-        origin.artist || origin.artistName,
-      ]
-        .filter(Boolean)
-        .join(" by ");
-      break;
-
-    case "favourite":
-      heading = "Because you favourited";
-      postContext = [
-        origin.title || origin.name,
-        origin.artist || origin.artistName,
-      ]
-        .filter(Boolean)
-        .join(" by ");
-      break;
-
-    case "high-rating":
-      heading = "Because you rated highly";
-      postContext = [
-        origin.title || origin.name,
-        origin.artist || origin.artistName,
-      ]
-        .filter(Boolean)
-        .join(" by ");
-      break;
-
-    case "feed":
-      heading = "Recommended for you";
-      postContext = "New music for your feed";
-      break;
-
-    case "discovery":
-      heading = "Recommended for you";
-      postContext = "Discover something new";
-      break;
-
-    default:
-      heading = "Recommended for you";
-      postContext = "";
-      break;
-  }
-}
-  
-    return (
-      <TouchableWithoutFeedback onPress={() => handleTap(item)}>
-        <View style={[styles.card, getCardBorderStyle(item)]}>
-          <View style={styles.cardInformation}>
-            <View style={styles.postContextContainer}>
-              <Text style={styles.postContext}>
-                <Text style={styles.boldPostContext}>
-                  {heading}
-                </Text>
-
-                {postContext ? `\n${postContext}` : ""}
+          <View style={styles.reviewContent}>
+            <View style={styles.reviewUsernameRow}>
+              <Text style={styles.reviewUsername}>
+                {review.username ||
+                  "Treble User"}
               </Text>
-            </View>
-            <View style={styles.actionButtons}>
-              <TouchableOpacity onPress={() => handleLikeSong(item)} style={styles.actionButton}>
-                <Image
-                  source={
-                    item.liked
-                      ? require("../images/whiteFullHeart.png")
-                      : require("../images/whiteOpenHeart.png")
-                  }
-                  style={styles.actionIcon}
-                />
-                <Text style={styles.actionText}>
-                  {item.liked ? "Liked" : "Like"}
+
+              {review.emoji ? (
+                <Text style={styles.reviewEmoji}>
+                  {typeof review.emoji ===
+                  "string"
+                    ? review.emoji.replace(
+                        /^\[|\]$/g,
+                        ""
+                      )
+                    : review.emoji}
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => handleModal(item)} style={styles.actionButton}>
+              ) : null}
+
+              {review.hearted ? (
                 <Image
-                  source={require("../images/shareIcon.png")}
-                  style={styles.actionIcon}
+                  source={require("../images/whiteFullHeart.png")}
+                  style={styles.reviewHeart}
                 />
-                <Text style={styles.actionText}>Share</Text>
-              </TouchableOpacity>
+              ) : null}
             </View>
-          </View>
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: imageUri }} style={styles.postImage} />
-            {(item.type === "track" || item.item_info?.type === "track") && (item.preview || item.item_info?.preview) && (
-              <TouchableOpacity
-                onPress={handlePreview}
-                style={styles.playButton}
-              >
-                <AnimatedCircularProgress
-                  size={50}
-                  width={5}
-                  fill={currentPreview === (item.preview || item.item_info?.preview) ? progress : 0}
-                  tintColor={colours.secondaryblue}
-                  backgroundColor={colours.bluegrey}
-                  rotation={0}
-                >
-                  {() => (
-                    <Icon
-                      name={currentPreview === (item.preview || item.item_info?.preview) && isPlaying ? "stop" : "play-arrow"}
-                      size={30}
-                      color="#fff"
-                    />
-                  )}
-                </AnimatedCircularProgress>
-              </TouchableOpacity>
-            )}
-          </View>
-          <View style={styles.cardContent}>
-            <Text style={styles.postTitle}>{displayName}</Text>
-            {albumName ? <Text style={styles.postAlbum}>{albumName}</Text> : null}
-            {subText ? <Text style={styles.postArtist}>{subText}</Text> : null}
-            {topReview && Object.keys(topReview).length > 0 && (
-              <View style={styles.reviewContainer}>
-                <View style={styles.avatarContainer}>
-                  <Image
-                    source={{ uri: topReview.author?.avatarLong || "https://via.placeholder.com/250" }}
-                    style={styles.avatar}
-                  />
-                </View>
-                <View style={styles.reviewContent}>
-                  <Text style={styles.username}>{topReview.author?.username} {topReview.emoji} {topReview.hearted && <Image source={require("../images/whiteFullHeart.png")} style={styles.heartEmoji} />}</Text>
-                  <Text style={styles.reviewText}>{topReview.review}</Text>
-                  <View style={styles.ratingContainer}>
-                    {[...Array(5)].map((_, i) => (
-                      <Image
-                        key={i}
-                        source={
-                          i < topReview.rating
-                            ? require("../images/starFullIcon.png")
-                            : require("../images/starEmptyIcon.png")
-                        }
-                        style={styles.starIcon}
-                      />
-                    ))}
-                  </View>
-                  <Text style={styles.upvotes}>{topReview.upvotes || 0} Likes</Text>
-                </View>
-              </View>
-            )}
+
+            {review.message ? (
+              <Text style={styles.reviewText}>
+                {review.message}
+              </Text>
+            ) : null}
+
+            {renderStars(review.rating)}
+
+            <Text style={styles.reviewLikes}>
+              {review.likes || 0} Likes
+            </Text>
           </View>
         </View>
-      </TouchableWithoutFeedback>
-    );
-  };
-  
+      );
+    },
+    [
+      getItemInfo,
+      renderStars,
+    ]
+  );
 
-  // -------------------------------------------------------------------------
-  //  Return component UI
-  // -------------------------------------------------------------------------
+  const renderFeedItem = useCallback(
+    ({ item }) => {
+      const context =
+        getRecommendationContext(item);
+
+      const itemInfo =
+        getItemInfo(item);
+
+      const itemId =
+        getItemId(item);
+
+      const previewUrl =
+        getPreviewUrl(item);
+
+      const liked =
+        getLikedStatus(item);
+
+      const imageUrl =
+        getImageUrl(item);
+
+      const displayName =
+        getDisplayName(item);
+
+      const albumName =
+        getAlbumName(item);
+
+      const artistName =
+        getArtistName(item);
+
+      const cardAccent =
+        getCardAccent(item);
+
+      const isCurrentPreview =
+        currentPreview === previewUrl;
+
+      return (
+        <TouchableWithoutFeedback
+          onPress={() =>
+            handleItemTap(item)
+          }
+        >
+          <View
+            style={[
+              styles.card,
+              isWeb && styles.webCard,
+              isTablet &&
+                styles.tabletCard,
+              isCompact &&
+                styles.compactCard,
+              {
+                borderColor: cardAccent,
+              },
+            ]}
+          >
+            <View style={styles.cardHeader}>
+              <View style={styles.contextContainer}>
+                <Text style={styles.contextHeading}>
+                  {context.heading}
+                </Text>
+
+                {context.description ? (
+                  <Text
+                    style={styles.contextDescription}
+                    numberOfLines={2}
+                  >
+                    {context.description}
+                  </Text>
+                ) : null}
+              </View>
+
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  onPress={(event) => {
+                    event?.stopPropagation?.();
+
+                    handleLikeSong(item);
+                  }}
+                  disabled={
+                    Boolean(
+                      likeLoading[itemId]
+                    )
+                  }
+                  style={styles.actionButton}
+                >
+                  {likeLoading[itemId] ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#ffffff"
+                      style={styles.actionLoader}
+                    />
+                  ) : (
+                    <Image
+                      source={
+                        liked
+                          ? require("../images/whiteFullHeart.png")
+                          : require("../images/whiteOpenHeart.png")
+                      }
+                      style={styles.actionIcon}
+                    />
+                  )}
+
+                  <Text style={styles.actionText}>
+                    {liked ? "Liked" : "Like"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={(event) => {
+                    event?.stopPropagation?.();
+
+                    openShareModal(item);
+                  }}
+                  style={styles.actionButton}
+                >
+                  <Image
+                    source={require("../images/shareIcon.png")}
+                    style={styles.actionIcon}
+                  />
+
+                  <Text style={styles.actionText}>
+                    Share
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.musicLayout,
+                isCompact &&
+                  styles.compactMusicLayout,
+              ]}
+            >
+              <View style={styles.imageContainer}>
+                <Image
+                  source={{
+                    uri: imageUrl,
+                  }}
+                  style={[
+                    styles.postImage,
+                    isCompact &&
+                      styles.compactPostImage,
+                  ]}
+                />
+
+                {previewUrl ? (
+                  <TouchableOpacity
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+
+                      handlePlayPreview(
+                        previewUrl
+                      );
+                    }}
+                    style={styles.playButton}
+                  >
+                    <AnimatedCircularProgress
+                      size={58}
+                      width={4}
+                      fill={
+                        isCurrentPreview
+                          ? progress
+                          : 0
+                      }
+                      tintColor={
+                        colours.secondaryblue
+                      }
+                      backgroundColor="rgba(255,255,255,0.25)"
+                      rotation={0}
+                    >
+                      {() => (
+                        <Icon
+                          name={
+                            isCurrentPreview &&
+                            isPlaying
+                              ? "stop"
+                              : "play-arrow"
+                          }
+                          size={34}
+                          color="#ffffff"
+                        />
+                      )}
+                    </AnimatedCircularProgress>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <View style={styles.songInformation}>
+                <Text
+                  style={styles.postTitle}
+                  numberOfLines={2}
+                >
+                  {displayName}
+                </Text>
+
+                {albumName ? (
+                  <Text
+                    style={styles.postAlbum}
+                    numberOfLines={1}
+                  >
+                    {albumName}
+                  </Text>
+                ) : null}
+
+                {artistName ? (
+                  <Text
+                    style={styles.postArtist}
+                    numberOfLines={1}
+                  >
+                    {artistName}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+
+            {renderReview(item)}
+          </View>
+        </TouchableWithoutFeedback>
+      );
+    },
+    [
+      currentPreview,
+      getAlbumName,
+      getArtistName,
+      getCardAccent,
+      getDisplayName,
+      getImageUrl,
+      getItemId,
+      getItemInfo,
+      getLikedStatus,
+      getPreviewUrl,
+      getRecommendationContext,
+      handleItemTap,
+      handleLikeSong,
+      handlePlayPreview,
+      isCompact,
+      isPlaying,
+      isTablet,
+      isWeb,
+      likeLoading,
+      openShareModal,
+      progress,
+      renderReview,
+    ]
+  );
+
+  const renderFriendItem = useCallback(
+    ({ item }) => {
+      const selected =
+        selectedUser?.userId ===
+        item?.userId;
+
+      return (
+        <TouchableOpacity
+          onPress={() =>
+            setSelectedUser(
+              selected ? null : item
+            )
+          }
+          style={[
+            styles.friendItem,
+            selected &&
+              styles.selectedFriendItem,
+          ]}
+        >
+          <View style={styles.friendAvatarContainer}>
+            <Image
+              source={{
+                uri:
+                  item?.avatar ||
+                  PLACEHOLDER_AVATAR,
+              }}
+              style={styles.friendAvatar}
+            />
+
+            {selected ? (
+              <View style={styles.selectedCheck}>
+                <Icon
+                  name="check"
+                  size={17}
+                  color="#ffffff"
+                />
+              </View>
+            ) : null}
+          </View>
+
+          <Text
+            style={styles.friendUsername}
+            numberOfLines={1}
+          >
+            {item?.username ||
+              "Treble User"}
+          </Text>
+        </TouchableOpacity>
+      );
+    },
+    [selectedUser]
+  );
+
+  const handleViewableItemsChanged =
+    useRef(({ viewableItems }) => {
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        return;
+      }
+
+      viewableItems.forEach(
+        ({ item }) => {
+          const isRecommendation =
+            !item?.class;
+
+          const recommendationId =
+            item?.record_id ||
+            item?.item_info?.record_id;
+
+          if (
+            !isRecommendation ||
+            !recommendationId ||
+            viewedRecommendationIds.current.has(
+              recommendationId
+            )
+          ) {
+            return;
+          }
+
+          viewedRecommendationIds.current.add(
+            recommendationId
+          );
+
+          setRecommendationServed(
+            currentUser.uid,
+            recommendationId
+          ).catch((error) => {
+            console.warn(
+              "[Feed] Could not mark recommendation as served:",
+              error
+            );
+          });
+        }
+      );
+    }).current;
+
+  const keyExtractor = useCallback(
+    (item, index) => {
+      const itemId =
+        getRecordId(item) ||
+        getItemId(item) ||
+        index;
+
+      return `feed-${itemId}-${index}`;
+    },
+    [
+      getItemId,
+      getRecordId,
+    ]
+  );
+
+  const renderListFooter =
+    useCallback(() => {
+      if (loadingMore) {
+        return (
+          <View style={styles.listFooter}>
+            <ActivityIndicator
+              size="small"
+              color="#ffffff"
+            />
+
+            <Text style={styles.loadingText}>
+              Loading more music...
+            </Text>
+          </View>
+        );
+      }
+
+      if (
+        !hasMore &&
+        combinedFeed.length > 0
+      ) {
+        return (
+          <Text style={styles.endOfFeedText}>
+            You’re all caught up.
+          </Text>
+        );
+      }
+
+      return <View style={styles.footerSpace} />;
+    }, [
+      combinedFeed.length,
+      hasMore,
+      loadingMore,
+    ]);
+
+  const renderEmptyFeed =
+    useCallback(() => {
+      return (
+        <View style={styles.emptyContainer}>
+          <Icon
+            name="music-note"
+            size={54}
+            color="rgba(255,255,255,0.5)"
+          />
+
+          <Text style={styles.emptyTitle}>
+            Your feed is empty
+          </Text>
+
+          <Text style={styles.emptyDescription}>
+            Like, rate, and favourite music to receive recommendations.
+          </Text>
+
+          <TouchableOpacity
+            onPress={handleRefresh}
+            style={styles.retryButton}
+          >
+            <Text style={styles.retryButtonText}>
+              Refresh Feed
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }, [handleRefresh]);
+
   return (
-    <View style={styles.container}>
-      {/* SHARE MODAL */}
+    <View
+      style={[
+        styles.container,
+        isWeb && styles.webContainer,
+      ]}
+    >
+      <View
+        style={[
+          styles.pageHeader,
+          isWeb && styles.webPageHeader,
+        ]}
+      >
+        <View style={styles.searchContainer}>
+          <SearchBar />
+        </View>
+
+        <TouchableOpacity
+          style={styles.notificationsButton}
+          onPress={() =>
+            navigation.navigate(
+              "Notifications"
+            )
+          }
+        >
+          <Image
+            source={require("../images/notificationsIcon2.png")}
+            style={styles.notificationIcon}
+          />
+
+          {notificationsCount > 0 ? (
+            <View style={styles.notificationBadge}>
+              <Text
+                style={styles.notificationBadgeText}
+              >
+                {notificationsCount > 99
+                  ? "99+"
+                  : notificationsCount}
+              </Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      </View>
+
+      <View
+        style={[
+          styles.sideMenu,
+          isWeb && styles.sideMenuWeb,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={menuOpen}
+          setMenuOpen={setMenuOpen}
+        />
+      </View>
+
+      <View
+        style={[
+          styles.content,
+          isWeb && styles.webContent,
+        ]}
+      >
+        <View style={styles.titleRow}>
+          <View>
+            <Text style={styles.header}>
+              Recent Feed
+            </Text>
+
+            <Text style={styles.headerDescription}>
+              Music selected for you and activity from your friends.
+            </Text>
+          </View>
+        </View>
+
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator
+              size="large"
+              color="#ffffff"
+            />
+
+            <Text style={styles.loadingText}>
+              Loading your feed...
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={combinedFeed}
+            renderItem={renderFeedItem}
+            keyExtractor={keyExtractor}
+            style={styles.feedList}
+            contentContainerStyle={[
+              styles.feedContent,
+              isWeb &&
+                styles.webFeedContent,
+              combinedFeed.length === 0 &&
+                styles.emptyFeedContent,
+            ]}
+            ListEmptyComponent={renderEmptyFeed}
+            ListFooterComponent={renderListFooter}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor="#ffffff"
+                colors={["#ffffff"]}
+                progressBackgroundColor={
+                  colours.foreground
+                }
+              />
+            }
+            onEndReached={loadMoreFeed}
+            onEndReachedThreshold={0.4}
+            showsVerticalScrollIndicator={
+              isWeb
+            }
+            onViewableItemsChanged={
+              handleViewableItemsChanged
+            }
+            viewabilityConfig={{
+              itemVisiblePercentThreshold: 60,
+            }}
+            keyboardShouldPersistTaps="handled"
+            removeClippedSubviews={
+              Platform.OS !== "web"
+            }
+          />
+        )}
+      </View>
+
+      {!isDesktopWeb ? (
+        <View style={styles.bottomNavBar}>
+          <BottomNavbar />
+        </View>
+      ) : null}
+
       <Modal
-        animationType="slide"
-        transparent={true}
+        animationType="fade"
+        transparent
         visible={modalVisible}
-        onRequestClose={closeModal}
+        onRequestClose={closeShareModal}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={0}
+          behavior={
+            Platform.OS === "ios"
+              ? "padding"
+              : undefined
+          }
+          style={styles.modalKeyboardView}
         >
-          <TouchableWithoutFeedback onPress={closeModal}>
+          <TouchableWithoutFeedback
+            onPress={closeShareModal}
+          >
             <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback onPress={() => {}}>
+              <TouchableWithoutFeedback
+                onPress={() => {}}
+              >
                 <Animated.View
                   style={[
                     styles.modalContent,
-                    { transform: [{ translateY: slideAnim }] },
+                    isWeb &&
+                      styles.webModalContent,
+                    {
+                      transform: [
+                        {
+                          translateY:
+                            slideAnim,
+                        },
+                      ],
+                    },
                   ]}
                 >
-                  <Text style={styles.modalText}>
-                    Share "{currentShareItem?.name || "Item"}"
+                  <View style={styles.modalHeader}>
+                    <View style={styles.modalTitleContainer}>
+                      <Text style={styles.modalTitle}>
+                        Share Music
+                      </Text>
+
+                      <Text
+                        style={styles.modalSubtitle}
+                        numberOfLines={1}
+                      >
+                        {getDisplayName(
+                          currentShareItem
+                        )}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      onPress={closeShareModal}
+                      style={styles.closeModalButton}
+                    >
+                      <Icon
+                        name="close"
+                        size={25}
+                        color="#ffffff"
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={styles.friendPrompt}>
+                    Select a friend
                   </Text>
+
                   <FlatList
                     data={friendsList}
                     renderItem={renderFriendItem}
-                    keyExtractor={(item) => item.userId}
-                    numColumns={3}
-                    contentContainerStyle={styles.gridContainer}
+                    keyExtractor={(item, index) =>
+                      String(
+                        item?.userId ||
+                          index
+                      )
+                    }
+                    numColumns={
+                      isCompact ? 3 : 4
+                    }
+                    key={
+                      isCompact
+                        ? "compact-friends"
+                        : "large-friends"
+                    }
+                    contentContainerStyle={
+                      styles.friendList
+                    }
+                    ListEmptyComponent={
+                      <Text
+                        style={
+                          styles.noFriendsText
+                        }
+                      >
+                        No friends were found.
+                      </Text>
+                    }
                   />
-                  {selectedUser && (
+
+                  {selectedUser ? (
                     <View style={styles.commentSection}>
                       <Text style={styles.commentPrompt}>
-                        Leave a message for {selectedUser.username}:
+                        Message for{" "}
+                        {selectedUser.username}
                       </Text>
+
                       <TextInput
-                        style={styles.commentInput}
                         value={comment}
                         onChangeText={setComment}
-                        placeholder="Write your comment here..."
-                        maxLength={40}
-                        multiline={false}
+                        placeholder="Add an optional message..."
+                        placeholderTextColor="rgba(255,255,255,0.45)"
+                        style={styles.commentInput}
+                        maxLength={100}
+                        multiline
                       />
-                    </View>
-                  )}
-                  <View style={styles.modalButtonContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.button,
-                        styles.shareButton,
-                        !selectedUser && styles.disabledButton,
-                      ]}
-                      onPress={handleShareComment}
-                      disabled={!selectedUser}
-                    >
-                      <Text
-                        style={[
-                          styles.buttonText,
-                          !selectedUser && styles.disabledButtonText,
-                        ]}
-                      >
-                        Share
+
+                      <Text style={styles.characterCount}>
+                        {comment.length}/100
                       </Text>
-                    </TouchableOpacity>
-                  </View>
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity
+                    onPress={submitShare}
+                    disabled={!selectedUser}
+                    style={[
+                      styles.shareButton,
+                      !selectedUser &&
+                        styles.disabledShareButton,
+                    ]}
+                  >
+                    <Icon
+                      name="send"
+                      size={20}
+                      color="#ffffff"
+                    />
+
+                    <Text style={styles.shareButtonText}>
+                      Share
+                    </Text>
+                  </TouchableOpacity>
                 </Animated.View>
               </TouchableWithoutFeedback>
             </View>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
-
-      {/* SIDEBAR */}
-      <View style={styles.sideMenu}>
-        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
-      </View>
-      {/* SEARCH BAR */}
-      <SearchBar />
-      {/* NOTIFICATIONS ICON */}
-      <TouchableOpacity
-        style={styles.notificationsIcon}
-        onPress={() => navigation.navigate("Notifications")}
-      >
-        <Image
-          source={require("../images/notificationsIcon2.png")}
-          style={styles.notifIcon}
-        />
-        {notificationsCount > 0 && (
-          <View style={styles.notificationBadge}>
-            <Text style={styles.notificationBadgeText}>{notificationsCount}</Text>
-          </View>
-        )}
-      </TouchableOpacity>
-      {/* MAIN CONTENT: FEED */}
-      <View style={styles.content}>
-        <Text style={styles.header}>Recent Feed</Text>
-        {isLoading ? (
-            <ActivityIndicator size="large" color="white" />
-        ) : (
-        <FlatList
-          data={combinedFeed}
-          renderItem={renderFeedItem}
-          keyExtractor={(item, index) => {
-            let baseKey;
-            if (item.type === "friend_review") {
-              baseKey = `friend_review-${item.rid}`;
-            } else if (item.sharedItems) {
-              baseKey = `shared-${item.sharedItems[0]?.rid}`;
-            } else {
-              baseKey = `item-${item.record_id || item.rid}`;
-            }
-            return `${baseKey}-${index}`;
-          }}
-          contentContainerStyle={styles.feedList}
-          refreshControl={
-          <RefreshControl 
-          tintColor="#FFFFFF" 
-          colors={['#FFFFFF']}
-          progressBackgroundColor="#FFFFFF"
-          refreshing={refreshing} 
-          onRefresh={onRefresh} 
-          />}
-          onMomentumScrollBegin={() => setOnEndReachedCalledDuringMomentum(false)}
-          onEndReached={() => {
-            if (!onEndReachedCalledDuringMomentum) {
-              loadMoreTimeline();
-              setOnEndReachedCalledDuringMomentum(true);
-            }
-          }}
-          onEndReachedThreshold={2}
-          showsVerticalScrollIndicator={false}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={{
-            itemVisiblePercentThreshold: 100,
-          }}
-        />
-        )}
-      </View>
-      {/* CREATE POST BUTTON */}
-      {/* <TouchableOpacity
-        style={styles.addPostButton}
-        onPress={() => navigation.navigate("CreatePost")}
-      >
-        <Image source={require("../images/addPost.png")} style={styles.addPostIcon} />
-      </TouchableOpacity> */}
-      {/* BOTTOM NAV BAR */}
-      <View style={styles.bottomNavBar}>
-        <BottomNavbar />
-      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-
   container: {
-
     flex: 1,
-
+    minHeight: 0,
     backgroundColor: colours.background,
-
   },
 
-  sideMenu: {
+  webContainer: {
+    height: "100vh",
+    minHeight: 0,
+    overflow: "hidden",
+  },
 
+  pageHeader: {
     position: "absolute",
-
-    top: 40,
-
-    right: 525,
-
-    bottom: 0,
-
-    shadowColor: "#000",
-
-    shadowOffset: { width: 2, height: 0 },
-
-    shadowOpacity: 0.25,
-
-    shadowRadius: 4,
-
-    elevation: 5,
-
-    zIndex: 10,
-
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 50,
+    paddingHorizontal: 20,
   },
 
-  notificationsIcon: {
-
-    width: 40,
-
-    height: 40,
-
-    position: "absolute",
-
-    top: 70,
-
-    right: 20,
-
+  webPageHeader: {
+    paddingTop: 24,
+    paddingHorizontal: 32,
   },
 
-  notifIcon: {
+  searchContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
 
-    width: "90%",
+  notificationsButton: {
+    position: "relative",
+    width: 48,
+    height: 48,
+    marginLeft: 14,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    zIndex: 80,
+  },
 
-    height: "90%",
-
+  notificationIcon: {
+    width: 29,
+    height: 29,
     resizeMode: "contain",
-
-    left: 10,
-
-    top: 2,
-
   },
 
   notificationBadge: {
-
     position: "absolute",
-
-    top: -5,
-
-    right: -5,
-
-    backgroundColor: "red",
-
-    width: 20,
-
-    height: 20,
-
-    borderRadius: 10,
-
+    top: -4,
+    right: -4,
+    minWidth: 21,
+    height: 21,
+    paddingHorizontal: 5,
+    borderRadius: 11,
     alignItems: "center",
-
     justifyContent: "center",
-
-    zIndex: 10,
-
+    backgroundColor: "#ff334f",
+    borderWidth: 2,
+    borderColor: colours.background,
   },
 
   notificationBadgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "800",
+  },
 
-    color: "black",
+  sideMenu: {
+    position: "absolute",
+    top: 40,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+    elevation: 20,
+  },
 
-    fontSize: 12,
-
-    fontWeight: "bold",
-
+  sideMenuWeb: {
+    top: 0,
+    right: 0,
+    bottom: undefined,
+    height: "100vh",
+    zIndex: 100,
   },
 
   content: {
-
     flex: 1,
+    minHeight: 0,
+    paddingHorizontal: 16,
+    paddingTop: 125,
+    paddingBottom: 80,
+  },
 
-    marginTop: 130,
+  webContent: {
+    width: "100%",
+    maxWidth: 1040,
+    alignSelf: "center",
+    minHeight: 0,
+    paddingTop: 105,
+    paddingBottom: 0,
+    paddingHorizontal: 28,
+  },
 
-    paddingHorizontal: 20,
-
+  titleRow: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+    marginBottom: 16,
   },
 
   header: {
+    color: "#ffffff",
+    fontSize: 27,
+    lineHeight: 33,
+    fontWeight: "800",
+  },
 
-    fontSize: 24,
+  headerDescription: {
+    color: "rgba(255,255,255,0.58)",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 3,
+  },
 
-    fontWeight: "bold",
+  loadingContainer: {
+    flex: 1,
+    minHeight: 250,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
-    color: colours.white,
-
-    marginBottom: 10,
-
+  loadingText: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 14,
+    marginTop: 10,
   },
 
   feedList: {
+    flex: 1,
+    minHeight: 0,
+  },
 
-    paddingBottom: 100,
+  feedContent: {
+    paddingBottom: 120,
+  },
 
+  webFeedContent: {
+    paddingBottom: 50,
+  },
+
+  emptyFeedContent: {
+    flexGrow: 1,
   },
 
   card: {
-
+    width: "100%",
+    marginBottom: 18,
+    padding: 16,
+    borderRadius: 16,
     backgroundColor: colours.foreground,
-
-    marginBottom: 20,
-
-    borderRadius: 10,
-
-    padding: 15,
-
-    shadowColor: "#000",
-
-    shadowOffset: { width: 0, height: 2 },
-
-    shadowOpacity: 0.1,
-
-    shadowRadius: 4,
-
-    elevation: 2,
-
-    alignItems: "center",
-
-    textAlign: "center",
-
+    borderWidth: 2,
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 4,
   },
 
-  cardInformation: {
+  webCard: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+    padding: 22,
+    borderRadius: 20,
+  },
 
-    display: "flex",
+  tabletCard: {
+    maxWidth: 700,
+  },
 
-    flex: 1,
+  compactCard: {
+    padding: 14,
+    borderRadius: 14,
+  },
 
+  cardHeader: {
+    width: "100%",
+    minWidth: 0,
     flexDirection: "row",
-
-    marginBottom: 10
-
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 18,
   },
 
-  postImage: {
-
-    width: 250,
-
-    height: 250,
-
-    borderRadius: 10,
-
-    marginBottom: 10,
-
-  },
-
-  cardContent: {
-
+  contextContainer: {
     flex: 1,
-
-    textAlign: "center",
-
-    alignItems: "center",
-
-    display: "flex",
-
-    flexDirection: "column",
-
+    minWidth: 0,
+    paddingRight: 12,
   },
 
-  postTitle: {
-
-    fontSize: 20,
-
-    fontWeight: "bold",
-
-    textAlign: "center",
-
-    color: "#fff",
-
-    marginBottom: 2,
-
-  },
-
-  postArtist: {
-
+  contextHeading: {
+    color: "#ffffff",
     fontSize: 16,
-
-    color: "#aaa",
-
-    marginBottom: 0,
-
-  },
-
-  postAlbum: {
-
-    textAlign: "center" ,
-
-    fontSize: 16,
-
-    color: "#aaa",
-
-    marginBottom: 10,
-
-  },
-
-  postContext: {
-
-    fontSize: 16,
-
-    color: "#fff",
-
-    width: "100%",
-
-    marginBottom: 10,
-
-    alignSelf: "left",
-
-  },
-
-  boldPostContext: {
-
-    fontSize: 16,
-
-    color: "#fff",
-
-    width: "100%",
-
-    marginBottom: 10,
-
-    alignSelf: "left",
-
-    fontWeight: "bold",
-
+    lineHeight: 21,
+    fontWeight: "800",
     textTransform: "capitalize",
-
   },
 
-  reviewContainer: {
-
-    marginTop: 10,
-
-    padding: 8,
-
-    backgroundColor: colours.foreground2,
-
-    borderRadius: 5,
-
-    width: "100%",
-
-    alignSelf: "stretch",
-
-    flexDirection: "row",
-
-    alignItems: "left",
-
-  },
-
-  reviewContent: {
-
-    flex: 1,
-
-    flexDirection: "column",
-
-    alignItems: "left",
-
-    textAlign: "left",
-
-  },
-
-  avatarContainer: {
-
-    marginRight: 10,
-
-  },
-
-  commentCard: {
-
-    backgroundColor: colours.foreground,
-
-    flexDirection: "row",
-
-    marginBottom: 20,
-
-    borderRadius: 10,
-
-    padding: 15,
-
-    alignItems: "center",
-
-  },
-
-  albumImage: {
-
-    width: 60,
-
-    height: 60,
-
-    borderRadius: 10,
-
-    marginRight: 15,
-
-  },
-
-  commentContent: {
-
-    flex: 1,
-
-  },
-
-  username: {
-
-    fontSize: 16,
-
-    fontWeight: "bold",
-
-    color: "white",
-
-    marginBottom: 5,
-
-    textTransform: "capitalize",
-
-  },
-
-  reviewText: {
-
+  contextDescription: {
+    color: "rgba(255,255,255,0.7)",
     fontSize: 14,
-
-    color: "#fff",
-
-    marginBottom: 5,
-
-  },
-
-  ratingContainer: {
-
-    flexDirection: "row",
-
-    marginTop: 5,
-
-  },
-
-  starIcon: {
-
-    width: 16,
-
-    height: 16,
-
-    marginRight: 2,
-
-  },
-
-  overallRating: {
-
-    width: 24,
-
-    height: 24,
-
-    marginRight: 2,
-
-  },
-
-  upvotes: {
-
-    fontSize: 14,
-
-    color: "#fff",
-
-    marginTop: 5,
-
-  },
-
-  bottomNavBar: {
-
-    position: "absolute",
-
-    bottom: 0,
-
-    width: "100%",
-
-    flexDirection: "row",
-
-  },
-
-  addPostButton: {
-
-    position: "absolute",
-
-    bottom: 120,
-
-    right: 20,
-
-    width: 60,
-
-    height: 60,
-
-    backgroundColor: colours.lightblue,
-
-    borderRadius: 30,
-
-    justifyContent: "center",
-
-    alignItems: "center",
-
-    shadowColor: "#000",
-
-    shadowOffset: { width: 0, height: 2 },
-
-    shadowOpacity: 0.3,
-
-    shadowRadius: 4,
-
-    elevation: 5,
-
-  },
-
-  postContextContainer: {
-
-    flex: 1,
-
-  },
-
-  addPostIcon: {
-
-    width: 30,
-
-    height: 30,
-
-    tintColor: "#fff",
-
+    lineHeight: 19,
+    marginTop: 2,
   },
 
   actionButtons: {
-
     flexDirection: "row",
-
-    justifyContent: "flex-start",
-
-    gap: 20,
-
-    marginTop: 0,
-
+    alignItems: "flex-start",
+    gap: 17,
   },
 
   actionButton: {
-
+    minWidth: 42,
     alignItems: "center",
-
+    justifyContent: "flex-start",
   },
 
   actionIcon: {
+    width: 28,
+    height: 28,
+    resizeMode: "contain",
+  },
 
-    width: 30,
-
-    height: 30,
-
+  actionLoader: {
+    width: 28,
+    height: 28,
   },
 
   actionText: {
-
-    fontSize: 14,
-
-    color: "#fff",
-
-    marginTop: 5,
-
+    color: "#ffffff",
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
   },
 
-  modalOverlay: {
-
-    flex: 1,
-
-    justifyContent: "flex-end",
-
-    alignItems: "center",
-
-  },
-  
-  modalContent: {
-
-    height: "50%",
-
-    margin: 0,
-
-    backgroundColor: colours.background,
-
-    borderRadius: 20,
-
-    padding: 0,
-
-    alignItems: "center",
-
-    shadowColor: "#000",
-
-    shadowOffset: { width: 0, height: 2 },
-
-    shadowOpacity: 0.25,
-
-    shadowRadius: 4,
-
-    elevation: 5,
-
-  },
-
-  modalText: {
-
-    marginVertical: 15,
-
-    textAlign: "center",
-
-    fontSize: 20,
-
-    fontWeight: "bold",
-
-    color: colours.white,
-
-  },
-
-  gridContainer: {
-
-    flex: 1,
-
-    flexDirection: "row",
-
-    flexWrap: "wrap",
-
-    justifyContent: "space-evenly",
-
-  },
-
-  friendItem: {
-
-    paddingTop: 8,
-
-    alignItems: "center",
-
-    marginBottom: 20,
-
-    marginHorizontal: 10,
-
-    width: 100,
-
-  },
-
-  selectedFriendItem: {
-
-    backgroundColor: "rgba(33, 150, 243, 0.2)",
-
-    borderRadius: 20,
-
-  },
-
-  checkmarkIcon: {
-
-    position: "absolute",
-
-    top: 40,
-
-    right: 15,
-
-    width: 20,
-
-    height: 20,
-
-  },
-
-  avatar: {
-
-    width: 50,
-
-    height: 50,
-
-    borderRadius: 25,
-
-    marginBottom: 5,
-
-  },
-
-  commentSection: {
-
+  musicLayout: {
     width: "100%",
-
-    paddingHorizontal: 20,
-
-    marginTop: 15,
-
+    alignItems: "center",
   },
 
-  commentPrompt: {
-
-    fontSize: 16,
-
-    marginBottom: 10,
-
-    textAlign: "center",
-
-    color: colours.white,
-
+  compactMusicLayout: {
+    alignItems: "center",
   },
 
-  commentInput: {
-
-    width: 220,
-
-    padding: 10,
-
-    borderWidth: 1,
-
-    borderColor: colours.white,
-
-    borderRadius: 5,
-
-    marginBottom: 0,
-
-    textAlign: "center",
-
-    color: colours.white,
-
-  },
-
-  modalButtonContainer: {
-
-    flexDirection: "row",
-
-    justifyContent: "space-between",
-
-    width: "100%",
-
-    paddingHorizontal: 20,
-
-    marginBottom: 20,
-
-  },
-
-  button: {
-
-    borderRadius: 20,
-
-    padding: 10,
-
-    elevation: 2,
-
-    marginTop: 20,
-
-  },
-
-  shareButton: {
-
-    backgroundColor: "#2196F3",
-
-    flex: 1,
-
-    marginRight: 0,
-
-    width: "100%",
-
-  },
-
-  disabledButton: {
-
-    backgroundColor: "#cccccc",
-
-    opacity: 0.5,
-
-  },
-
-  buttonText: {
-
-    color: "white",
-
-    fontWeight: "bold",
-
-    textAlign: "center",
-
-  },
-
-  disabledButtonText: {
-
-    color: "#666666",
-
-  },
-
-  refreshSpinner: {
-
-    backgroundColor: colours.white,
-
-  },
-
-  heartEmoji: {
-    width: 16,
-    height: 16
-  },
-  reviewEmoji: {
-    fontSize: 16,
-    marginRight: 4,
-    color: "#FFF",
-  },
-  previewButton: {
-    backgroundColor: colours.lightblue,
-    padding: 10,
-    borderRadius: 5,
-    marginTop: 10,
-  },
-  previewButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
   imageContainer: {
     position: "relative",
     alignItems: "center",
     justifyContent: "center",
   },
-  playButton: {
-    position: "absolute",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.7)", // Darker semi-transparent background
-    borderRadius: 25,
-    width: 50,
-    height: 50,
-    shadowColor: "#000", // Add shadow for better visibility
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 3,
-    elevation: 5, // For Android shadow
+
+  postImage: {
+    width: 280,
+    height: 280,
+    maxWidth: "100%",
+    borderRadius: 14,
+    resizeMode: "cover",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
 
+  compactPostImage: {
+    width: 230,
+    height: 230,
+  },
+
+  playButton: {
+    position: "absolute",
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.72)",
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.55,
+    shadowRadius: 6,
+    elevation: 7,
+  },
+
+  songInformation: {
+    width: "100%",
+    alignItems: "center",
+    paddingTop: 14,
+    paddingHorizontal: 10,
+  },
+
+  postTitle: {
+    color: "#ffffff",
+    fontSize: 21,
+    lineHeight: 27,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  postAlbum: {
+    color: "rgba(255,255,255,0.68)",
+    fontSize: 15,
+    lineHeight: 20,
+    textAlign: "center",
+    marginTop: 3,
+  },
+
+  postArtist: {
+    color: "rgba(255,255,255,0.48)",
+    fontSize: 14,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 2,
+  },
+
+  reviewContainer: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginTop: 18,
+    padding: 13,
+    borderRadius: 12,
+    backgroundColor: colours.foreground2,
+  },
+
+  reviewAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    marginRight: 12,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+
+  reviewContent: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-start",
+  },
+
+  reviewUsernameRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
+
+  reviewUsername: {
+    color: "#ffffff",
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "800",
+    textTransform: "capitalize",
+  },
+
+  reviewEmoji: {
+    color: "#ffffff",
+    fontSize: 16,
+    marginLeft: 5,
+  },
+
+  reviewHeart: {
+    width: 16,
+    height: 16,
+    marginLeft: 5,
+  },
+
+  reviewText: {
+    color: "rgba(255,255,255,0.88)",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 5,
+  },
+
+  ratingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 7,
+  },
+
+  starIcon: {
+    width: 16,
+    height: 16,
+    marginRight: 2,
+  },
+
+  reviewLikes: {
+    color: "rgba(255,255,255,0.58)",
+    fontSize: 12,
+    marginTop: 5,
+  },
+
+  listFooter: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 22,
+  },
+
+  footerSpace: {
+    height: 20,
+  },
+
+  endOfFeedText: {
+    color: "rgba(255,255,255,0.46)",
+    fontSize: 13,
+    textAlign: "center",
+    paddingVertical: 24,
+  },
+
+  emptyContainer: {
+    flex: 1,
+    minHeight: 320,
+    alignItems: "center",
+    justifyContent: "center",
+    maxWidth: 500,
+    alignSelf: "center",
+    paddingHorizontal: 30,
+  },
+
+  emptyTitle: {
+    color: "#ffffff",
+    fontSize: 21,
+    fontWeight: "800",
+    marginTop: 12,
+  },
+
+  emptyDescription: {
+    color: "rgba(255,255,255,0.58)",
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+    marginTop: 7,
+  },
+
+  retryButton: {
+    marginTop: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 22,
+    backgroundColor: colours.lightblue,
+  },
+
+  retryButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  bottomNavBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 90,
+  },
+
+  modalKeyboardView: {
+    flex: 1,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 18,
+    backgroundColor: "rgba(0,0,0,0.76)",
+  },
+
+  modalContent: {
+    width: "100%",
+    maxHeight: "82%",
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: colours.background,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+
+  webModalContent: {
+    width: 520,
+    maxHeight: 650,
+    padding: 22,
+  },
+
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+
+  modalTitleContainer: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 15,
+  },
+
+  modalTitle: {
+    color: "#ffffff",
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "800",
+  },
+
+  modalSubtitle: {
+    color: "rgba(255,255,255,0.58)",
+    fontSize: 14,
+    marginTop: 3,
+  },
+
+  closeModalButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.07)",
+  },
+
+  friendPrompt: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+
+  friendList: {
+    paddingBottom: 10,
+  },
+
+  friendItem: {
+    flex: 1,
+    minWidth: 75,
+    maxWidth: 110,
+    alignItems: "center",
+    padding: 8,
+    margin: 3,
+    borderRadius: 13,
+  },
+
+  selectedFriendItem: {
+    backgroundColor: "rgba(33,150,243,0.2)",
+  },
+
+  friendAvatarContainer: {
+    position: "relative",
+  },
+
+  friendAvatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+
+  selectedCheck: {
+    position: "absolute",
+    right: -3,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196f3",
+    borderWidth: 2,
+    borderColor: colours.background,
+  },
+
+  friendUsername: {
+    color: "#ffffff",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 6,
+  },
+
+  noFriendsText: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 14,
+    textAlign: "center",
+    paddingVertical: 25,
+  },
+
+  commentSection: {
+    marginTop: 10,
+  },
+
+  commentPrompt: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+
+  commentInput: {
+    minHeight: 80,
+    maxHeight: 120,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    color: "#ffffff",
+    backgroundColor: colours.foreground,
+    textAlignVertical: "top",
+  },
+
+  characterCount: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 11,
+    textAlign: "right",
+    marginTop: 4,
+  },
+
+  shareButton: {
+    minHeight: 48,
+    marginTop: 16,
+    borderRadius: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#2196f3",
+  },
+
+  disabledShareButton: {
+    opacity: 0.4,
+  },
+
+  shareButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
 });
