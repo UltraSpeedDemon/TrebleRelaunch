@@ -1,148 +1,717 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Switch,
+  ActivityIndicator,
   Alert,
+  Platform,
+  ScrollView,
   StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
+
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
+
 import colours from "../styles/colours";
-import { auth } from '../utils/firebase';
-import { getUser, updateUser } from "../providers/rest";
-import { updateProfile } from "firebase/auth";
 
-export default function Settings({ navigation }) {
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [darkMode, setDarkMode] = useState(false);
-  const [loading, setLoading] = useState(true);
+import { auth } from "../utils/firebase";
 
+import {
+  getUser,
+  updateUser,
+} from "../providers/rest";
+
+import {
+  updateProfile,
+} from "firebase/auth";
+
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+const BOTTOM_NAV_HEIGHT = 72;
+const MAX_CONTENT_WIDTH = 760;
+
+export default function Settings({
+  navigation,
+}) {
+  const { width } = useWindowDimensions();
+
+  const isWeb =
+    Platform.OS === "web";
+
+  const isDesktopWeb =
+    isWeb &&
+    width >= DESKTOP_BREAKPOINT;
+
+  const isMobileWeb =
+    isWeb &&
+    width < DESKTOP_BREAKPOINT;
+
+  const isCompact =
+    width < 600;
+
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  const [username, setUsername] =
+    useState("");
+
+  const [email, setEmail] =
+    useState("");
+
+  const [darkMode, setDarkMode] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [loggingOut, setLoggingOut] =
+    useState(false);
+
+  /*
+   * Keep the desktop sidebar open.
+   */
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const currentUser = auth.currentUser;
+    if (isDesktopWeb) {
+      setMenuOpen(true);
+    } else {
+      setMenuOpen(false);
+    }
+  }, [isDesktopWeb]);
 
-        if (currentUser) {
-          console.log("[DEBUG] Fetching user data from Orient for UID:", currentUser.uid);
-          const response = await getUser(currentUser.uid);
-          if (!response.ok) {
-            throw new Error("Failed to fetch user data from backend.");
-          }
-          const userData = await response.json();
-          console.log("[DEBUG] Received user data from OrientDB:", userData);
-          setUsername(userData.username || currentUser.displayName || "");
-          setEmail(userData.email || currentUser.email || "");
-          // Assuming Orient stores a darkMode field for the user's preference
-          //setDarkMode(userData.darkMode || false);
-        } else {
-          navigation.navigate("Home"); // Redirect to Login if no user is logged in
+  /*
+   * Load the current user's settings.
+   */
+  const fetchUserData =
+    useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        navigation.navigate("Home");
+        return;
+      }
+
+      try {
+        setLoading(true);
+
+        const response =
+          await getUser(
+            currentUser.uid
+          );
+
+        if (!response?.ok) {
+          throw new Error(
+            "Failed to fetch your account settings."
+          );
         }
+
+        const userData =
+          await response.json();
+
+        setUsername(
+          userData?.username ||
+            currentUser.displayName ||
+            ""
+        );
+
+        setEmail(
+          userData?.email ||
+            currentUser.email ||
+            ""
+        );
+
+        setDarkMode(
+          Boolean(
+            userData?.darkMode
+          )
+        );
       } catch (error) {
-        console.error("Error fetching user data:", error);
-        Alert.alert("Error", "Unable to fetch user data.");
+        console.error(
+          "[Settings] Load error:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to load settings",
+          error?.message ||
+            "Please try again."
+        );
       } finally {
         setLoading(false);
       }
-    };
+    }, [navigation]);
 
+  useEffect(() => {
     fetchUserData();
-  }, [navigation]);
+  }, [fetchUserData]);
 
-  const handleSaveSettings = async () => {
-    try {
-      const currentUser = auth.currentUser;
-      if (currentUser) {
+  /*
+   * Save settings.
+   */
+  const handleSaveSettings =
+    useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        Alert.alert(
+          "Not signed in",
+          "Please sign in again."
+        );
+
+        navigation.navigate("Home");
+        return;
+      }
+
+      const cleanedUsername =
+        username.trim();
+
+      if (!cleanedUsername) {
+        Alert.alert(
+          "Username required",
+          "Please enter a username."
+        );
+
+        return;
+      }
+
+      try {
+        setSaving(true);
+
         const payload = {
-          username: newUsername.trim().toLowerCase(),
-          //darkMode: darkMode, // Save dark mode preference
+          username:
+            cleanedUsername.toLowerCase(),
+
+          darkMode:
+            Boolean(darkMode),
         };
 
-        console.log("[DEBUG] Updating settings with payload:", payload);
-        const response = await updateUser(currentUser.uid, payload);
+        const response =
+          await updateUser(
+            currentUser.uid,
+            payload
+          );
+
+        if (!response) {
+          throw new Error(
+            "The backend returned no response."
+          );
+        }
+
+        const responseText =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(
+                responseText
+              )
+            : {};
+        } catch {
+          data = {
+            error:
+              responseText ||
+              "Invalid backend response.",
+          };
+        }
+
         if (!response.ok) {
-          const data = await response.json();
-      
-          if (response.status === 409) {
-            // Show the user a message
-            throw new Error(data.error || "Username already exists");
-          } else {
-            // Some other error
-            throw new Error(data.error || "Failed to update user in OrientDB.");
+          if (
+            response.status === 409
+          ) {
+            throw new Error(
+              data?.error ||
+                "That username is already being used."
+            );
           }
-        }
-        console.log("[DEBUG] Settings updated successfully for UID:", currentUser.uid);
 
-        // Optionally update Firebase Auth profile if display name changed
-        if (currentUser.displayName !== username.trim().toLowerCase()) {
-          await updateProfile(currentUser, { displayName: username.trim() });
+          throw new Error(
+            data?.error ||
+              `Unable to save settings. HTTP ${response.status}`
+          );
         }
-        Alert.alert("Success", "Settings saved successfully!");
+
+        if (
+          currentUser.displayName !==
+          cleanedUsername
+        ) {
+          await updateProfile(
+            currentUser,
+            {
+              displayName:
+                cleanedUsername,
+            }
+          );
+        }
+
+        setUsername(
+          cleanedUsername
+        );
+
+        Alert.alert(
+          "Settings saved",
+          "Your settings were updated successfully."
+        );
+      } catch (error) {
+        console.error(
+          "[Settings] Save error:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to save settings",
+          error?.message ||
+            "Please try again."
+        );
+      } finally {
+        setSaving(false);
       }
-    } catch (error) {
-      console.error("Error saving settings:", error);
-      Alert.alert("Error", error.message);
-    }
-  };
+    }, [
+      darkMode,
+      navigation,
+      username,
+    ]);
 
-  const handleLogout = () => {
-    auth.signOut()
-      .then(() => {
-        navigation.navigate("Home"); // Redirect to Login page
-      })
-      .catch((error) => {
-        console.error("Logout Error:", error);
-        Alert.alert("Error", "Failed to log out. Please try again.");
-      });
-  };
+  /*
+   * Sign the user out.
+   */
+  const handleLogout =
+    useCallback(() => {
+      Alert.alert(
+        "Log Out?",
+        "Are you sure you want to log out?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Log Out",
+            style: "destructive",
+
+            onPress: async () => {
+              try {
+                setLoggingOut(true);
+
+                await auth.signOut();
+
+                navigation.reset({
+                  index: 0,
+                  routes: [
+                    {
+                      name: "Home",
+                    },
+                  ],
+                });
+              } catch (error) {
+                console.error(
+                  "[Settings] Logout error:",
+                  error
+                );
+
+                Alert.alert(
+                  "Unable to log out",
+                  "Please try again."
+                );
+              } finally {
+                setLoggingOut(false);
+              }
+            },
+          },
+        ]
+      );
+    }, [navigation]);
 
   if (loading) {
     return (
       <View style={styles.loader}>
-        <Text>Loading...</Text>
+        <ActivityIndicator
+          size="large"
+          color={
+            colours.lightblue
+          }
+        />
+
+        <Text
+          style={
+            styles.loadingText
+          }
+        >
+          Loading settings...
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Sidebar */}
-      <View style={styles.sideMenu}>
-        <Sidebar />
+    <View
+      style={[
+        styles.container,
+        isWeb &&
+          styles.webContainer,
+      ]}
+    >
+      {/* =====================================================
+          SIDEBAR
+      ===================================================== */}
+      <View
+        style={[
+          styles.sideMenu,
+          isDesktopWeb &&
+            styles.desktopSideMenu,
+          isMobileWeb &&
+            styles.mobileSideMenu,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={
+            isDesktopWeb
+              ? true
+              : menuOpen
+          }
+          setMenuOpen={
+            isDesktopWeb
+              ? () => {}
+              : setMenuOpen
+          }
+          isDesktop={
+            isDesktopWeb
+          }
+        />
       </View>
 
-      {/* Settings Header */}
-      <Text style={styles.header}>Settings</Text>
-      <Text style={styles.subHeader}>Manage your preferences</Text>
+      {/* =====================================================
+          PAGE CONTENT
+      ===================================================== */}
+      <View
+        style={[
+          styles.pageContent,
+          isDesktopWeb &&
+            styles.desktopPageContent,
+          isMobileWeb &&
+            styles.mobilePageContent,
+        ]}
+      >
+        <ScrollView
+          style={[
+            styles.settingsScroll,
+            isWeb &&
+              styles.webSettingsScroll,
+          ]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isDesktopWeb &&
+              styles.desktopScrollContent,
+          ]}
+          showsVerticalScrollIndicator={
+            false
+          }
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* PAGE HEADER */}
+          <View
+            style={
+              styles.pageHeader
+            }
+          >
+            <Text
+              style={
+                styles.header
+              }
+            >
+              Settings
+            </Text>
 
-      {/* Dark Mode Section */}
-      <View style={styles.settingCard}>
-        <Text style={styles.settingLabel}>Dark Mode</Text>
-        <View style={styles.switchContainer}>
-          <Switch
-            value={darkMode}
-            onValueChange={(value) => setDarkMode(value)}
-            trackColor={{ true: "#4CAF50", false: "#ccc" }}
-            thumbColor={darkMode ? "#fff" : "#f4f3f4"}
-          />
-        </View>
+            <Text
+              style={
+                styles.subHeader
+              }
+            >
+              Manage your account and application preferences.
+            </Text>
+          </View>
+
+          {/* ACCOUNT INFORMATION */}
+          <View
+            style={
+              styles.settingCard
+            }
+          >
+            <View
+              style={
+                styles.cardHeader
+              }
+            >
+              <View>
+                <Text
+                  style={
+                    styles.cardTitle
+                  }
+                >
+                  Account
+                </Text>
+
+                <Text
+                  style={
+                    styles.cardDescription
+                  }
+                >
+                  Your Treble account information
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={
+                styles.accountInformation
+              }
+            >
+              <View
+                style={
+                  styles.accountRow
+                }
+              >
+                <Text
+                  style={
+                    styles.accountLabel
+                  }
+                >
+                  Username
+                </Text>
+
+                <Text
+                  style={
+                    styles.accountValue
+                  }
+                  numberOfLines={1}
+                >
+                  {username ||
+                    "Not set"}
+                </Text>
+              </View>
+
+              <View
+                style={
+                  styles.accountDivider
+                }
+              />
+
+              <View
+                style={
+                  styles.accountRow
+                }
+              >
+                <Text
+                  style={
+                    styles.accountLabel
+                  }
+                >
+                  Email
+                </Text>
+
+                <Text
+                  style={
+                    styles.accountValue
+                  }
+                  numberOfLines={1}
+                >
+                  {email ||
+                    "Not available"}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={
+                styles.editProfileButton
+              }
+              onPress={() =>
+                navigation.navigate(
+                  "EditProfile"
+                )
+              }
+            >
+              <Text
+                style={
+                  styles.editProfileButtonText
+                }
+              >
+                Edit Profile
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* APPEARANCE */}
+          <View
+            style={
+              styles.settingCard
+            }
+          >
+            <View
+              style={[
+                styles.settingRow,
+                isCompact &&
+                  styles.compactSettingRow,
+              ]}
+            >
+              <View
+                style={
+                  styles.settingTextContainer
+                }
+              >
+                <Text
+                  style={
+                    styles.settingLabel
+                  }
+                >
+                  Dark Mode
+                </Text>
+
+                <Text
+                  style={
+                    styles.settingDescription
+                  }
+                >
+                  Use a darker appearance throughout the application.
+                </Text>
+              </View>
+
+              <Switch
+                value={darkMode}
+                onValueChange={
+                  setDarkMode
+                }
+                trackColor={{
+                  false:
+                    "rgba(255,255,255,0.18)",
+                  true:
+                    colours.lightblue,
+                }}
+                thumbColor="#ffffff"
+                ios_backgroundColor="rgba(255,255,255,0.18)"
+              />
+            </View>
+          </View>
+
+          {/* SAVE SETTINGS */}
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              saving &&
+                styles.disabledButton,
+            ]}
+            onPress={
+              handleSaveSettings
+            }
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator
+                size="small"
+                color="#ffffff"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.buttonText
+                }
+              >
+                Save Settings
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* LOGOUT */}
+          <View
+            style={[
+              styles.settingCard,
+              styles.dangerCard,
+            ]}
+          >
+            <View
+              style={
+                styles.dangerContent
+              }
+            >
+              <View
+                style={
+                  styles.dangerTextContainer
+                }
+              >
+                <Text
+                  style={
+                    styles.dangerTitle
+                  }
+                >
+                  Log Out
+                </Text>
+
+                <Text
+                  style={
+                    styles.dangerDescription
+                  }
+                >
+                  Sign out of your Treble account on this device.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.logoutButton,
+                  loggingOut &&
+                    styles.disabledButton,
+                ]}
+                onPress={
+                  handleLogout
+                }
+                disabled={
+                  loggingOut
+                }
+              >
+                {loggingOut ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.buttonText
+                    }
+                  >
+                    Logout
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
       </View>
-      <Text style={styles.buttonText}></Text>
-      {/* Save Button */}
-      <TouchableOpacity style={styles.saveButton} onPress={handleSaveSettings}>
-        <Text style={styles.buttonText}>Save Settings</Text>
-      </TouchableOpacity>
 
-      {/* Logout Button */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.buttonText}>Logout</Text>
-      </TouchableOpacity>
-
-      {/* Bottom Navigation Bar */}
-      <View style={styles.bottomNavBar}>
+      {/* =====================================================
+          BOTTOM NAVIGATION — MOBILE AND DESKTOP
+      ===================================================== */}
+      <View
+        style={[
+          styles.bottomNavBar,
+          isDesktopWeb &&
+            styles.desktopBottomNavBar,
+        ]}
+      >
         <BottomNavbar />
       </View>
     </View>
@@ -150,90 +719,500 @@ export default function Settings({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  /* =====================================================
+     PAGE
+  ===================================================== */
+
   container: {
     flex: 1,
-    backgroundColor: colours.bluegrey,
-    paddingHorizontal: 20,
-    paddingTop: 140,
+    minHeight: 0,
+
+    backgroundColor:
+      colours.background,
   },
-  sideMenu: {
-    position: "absolute",
-    top: 40,
-    right: 525,
-    bottom: 0,
-    shadowColor: "#000",
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 10,
-},
+
+  webContainer: {
+    width: "100%",
+    height: "100vh",
+
+    minHeight: 0,
+
+    overflow: "hidden",
+  },
+
   loader: {
     flex: 1,
-    justifyContent: "center",
+
     alignItems: "center",
+    justifyContent: "center",
+
+    backgroundColor:
+      colours.background,
   },
-  header: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: colours.lightblue,
-    marginBottom: 10,
+
+  loadingText: {
+    color:
+      "rgba(255,255,255,0.7)",
+
+    fontSize: 14,
+
+    marginTop: 12,
   },
-  subHeader: {
-    fontSize: 16,
-    color: "#aaa",
+
+  /* =====================================================
+     SIDEBAR
+  ===================================================== */
+
+  sideMenu: {
+    position: "absolute",
+
+    top: 40,
+    left: 0,
+    bottom: 0,
+
+    zIndex: 100,
+    elevation: 20,
+  },
+
+  desktopSideMenu: {
+    position: "fixed",
+
+    top: 0,
+    left: 0,
+    right: undefined,
+    bottom: 0,
+
+    width:
+      DESKTOP_SIDEBAR_WIDTH,
+
+    height: "100vh",
+
+    overflow: "hidden",
+
+    zIndex: 100,
+    elevation: 20,
+  },
+
+  mobileSideMenu: {
+    position: "absolute",
+
+    top: 40,
+    left: 0,
+    right: undefined,
+    bottom: 0,
+
+    zIndex: 100,
+  },
+
+  /* =====================================================
+     PAGE CONTENT
+  ===================================================== */
+
+  pageContent: {
+    flex: 1,
+    minHeight: 0,
+
+    paddingBottom:
+      BOTTOM_NAV_HEIGHT,
+
+    overflow: "hidden",
+  },
+
+  desktopPageContent: {
+    position: "absolute",
+
+    top: 0,
+    left:
+      DESKTOP_SIDEBAR_WIDTH,
+    right: 0,
+    bottom:
+      BOTTOM_NAV_HEIGHT,
+
+    minHeight: 0,
+
+    paddingTop: 24,
+    paddingHorizontal: 28,
+
+    overflow: "hidden",
+  },
+
+  mobilePageContent: {
+    position: "absolute",
+
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom:
+      BOTTOM_NAV_HEIGHT,
+
+    minHeight: 0,
+
+    paddingTop: 70,
+    paddingHorizontal: 12,
+
+    overflow: "hidden",
+  },
+
+  settingsScroll: {
+    flex: 1,
+    minHeight: 0,
+
+    width: "100%",
+  },
+
+  webSettingsScroll: {
+    height: "100%",
+
+    overflowY: "auto",
+    overflowX: "hidden",
+
+    WebkitOverflowScrolling:
+      "touch",
+
+    overscrollBehaviorY:
+      "contain",
+
+    scrollbarWidth: "none",
+    msOverflowStyle: "none",
+  },
+
+  scrollContent: {
+    width: "100%",
+
+    paddingBottom: 45,
+  },
+
+  desktopScrollContent: {
+    width: "100%",
+    maxWidth:
+      MAX_CONTENT_WIDTH,
+
+    alignSelf: "center",
+  },
+
+  /* =====================================================
+     HEADER
+  ===================================================== */
+
+  pageHeader: {
+    width: "100%",
+
     marginBottom: 20,
   },
+
+  header: {
+    color:
+      colours.lightblue,
+
+    fontSize: 32,
+    lineHeight: 39,
+    fontWeight: "800",
+  },
+
+  subHeader: {
+    color:
+      "rgba(255,255,255,0.62)",
+
+    fontSize: 15,
+    lineHeight: 21,
+
+    marginTop: 3,
+  },
+
+  /* =====================================================
+     SETTING CARDS
+  ===================================================== */
+
   settingCard: {
-    backgroundColor: colours.darkblue,
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    width: "100%",
+
+    padding: 20,
+    marginBottom: 16,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.08)",
+
+    borderRadius: 17,
+
+    backgroundColor:
+      colours.darkblue,
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.14,
+    shadowRadius: 9,
+
+    elevation: 3,
   },
-  settingLabel: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 10,
+
+  cardHeader: {
+    width: "100%",
+
+    marginBottom: 16,
   },
-  input: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 10,
+
+  cardTitle: {
+    color: "#ffffff",
+
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "800",
+  },
+
+  cardDescription: {
+    color:
+      "rgba(255,255,255,0.5)",
+
+    fontSize: 13,
+    lineHeight: 18,
+
+    marginTop: 3,
+  },
+
+  /* =====================================================
+     ACCOUNT
+  ===================================================== */
+
+  accountInformation: {
+    width: "100%",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.07)",
+
+    borderRadius: 12,
+
+    backgroundColor:
+      "rgba(255,255,255,0.035)",
+  },
+
+  accountRow: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent:
+      "space-between",
+
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+
+  accountLabel: {
+    color:
+      "rgba(255,255,255,0.58)",
+
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  accountValue: {
+    flex: 1,
+
+    color: "#ffffff",
+
     fontSize: 14,
-    color: "#333",
+    fontWeight: "700",
+
+    textAlign: "right",
+
+    marginLeft: 16,
   },
-  disabledInput: {
-    backgroundColor: "#e0e0e0",
-    color: "#999",
+
+  accountDivider: {
+    width: "100%",
+    height: 1,
+
+    backgroundColor:
+      "rgba(255,255,255,0.07)",
   },
-  switchContainer: {
+
+  editProfileButton: {
+    minHeight: 43,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    marginTop: 15,
+
+    paddingHorizontal: 18,
+
+    borderRadius: 22,
+
+    backgroundColor:
+      "rgba(255,255,255,0.08)",
+  },
+
+  editProfileButtonText: {
+    color: "#ffffff",
+
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  /* =====================================================
+     DARK MODE
+  ===================================================== */
+
+  settingRow: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent:
+      "space-between",
+  },
+
+  compactSettingRow: {
     alignItems: "flex-start",
-    marginTop: 10,
   },
+
+  settingTextContainer: {
+    flex: 1,
+    minWidth: 0,
+
+    paddingRight: 20,
+  },
+
+  settingLabel: {
+    color: "#ffffff",
+
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: "800",
+  },
+
+  settingDescription: {
+    color:
+      "rgba(255,255,255,0.52)",
+
+    fontSize: 13,
+    lineHeight: 19,
+
+    marginTop: 3,
+  },
+
+  /* =====================================================
+     BUTTONS
+  ===================================================== */
+
   saveButton: {
-    backgroundColor: colours.lightblue,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 40,
+    width: "100%",
+    minHeight: 49,
+
     alignItems: "center",
-    marginBottom: 15,
+    justifyContent: "center",
+
+    paddingHorizontal: 20,
+
+    marginBottom: 16,
+
+    borderRadius: 25,
+
+    backgroundColor:
+      colours.lightblue,
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.16,
+    shadowRadius: 7,
+
+    elevation: 3,
   },
-  logoutButton: {
-    backgroundColor: "red",
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 40,
-    alignItems: "center",
-  },
+
   buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
+    color: "#ffffff",
+
+    fontSize: 15,
+    fontWeight: "800",
   },
+
+  disabledButton: {
+    opacity: 0.5,
+  },
+
+  /* =====================================================
+     LOGOUT
+  ===================================================== */
+
+  dangerCard: {
+    borderColor:
+      "rgba(255,70,70,0.24)",
+  },
+
+  dangerContent: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent:
+      "space-between",
+  },
+
+  dangerTextContainer: {
+    flex: 1,
+    minWidth: 0,
+
+    paddingRight: 18,
+  },
+
+  dangerTitle: {
+    color: "#ff6b6b",
+
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: "800",
+  },
+
+  dangerDescription: {
+    color:
+      "rgba(255,255,255,0.5)",
+
+    fontSize: 13,
+    lineHeight: 19,
+
+    marginTop: 3,
+  },
+
+  logoutButton: {
+    minWidth: 100,
+    minHeight: 43,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    paddingHorizontal: 18,
+
+    borderRadius: 22,
+
+    backgroundColor:
+      "#d94343",
+  },
+
+  /* =====================================================
+     BOTTOM NAVIGATION
+  ===================================================== */
+
   bottomNavBar: {
     position: "absolute",
+
+    left: 0,
+    right: 0,
     bottom: 0,
-    width: "112%",
+
+    zIndex: 90,
+  },
+
+  desktopBottomNavBar: {
+    left:
+      DESKTOP_SIDEBAR_WIDTH,
+    right: 0,
   },
 });

@@ -1,344 +1,1146 @@
-import React, { useState, useCallback } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
   Text,
   TextInput,
-  StyleSheet,
   TouchableOpacity,
-  Image,
-  Alert,
-  ActivityIndicator,
-  Switch,
-  Modal,
-  Button,
+  useWindowDimensions,
+  View,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import { auth, storage } from "../utils/firebase";  // <-- import storage from your config
-import { updateProfile } from "firebase/auth";
-import { ref, uploadString, uploadBytes, getDownloadURL } from "firebase/storage"; // <-- for uploading to Firebase Storage
-import { getUser, updateUser } from "../providers/rest"; // <-- your OrientDB REST calls
+
+import {
+  useFocusEffect,
+} from "@react-navigation/native";
+
+import {
+  updateProfile,
+} from "firebase/auth";
+
+import {
+  getDownloadURL,
+  ref,
+  uploadBytes,
+} from "firebase/storage";
+
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
+
+import {
+  auth,
+  storage,
+} from "../utils/firebase";
+
+import {
+  getUser,
+  updateUser,
+} from "../providers/rest";
+
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
+
 import colours from "../styles/colours";
 
-export default function EditProfile({ navigation }) {
-  const [username, setUsername] = useState("");
-  const [originalUsername, setOriginalUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [avatar, setAvatar] = useState(null);   // We'll store the download URL from Firebase
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [isPublic, setIsPublic] = useState(true);
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+const BOTTOM_NAV_HEIGHT = 72;
+const MAX_CONTENT_WIDTH = 760;
 
-  const [showCropModal, setShowCropModal] = useState(false);
-  const [imageToCrop, setImageToCrop] = useState(null);
+const AVATAR_SIZE = 512;
 
-  // 1. Fetch user data from OrientDB
-  const fetchUserData = async () => {
-    try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        navigation.navigate("Home");
+const FALLBACK_AVATAR =
+  require("../images/avatarIcon.png");
+
+export default function EditProfile({
+  navigation,
+}) {
+  const { width } = useWindowDimensions();
+
+  const isWeb =
+    Platform.OS === "web";
+
+  const isDesktopWeb =
+    isWeb &&
+    width >= DESKTOP_BREAKPOINT;
+
+  const isMobileWeb =
+    isWeb &&
+    width < DESKTOP_BREAKPOINT;
+
+  const isCompact =
+    width < 600;
+
+  const [username, setUsername] =
+    useState("");
+
+  const [
+    originalUsername,
+    setOriginalUsername,
+  ] = useState("");
+
+  const [email, setEmail] =
+    useState("");
+
+  const [avatar, setAvatar] =
+    useState(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [
+    uploadingAvatar,
+    setUploadingAvatar,
+  ] = useState(false);
+
+  const [isPublic, setIsPublic] =
+    useState(true);
+
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  /*
+   * Keep the sidebar permanently open on desktop.
+   */
+  useEffect(() => {
+    if (isDesktopWeb) {
+      setMenuOpen(true);
+    } else {
+      setMenuOpen(false);
+    }
+  }, [isDesktopWeb]);
+
+  /*
+   * Safely parse backend responses.
+   */
+  const parseResponse = useCallback(
+    async (
+      response,
+      fallbackMessage
+    ) => {
+      if (!response) {
+        throw new Error(
+          "The backend returned no response."
+        );
+      }
+
+      const responseText =
+        await response.text();
+
+      let data = {};
+
+      try {
+        data = responseText
+          ? JSON.parse(responseText)
+          : {};
+      } catch {
+        data = {
+          error:
+            responseText ||
+            "The backend returned an invalid response.",
+        };
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            `${fallbackMessage} HTTP ${response.status}`
+        );
+      }
+
+      return data;
+    },
+    []
+  );
+
+  /*
+   * Load the current profile.
+   */
+  const fetchUserData =
+    useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        setLoading(false);
+
+        navigation.navigate(
+          "Home"
+        );
+
         return;
       }
-      setLoading(true);
-      console.log("[DEBUG] Fetching user data for UID:", currentUser.uid);
 
-      const orientRes = await getUser(currentUser.uid);
-      if (!orientRes.ok) {
-        throw new Error("Failed to fetch user data from OrientDB.");
-      }
-      const orientData = await orientRes.json();
-      console.log("[DEBUG] Orient data:", orientData);
+      try {
+        setLoading(true);
 
-      const finalUsername = orientData.username || currentUser.displayName || "";
-      const finalEmail = orientData.email || currentUser.email || "";
-      const finalAvatar =
-        orientData.avatar && orientData.avatar !== "None"
-          ? orientData.avatar
-          : null;
+        const response =
+          await getUser(
+            currentUser.uid
+          );
 
-      setUsername(finalUsername);
-      setOriginalUsername(finalUsername);
-      setEmail(finalEmail);
-      if (finalAvatar) {
-        console.log("[DEBUG] Found avatar in DB:", finalAvatar);
+        const userData =
+          await parseResponse(
+            response,
+            "Unable to load your profile."
+          );
+
+        const finalUsername =
+          userData?.username ||
+          currentUser.displayName ||
+          "";
+
+        const finalEmail =
+          userData?.email ||
+          currentUser.email ||
+          "";
+
+        const finalAvatar =
+          userData?.avatar &&
+          userData.avatar !== "None"
+            ? userData.avatar
+            : null;
+
+        const publicValue =
+          userData?.isPublic;
+
+        setUsername(
+          finalUsername
+        );
+
+        setOriginalUsername(
+          finalUsername
+        );
+
+        setEmail(finalEmail);
+
         setAvatar(finalAvatar);
+
+        setIsPublic(
+          publicValue === true ||
+            publicValue ===
+              "true" ||
+            publicValue === 1 ||
+            publicValue ===
+              undefined
+        );
+      } catch (error) {
+        console.error(
+          "[EditProfile] Load error:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to load profile",
+          error?.message ||
+            "Please try again."
+        );
+      } finally {
+        setLoading(false);
       }
-      if (typeof orientData.isPublic === "boolean") {
-        setIsPublic(orientData.isPublic);
-      } else {
-        setIsPublic(true);
-      }
-    } catch (error) {
-      console.error("Error fetching user data:", error);
-      Alert.alert("Error", "Unable to fetch user data.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    }, [
+      navigation,
+      parseResponse,
+    ]);
 
   useFocusEffect(
     useCallback(() => {
       fetchUserData();
-    }, [navigation])
+    }, [fetchUserData])
   );
 
-  // 2. Pick a new avatar image
-  const handlePickAvatar = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 1,
-        base64: true, // needed for uploadString base64
-      });
-
-      if (!result.canceled) {
-        const asset = result.assets[0];
-        await uploadAvatarToFirebase(asset);
-        // If it's not 512x512, ask user to crop
-        // if (asset.width !== 512 || asset.height !== 512) {
-        //   setImageToCrop(asset);
-        //   setShowCropModal(true);
-        // } else {
-        //   // If it's already 512x512, go ahead and upload
-        //   await uploadAvatarToFirebase(asset);
-        // }
+  /*
+   * Convert the selected image to a Blob.
+   */
+  const createImageBlob =
+    useCallback(async (uri) => {
+      if (!uri) {
+        throw new Error(
+          "The selected image does not have a valid file location."
+        );
       }
-    } catch (error) {
-      console.error("Error picking avatar:", error);
-    }
-  };
 
-const uploadAvatarToFirebase = async (asset) => {
-  try {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      throw new Error("No user is logged in.");
-    }
+      const response =
+        await fetch(uri);
 
-    let mimeType = "image/jpeg";
-    if (asset.uri && asset.uri.endsWith(".png")) {
-      mimeType = "image/png";
-    }
+      if (!response.ok) {
+        throw new Error(
+          "Unable to read the selected image."
+        );
+      }
 
-    // Convert the data URL to a Blob using fetch.
-    const response = await fetch(asset.uri);
-    const blob = await response.blob();
+      return response.blob();
+    }, []);
 
-    // Create a storage reference for the avatar (e.g., avatars/USER_ID.jpg).
-    const storageRef = ref(storage, `avatars/${currentUser.uid}.jpg`);
+  /*
+   * Resize and crop the avatar to a square.
+   */
+  const prepareAvatar =
+    useCallback(async (asset) => {
+      if (!asset?.uri) {
+        throw new Error(
+          "No image was selected."
+        );
+      }
 
-    // Upload the Blob to Firebase Storage.
-    await uploadBytes(storageRef, blob, { contentType: mimeType });
+      const imageWidth =
+        Number(asset.width) ||
+        AVATAR_SIZE;
 
-    // Retrieve the download URL.
-    const downloadURL = await getDownloadURL(storageRef);
-    console.log("[DEBUG] Firebase Storage download URL:", downloadURL);
+      const imageHeight =
+        Number(asset.height) ||
+        AVATAR_SIZE;
 
-    // Update the user's record in OrientDB with the avatar URL.
-    const orientPayload = { avatar: downloadURL };
-    const orientResponse = await updateUser(currentUser.uid, orientPayload);
-    if (!orientResponse.ok) {
-      const data = await orientResponse.json();
-      throw new Error(data.error || "Failed to update avatar in OrientDB.");
-    }
-    console.log("[DEBUG] OrientDB avatar update successful.");
+      const shortestSide =
+        Math.min(
+          imageWidth,
+          imageHeight
+        );
 
-    // Optionally update local state with the new URL.
-    setAvatar(downloadURL);
-    Alert.alert("Success", "Avatar updated successfully!");
-  } catch (error) {
-    console.error("Error uploading avatar:", error);
-    Alert.alert("Error", error.message);
-  }
-};
+      const originX =
+        Math.max(
+          (
+            imageWidth -
+            shortestSide
+          ) / 2,
+          0
+        );
 
+      const originY =
+        Math.max(
+          (
+            imageHeight -
+            shortestSide
+          ) / 2,
+          0
+        );
 
-  // 4. Crop if needed, then upload
-  const handleCropAndUpload = async () => {
-    try {
-      const { uri, width, height } = imageToCrop;
-      const cropWidth = 512;
-      const cropHeight = 512;
-      const originX = Math.max((width - cropWidth) / 2, 0);
-      const originY = Math.max((height - cropHeight) / 2, 0);
-      const actions = [
-        { crop: { originX, originY, width: cropWidth, height: cropHeight } },
-      ];
+      return ImageManipulator.manipulateAsync(
+        asset.uri,
+        [
+          {
+            crop: {
+              originX,
+              originY,
+              width:
+                shortestSide,
+              height:
+                shortestSide,
+            },
+          },
+          {
+            resize: {
+              width:
+                AVATAR_SIZE,
+              height:
+                AVATAR_SIZE,
+            },
+          },
+        ],
+        {
+          compress: 0.85,
+          format:
+            ImageManipulator
+              .SaveFormat.JPEG,
+        }
+      );
+    }, []);
 
-      const result = await ImageManipulator.manipulateAsync(uri, actions, {
-        base64: true,
-      });
-      console.log("[DEBUG] Cropped base64 (first 50 chars):", result.base64.substring(0, 50));
+  /*
+   * Upload an avatar to Firebase Storage and update OrientDB.
+   */
+  const uploadAvatarToFirebase =
+    useCallback(
+      async (asset) => {
+        const currentUser =
+          auth.currentUser;
 
-      // Upload the cropped image
-      await uploadAvatarToFirebase({ uri: result.uri });
+        if (!currentUser?.uid) {
+          throw new Error(
+            "No user is logged in."
+          );
+        }
 
-      setShowCropModal(false);
-    } catch (cropError) {
-      console.error("Error cropping image:", cropError);
-      Alert.alert("Error", "Failed to crop image. Please try again.");
-    }
-  };
+        try {
+          setUploadingAvatar(
+            true
+          );
 
-  // 5. Save other profile data (username, isPublic)
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        Alert.alert("Error", "No user is logged in.");
+          const preparedImage =
+            await prepareAvatar(
+              asset
+            );
+
+          const blob =
+            await createImageBlob(
+              preparedImage.uri
+            );
+
+          const storageReference =
+            ref(
+              storage,
+              `avatars/${currentUser.uid}.jpg`
+            );
+
+          await uploadBytes(
+            storageReference,
+            blob,
+            {
+              contentType:
+                "image/jpeg",
+            }
+          );
+
+          const downloadURL =
+            await getDownloadURL(
+              storageReference
+            );
+
+          const updateResponse =
+            await updateUser(
+              currentUser.uid,
+              {
+                avatar:
+                  downloadURL,
+              }
+            );
+
+          await parseResponse(
+            updateResponse,
+            "Unable to save the avatar."
+          );
+
+          setAvatar(
+            downloadURL
+          );
+
+          Alert.alert(
+            "Avatar updated",
+            "Your profile picture was updated successfully."
+          );
+        } catch (error) {
+          console.error(
+            "[EditProfile] Avatar upload error:",
+            error
+          );
+
+          Alert.alert(
+            "Unable to update avatar",
+            error?.message ||
+              "Please try another image."
+          );
+        } finally {
+          setUploadingAvatar(
+            false
+          );
+        }
+      },
+      [
+        createImageBlob,
+        parseResponse,
+        prepareAvatar,
+      ]
+    );
+
+  /*
+   * Open the image picker.
+   */
+  const handlePickAvatar =
+    useCallback(async () => {
+      if (uploadingAvatar) {
         return;
       }
 
-      const newUsername = username.trim().toLowerCase();
+      try {
+        if (
+          Platform.OS !== "web"
+        ) {
+          const permissionResult =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-      const orientPayload = {
-        username: newUsername,
-        avatar: avatar || null,
-        isPublic,
-      };
+          if (
+            !permissionResult.granted
+          ) {
+            Alert.alert(
+              "Permission required",
+              "Treble needs access to your photo library to update your avatar."
+            );
 
-      const orientResponse = await updateUser(currentUser.uid, orientPayload);
-      if (!orientResponse.ok) {
-        const data = await orientResponse.json();
-        if (orientResponse.status === 409) {
-          throw new Error(data.error || "Username already exists");
-        } else {
-          throw new Error(data.error || "Failed to update user in OrientDB.");
+            return;
+          }
         }
+
+        const result =
+          await ImagePicker.launchImageLibraryAsync(
+            {
+              mediaTypes:
+                ImagePicker
+                  .MediaTypeOptions
+                  .Images,
+
+              allowsEditing: true,
+
+              aspect: [1, 1],
+
+              quality: 0.9,
+            }
+          );
+
+        if (
+          result.canceled ||
+          !result.assets?.length
+        ) {
+          return;
+        }
+
+        await uploadAvatarToFirebase(
+          result.assets[0]
+        );
+      } catch (error) {
+        console.error(
+          "[EditProfile] Image picker error:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to select image",
+          error?.message ||
+            "Please try again."
+        );
+      }
+    }, [
+      uploadAvatarToFirebase,
+      uploadingAvatar,
+    ]);
+
+  /*
+   * Save username and privacy settings.
+   */
+  const handleSave =
+    useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        Alert.alert(
+          "Not signed in",
+          "Please sign in again."
+        );
+
+        navigation.navigate(
+          "Home"
+        );
+
+        return;
       }
 
-      // Update Firebase Auth displayName if needed
-      if (currentUser.displayName !== newUsername) {
-        await updateProfile(currentUser, { displayName: newUsername });
+      const newUsername =
+        username
+          .trim()
+          .toLowerCase();
+
+      if (!newUsername) {
+        Alert.alert(
+          "Username required",
+          "Please enter a username."
+        );
+
+        return;
       }
 
-      Alert.alert("Success", "Profile updated successfully!", [
-        { text: "OK", onPress: () => navigation.navigate("Profile") },
-      ]);
-    } catch (error) {
-      console.error("Error saving profile:", error);
-      Alert.alert("Error", error.message);
-    } finally {
-      setSaving(false);
-    }
-  };
+      if (
+        newUsername.length < 3
+      ) {
+        Alert.alert(
+          "Username too short",
+          "Your username must contain at least three characters."
+        );
+
+        return;
+      }
+
+      if (
+        newUsername.length > 30
+      ) {
+        Alert.alert(
+          "Username too long",
+          "Your username must contain 30 characters or fewer."
+        );
+
+        return;
+      }
+
+      if (
+        !/^[a-z0-9._-]+$/.test(
+          newUsername
+        )
+      ) {
+        Alert.alert(
+          "Invalid username",
+          "Use only letters, numbers, periods, underscores, or hyphens."
+        );
+
+        return;
+      }
+
+      try {
+        setSaving(true);
+
+        const payload = {
+          username:
+            newUsername,
+
+          avatar:
+            avatar || null,
+
+          isPublic:
+            Boolean(isPublic),
+        };
+
+        const response =
+          await updateUser(
+            currentUser.uid,
+            payload
+          );
+
+        await parseResponse(
+          response,
+          "Unable to update your profile."
+        );
+
+        if (
+          currentUser.displayName !==
+          newUsername
+        ) {
+          await updateProfile(
+            currentUser,
+            {
+              displayName:
+                newUsername,
+            }
+          );
+        }
+
+        setUsername(
+          newUsername
+        );
+
+        setOriginalUsername(
+          newUsername
+        );
+
+        Alert.alert(
+          "Profile updated",
+          "Your profile was updated successfully.",
+          [
+            {
+              text: "OK",
+              onPress: () =>
+                navigation.navigate(
+                  "Profile"
+                ),
+            },
+          ]
+        );
+      } catch (error) {
+        console.error(
+          "[EditProfile] Save error:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to save profile",
+          error?.message ||
+            "Please try again."
+        );
+      } finally {
+        setSaving(false);
+      }
+    }, [
+      avatar,
+      isPublic,
+      navigation,
+      parseResponse,
+      username,
+    ]);
+
+  const avatarSource =
+    avatar &&
+    typeof avatar ===
+      "string" &&
+    (
+      avatar.startsWith(
+        "data:"
+      ) ||
+      avatar.startsWith(
+        "http://"
+      ) ||
+      avatar.startsWith(
+        "https://"
+      )
+    )
+      ? {
+          uri: avatar,
+        }
+      : FALLBACK_AVATAR;
+
+  const hasChanges =
+    username
+      .trim()
+      .toLowerCase() !==
+      originalUsername
+        .trim()
+        .toLowerCase();
 
   if (loading) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" color="white" />
+        <ActivityIndicator
+          size="large"
+          color={
+            colours.lightblue
+          }
+        />
+
+        <Text
+          style={
+            styles.loadingText
+          }
+        >
+          Loading profile...
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Crop Modal */}
-      <Modal
-        visible={showCropModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCropModal(false)}
+    <View
+      style={[
+        styles.container,
+        isWeb &&
+          styles.webContainer,
+      ]}
+    >
+      {/* =====================================================
+          SIDEBAR
+      ===================================================== */}
+      <View
+        style={[
+          styles.sideMenu,
+          isDesktopWeb &&
+            styles.desktopSideMenu,
+          isMobileWeb &&
+            styles.mobileSideMenu,
+        ]}
+        pointerEvents="box-none"
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Crop Your Avatar</Text>
-            {imageToCrop && (
-              <Image
-                source={{ uri: imageToCrop.uri }}
-                style={styles.cropImage}
-                resizeMode="contain"
-              />
-            )}
-            <Text style={styles.modalInstructions}>
-              Your selected image is not 512x512. Please crop it to 512x512.
+        <Sidebar
+          menuOpen={
+            isDesktopWeb
+              ? true
+              : menuOpen
+          }
+          setMenuOpen={
+            isDesktopWeb
+              ? () => {}
+              : setMenuOpen
+          }
+          isDesktop={
+            isDesktopWeb
+          }
+        />
+      </View>
+
+      {/* =====================================================
+          PAGE CONTENT
+      ===================================================== */}
+      <View
+        style={[
+          styles.pageContent,
+          isDesktopWeb &&
+            styles.desktopPageContent,
+          isMobileWeb &&
+            styles.mobilePageContent,
+        ]}
+      >
+        <ScrollView
+          style={[
+            styles.profileScroll,
+            isWeb &&
+              styles.webProfileScroll,
+          ]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isDesktopWeb &&
+              styles.desktopScrollContent,
+          ]}
+          showsVerticalScrollIndicator={
+            false
+          }
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* PAGE TITLE */}
+          <View
+            style={
+              styles.pageHeader
+            }
+          >
+            <Text
+              style={
+                styles.pageTitle
+              }
+            >
+              Edit Profile
             </Text>
-            <View style={styles.modalButtons}>
-              <Button title="Crop to 512x512" onPress={handleCropAndUpload} />
-              <Button title="Cancel" onPress={() => setShowCropModal(false)} />
+
+            <Text
+              style={
+                styles.pageDescription
+              }
+            >
+              Update your account details, profile picture, and privacy settings.
+            </Text>
+          </View>
+
+          {/* AVATAR CARD */}
+          <View
+            style={[
+              styles.profileHeader,
+              isCompact &&
+                styles.compactProfileHeader,
+            ]}
+          >
+            <TouchableOpacity
+              style={
+                styles.avatarButton
+              }
+              onPress={
+                handlePickAvatar
+              }
+              disabled={
+                uploadingAvatar
+              }
+              activeOpacity={0.8}
+            >
+              <Image
+                source={
+                  avatarSource
+                }
+                style={
+                  styles.avatar
+                }
+              />
+
+              <View
+                style={
+                  styles.avatarOverlay
+                }
+              >
+                {uploadingAvatar ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.avatarOverlayText
+                    }
+                  >
+                    Edit
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
+
+            <View
+              style={
+                styles.headerInfo
+              }
+            >
+              <Text
+                style={
+                  styles.profileHeading
+                }
+              >
+                Profile Picture
+              </Text>
+
+              <Text
+                style={
+                  styles.editInfoText
+                }
+              >
+                Select a square image. It will be cropped and resized automatically.
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.changePhotoButton,
+                  uploadingAvatar &&
+                    styles.disabledButton,
+                ]}
+                onPress={
+                  handlePickAvatar
+                }
+                disabled={
+                  uploadingAvatar
+                }
+              >
+                <Text
+                  style={
+                    styles.changePhotoButtonText
+                  }
+                >
+                  {uploadingAvatar
+                    ? "Uploading..."
+                    : "Change Photo"}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
 
-      {/* Sidebar */}
-      <View style={styles.sideMenu}>
-        <Sidebar />
+          {/* ACCOUNT DETAILS */}
+          <View
+            style={
+              styles.formCard
+            }
+          >
+            <Text
+              style={
+                styles.cardTitle
+              }
+            >
+              Account Details
+            </Text>
+
+            <Text
+              style={
+                styles.cardDescription
+              }
+            >
+              Choose the username displayed throughout Treble.
+            </Text>
+
+            <View
+              style={
+                styles.inputSection
+              }
+            >
+              <Text
+                style={
+                  styles.label
+                }
+              >
+                Username
+              </Text>
+
+              <TextInput
+                style={
+                  styles.input
+                }
+                value={username}
+                onChangeText={
+                  setUsername
+                }
+                placeholder="Enter your username"
+                placeholderTextColor="rgba(255,255,255,0.35)"
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={30}
+                editable={!saving}
+                returnKeyType="done"
+              />
+
+              <Text
+                style={
+                  styles.inputHelper
+                }
+              >
+                Letters, numbers, periods, underscores, and hyphens only.
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.inputSection
+              }
+            >
+              <Text
+                style={
+                  styles.label
+                }
+              >
+                Email
+              </Text>
+
+              <TextInput
+                style={[
+                  styles.input,
+                  styles.disabledInput,
+                ]}
+                value={email}
+                editable={false}
+                selectTextOnFocus={
+                  false
+                }
+              />
+
+              <Text
+                style={
+                  styles.inputHelper
+                }
+              >
+                Your email address cannot be changed from this page.
+              </Text>
+            </View>
+          </View>
+
+          {/* PRIVACY */}
+          <View
+            style={
+              styles.privacyCard
+            }
+          >
+            <View
+              style={
+                styles.privacyTextContainer
+              }
+            >
+              <Text
+                style={
+                  styles.privacyTitle
+                }
+              >
+                Profile Privacy
+              </Text>
+
+              <Text
+                style={
+                  styles.privacySubtitle
+                }
+              >
+                Public profiles can be followed immediately. Private profiles require approval.
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.privacyRow
+              }
+            >
+              <View
+                style={
+                  styles.privacyStatusContainer
+                }
+              >
+                <Text
+                  style={
+                    styles.privacyLabel
+                  }
+                >
+                  {isPublic
+                    ? "Public Profile"
+                    : "Private Profile"}
+                </Text>
+
+                <Text
+                  style={
+                    styles.privacyStatusDescription
+                  }
+                >
+                  {isPublic
+                    ? "Anyone can follow your account."
+                    : "You approve each follow request."}
+                </Text>
+              </View>
+
+              <Switch
+                value={isPublic}
+                onValueChange={
+                  setIsPublic
+                }
+                disabled={saving}
+                trackColor={{
+                  false:
+                    "rgba(255,255,255,0.18)",
+                  true:
+                    colours.lightblue,
+                }}
+                thumbColor="#ffffff"
+                ios_backgroundColor="rgba(255,255,255,0.18)"
+              />
+            </View>
+          </View>
+
+          {/* SAVE BUTTON */}
+          <TouchableOpacity
+            style={[
+              styles.saveButton,
+              (
+                saving ||
+                uploadingAvatar
+              ) &&
+                styles.disabledButton,
+            ]}
+            onPress={
+              handleSave
+            }
+            disabled={
+              saving ||
+              uploadingAvatar
+            }
+          >
+            {saving ? (
+              <ActivityIndicator
+                size="small"
+                color="#ffffff"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.saveButtonText
+                }
+              >
+                Save Changes
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {hasChanges ? (
+            <Text
+              style={
+                styles.unsavedText
+              }
+            >
+              You have unsaved username changes.
+            </Text>
+          ) : null}
+        </ScrollView>
       </View>
 
-      {/* Header Section */}
-      <View style={styles.profileHeader}>
-        <TouchableOpacity onPress={handlePickAvatar}>
-          <Image
-            source={avatar ? { uri: avatar } : require("../images/avatarIcon.png")}
-            style={styles.avatar}
-          />
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.username}>Edit Your Profile</Text>
-          <Text style={styles.editInfoText}>Tap the avatar to change your picture</Text>
-        </View>
-      </View>
-
-      {/* Username Input */}
-      <View style={styles.inputSection}>
-        <Text style={styles.label}>Username</Text>
-        <TextInput
-          style={styles.input}
-          value={username}
-          onChangeText={setUsername}
-          placeholder="Enter your username"
-          placeholderTextColor="#aaa"
-        />
-      </View>
-
-      {/* Email Display */}
-      <View style={styles.inputSection}>
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={[styles.input, styles.disabledInput]}
-          value={email}
-          editable={false}
-          selectTextOnFocus={false}
-        />
-      </View>
-
-      {/* Privacy Card */}
-      <View style={styles.privacyCard}>
-        <Text style={styles.privacyTitle}>Privacy</Text>
-        <Text style={styles.privacySubtitle}>
-          Toggle to make your profile visible or private to others.
-        </Text>
-        <View style={styles.privacyRow}>
-          <Text style={styles.privacyLabel}>{isPublic ? "Public" : "Private"}</Text>
-          <Switch
-            trackColor={{ false: "#767577", true: "#767577" }}
-            thumbColor={isPublic ? colours.lightblue : "#f4f3f4"}
-            ios_backgroundColor="#3e3e3e"
-            onValueChange={(val) => setIsPublic(val)}
-            value={isPublic}
-          />
-        </View>
-      </View>
-
-      {/* Save Button */}
-      <TouchableOpacity
-        style={[styles.button, saving && styles.disabledButton]}
-        onPress={handleSave}
-        disabled={saving}
+      {/* =====================================================
+          BOTTOM NAVIGATION
+      ===================================================== */}
+      <View
+        style={[
+          styles.bottomNavBar,
+          isDesktopWeb &&
+            styles.desktopBottomNavBar,
+        ]}
       >
-        <Text style={styles.buttonText}>{saving ? "Saving..." : "Save Changes"}</Text>
-      </TouchableOpacity>
-
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNavBar}>
         <BottomNavbar />
       </View>
     </View>
@@ -346,158 +1148,578 @@ const uploadAvatarToFirebase = async (asset) => {
 }
 
 const styles = StyleSheet.create({
+  /* =====================================================
+     PAGE
+  ===================================================== */
+
   container: {
     flex: 1,
-    backgroundColor: colours.bluegrey,
-    paddingTop: 120,
+    minHeight: 0,
+
+    backgroundColor:
+      colours.background,
   },
+
+  webContainer: {
+    width: "100%",
+    height: "100vh",
+
+    minHeight: 0,
+
+    overflow: "hidden",
+  },
+
   loader: {
     flex: 1,
-    justifyContent: "center",
+
     alignItems: "center",
+    justifyContent: "center",
+
+    backgroundColor:
+      colours.background,
   },
+
+  loadingText: {
+    color:
+      "rgba(255,255,255,0.65)",
+
+    fontSize: 14,
+
+    marginTop: 12,
+  },
+
+  /* =====================================================
+     SIDEBAR
+  ===================================================== */
+
   sideMenu: {
     position: "absolute",
+
     top: 40,
-    right: 525,
+    left: 0,
     bottom: 0,
-    shadowColor: "#000",
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 10,
+
+    zIndex: 100,
+    elevation: 20,
   },
-  profileHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: colours.darkblue,
-    borderRadius: 10,
-    marginHorizontal: 20,
+
+  desktopSideMenu: {
+    position: "fixed",
+
+    top: 0,
+    left: 0,
+    right: undefined,
+    bottom: 0,
+
+    width:
+      DESKTOP_SIDEBAR_WIDTH,
+
+    height: "100vh",
+
+    overflow: "hidden",
+
+    zIndex: 100,
+    elevation: 20,
+  },
+
+  mobileSideMenu: {
+    position: "absolute",
+
+    top: 40,
+    left: 0,
+    right: undefined,
+    bottom: 0,
+
+    zIndex: 100,
+  },
+
+  /* =====================================================
+     CONTENT
+  ===================================================== */
+
+  pageContent: {
+    flex: 1,
+    minHeight: 0,
+
+    overflow: "hidden",
+  },
+
+  desktopPageContent: {
+    position: "absolute",
+
+    top: 0,
+    left:
+      DESKTOP_SIDEBAR_WIDTH,
+    right: 0,
+    bottom:
+      BOTTOM_NAV_HEIGHT,
+
+    minHeight: 0,
+
+    paddingTop: 24,
+    paddingHorizontal: 28,
+
+    overflow: "hidden",
+  },
+
+  mobilePageContent: {
+    position: "absolute",
+
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom:
+      BOTTOM_NAV_HEIGHT,
+
+    minHeight: 0,
+
+    paddingTop: 72,
+    paddingHorizontal: 12,
+
+    overflow: "hidden",
+  },
+
+  profileScroll: {
+    flex: 1,
+    minHeight: 0,
+
+    width: "100%",
+  },
+
+  webProfileScroll: {
+    height: "100%",
+
+    overflowY: "auto",
+    overflowX: "hidden",
+
+    WebkitOverflowScrolling:
+      "touch",
+
+    overscrollBehaviorY:
+      "contain",
+
+    scrollbarWidth: "none",
+    msOverflowStyle: "none",
+  },
+
+  scrollContent: {
+    width: "100%",
+
+    paddingBottom: 45,
+  },
+
+  desktopScrollContent: {
+    width: "100%",
+    maxWidth:
+      MAX_CONTENT_WIDTH,
+
+    alignSelf: "center",
+  },
+
+  /* =====================================================
+     PAGE HEADER
+  ===================================================== */
+
+  pageHeader: {
+    width: "100%",
+
     marginBottom: 20,
   },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginRight: 15,
+
+  pageTitle: {
+    color:
+      colours.lightblue,
+
+    fontSize: 32,
+    lineHeight: 39,
+    fontWeight: "800",
   },
+
+  pageDescription: {
+    color:
+      "rgba(255,255,255,0.58)",
+
+    fontSize: 14,
+    lineHeight: 20,
+
+    marginTop: 3,
+  },
+
+  /* =====================================================
+     AVATAR
+  ===================================================== */
+
+  profileHeader: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    padding: 20,
+    marginBottom: 16,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.08)",
+
+    borderRadius: 18,
+
+    backgroundColor:
+      colours.darkblue,
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.14,
+    shadowRadius: 9,
+
+    elevation: 3,
+  },
+
+  compactProfileHeader: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+  },
+
+  avatarButton: {
+    position: "relative",
+
+    width: 112,
+    height: 112,
+
+    marginRight: 20,
+
+    borderRadius: 56,
+
+    overflow: "hidden",
+
+    backgroundColor:
+      "rgba(255,255,255,0.08)",
+  },
+
+  avatar: {
+    width: "100%",
+    height: "100%",
+
+    borderRadius: 56,
+
+    resizeMode: "cover",
+  },
+
+  avatarOverlay: {
+    position: "absolute",
+
+    left: 0,
+    right: 0,
+    bottom: 0,
+
+    height: 33,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    backgroundColor:
+      "rgba(0,0,0,0.65)",
+  },
+
+  avatarOverlayText: {
+    color: "#ffffff",
+
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
   headerInfo: {
     flex: 1,
+    minWidth: 0,
   },
-  username: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: colours.lightblue,
-    marginBottom: 5,
+
+  profileHeading: {
+    color: "#ffffff",
+
+    fontSize: 19,
+    lineHeight: 25,
+    fontWeight: "800",
   },
+
   editInfoText: {
-    fontSize: 14,
-    color: "#aaa",
+    color:
+      "rgba(255,255,255,0.52)",
+
+    fontSize: 13,
+    lineHeight: 19,
+
+    marginTop: 4,
   },
-  inputSection: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: colours.lightblue,
-    marginBottom: 5,
-  },
-  input: {
-    backgroundColor: colours.darkblue,
-    color: "#fff",
-    borderRadius: 5,
-    padding: 10,
-    fontSize: 16,
-  },
-  disabledInput: {
-    backgroundColor: "#e0e0e0",
-    color: "#999",
-  },
-  button: {
-    marginHorizontal: 20,
-    padding: 15,
-    backgroundColor: colours.lightblue,
-    borderRadius: 5,
+
+  changePhotoButton: {
+    alignSelf: "flex-start",
+
+    minHeight: 40,
+
     alignItems: "center",
-    marginBottom: 70,
+    justifyContent: "center",
+
+    paddingHorizontal: 17,
+
+    marginTop: 13,
+
+    borderRadius: 20,
+
+    backgroundColor:
+      "rgba(255,255,255,0.09)",
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
+
+  changePhotoButtonText: {
+    color: "#ffffff",
+
+    fontSize: 13,
+    fontWeight: "800",
   },
+
+  /* =====================================================
+     FORM
+  ===================================================== */
+
+  formCard: {
+    width: "100%",
+
+    padding: 20,
+    marginBottom: 16,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.08)",
+
+    borderRadius: 18,
+
+    backgroundColor:
+      colours.darkblue,
+  },
+
+  cardTitle: {
+    color: "#ffffff",
+
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "800",
+  },
+
+  cardDescription: {
+    color:
+      "rgba(255,255,255,0.5)",
+
+    fontSize: 13,
+    lineHeight: 19,
+
+    marginTop: 3,
+    marginBottom: 18,
+  },
+
+  inputSection: {
+    width: "100%",
+
+    marginBottom: 18,
+  },
+
+  label: {
+    color:
+      colours.lightblue,
+
+    fontSize: 14,
+    fontWeight: "800",
+
+    marginBottom: 7,
+  },
+
+  input: {
+    width: "100%",
+    minHeight: 48,
+
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.1)",
+
+    borderRadius: 11,
+
+    color: "#ffffff",
+
+    fontSize: 15,
+
+    backgroundColor:
+      "rgba(255,255,255,0.045)",
+  },
+
+  disabledInput: {
+    color:
+      "rgba(255,255,255,0.45)",
+
+    backgroundColor:
+      "rgba(255,255,255,0.025)",
+  },
+
+  inputHelper: {
+    color:
+      "rgba(255,255,255,0.42)",
+
+    fontSize: 12,
+    lineHeight: 17,
+
+    marginTop: 6,
+  },
+
+  /* =====================================================
+     PRIVACY
+  ===================================================== */
+
+  privacyCard: {
+    width: "100%",
+
+    padding: 20,
+    marginBottom: 16,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.08)",
+
+    borderRadius: 18,
+
+    backgroundColor:
+      colours.darkblue,
+  },
+
+  privacyTextContainer: {
+    width: "100%",
+
+    marginBottom: 17,
+  },
+
+  privacyTitle: {
+    color: "#ffffff",
+
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "800",
+  },
+
+  privacySubtitle: {
+    color:
+      "rgba(255,255,255,0.5)",
+
+    fontSize: 13,
+    lineHeight: 19,
+
+    marginTop: 3,
+  },
+
+  privacyRow: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent:
+      "space-between",
+
+    padding: 14,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.07)",
+
+    borderRadius: 12,
+
+    backgroundColor:
+      "rgba(255,255,255,0.035)",
+  },
+
+  privacyStatusContainer: {
+    flex: 1,
+    minWidth: 0,
+
+    paddingRight: 18,
+  },
+
+  privacyLabel: {
+    color: "#ffffff",
+
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  privacyStatusDescription: {
+    color:
+      "rgba(255,255,255,0.46)",
+
+    fontSize: 12,
+    lineHeight: 17,
+
+    marginTop: 2,
+  },
+
+  /* =====================================================
+     SAVE
+  ===================================================== */
+
+  saveButton: {
+    width: "100%",
+    minHeight: 50,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    paddingHorizontal: 20,
+
+    borderRadius: 25,
+
+    backgroundColor:
+      colours.lightblue,
+  },
+
+  saveButtonText: {
+    color: "#ffffff",
+
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
   disabledButton: {
-    backgroundColor: "#aaa",
+    opacity: 0.5,
   },
+
+  unsavedText: {
+    color:
+      "rgba(255,255,255,0.5)",
+
+    fontSize: 12,
+
+    textAlign: "center",
+
+    marginTop: 9,
+  },
+
+  /* =====================================================
+     BOTTOM NAVIGATION
+  ===================================================== */
+
   bottomNavBar: {
     position: "absolute",
+
+    left: 0,
+    right: 0,
     bottom: 0,
-    width: "100%",
+
+    zIndex: 90,
   },
-  privacyCard: {
-    backgroundColor: colours.darkblue,
-    borderRadius: 10,
-    padding: 20,
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  privacyTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: colours.lightblue,
-    marginBottom: 10,
-  },
-  privacySubtitle: {
-    fontSize: 14,
-    color: "#aaa",
-    marginBottom: 12,
-  },
-  privacyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginRight: 190,
-  },
-  privacyLabel: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 20,
-    width: "80%",
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  cropImage: {
-    width: 300,
-    height: 300,
-    marginBottom: 10,
-  },
-  modalInstructions: {
-    fontSize: 14,
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
+
+  desktopBottomNavBar: {
+    left:
+      DESKTOP_SIDEBAR_WIDTH,
+
+    right: 0,
   },
 });

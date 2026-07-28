@@ -1,544 +1,2188 @@
-import React, { useReducer, useState, useEffect } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+} from "react";
+
 import {
-  View,
-  Text,
-  Image,
-  StyleSheet,
-  TouchableOpacity,
   ActivityIndicator,
-  ScrollView,
   Alert,
+  Image,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
-import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
+
 import { Chip } from "@rneui/base";
+import { useFocusEffect } from "@react-navigation/native";
+
 import { auth } from "../utils/firebase";
+
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
 import BottomNavbar from "../components/BottomNavbar";
-import useFetchUserData from "../hooks/useFetchUserData";
 import SectionDivider from "../components/SectionDivider";
 import MusicCard from "../components/MusicCard";
+
 import {
   followUser,
-  unfollowUser,
-  postSearchResults,
   getFollowRequests,
+  postSearchResults,
   requestFollow,
-} from "../providers/rest"; // REMOVED getFollowers, getFriends
+  unfollowUser,
+} from "../providers/rest";
+
 import colours from "../styles/colours";
 
-export default function Search({ navigation, route }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [searchResult, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(true);
-  const [followingUsers, setFollowingUsers] = useState({});
-  const [notificationsCount, setNotificationsCount] = useState(0);
-  // Dictionary to track follow-request status per user
-  const [followRequests, setFollowRequests] = useState({});
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+const DESKTOP_HEADER_HEIGHT = 70;
+const BOTTOM_NAV_HEIGHT = 72;
+const MAX_CONTENT_WIDTH = 980;
 
-  const { searchQuery } = route.params;
+const FALLBACK_AVATAR =
+  require("../images/avatarIcon.png");
 
-  // Get current user data
-  const {
-    username,
-    userId: currentUserId,
-    isSpotifyLinked,
-    spotifyAccessToken,
-    spotifyRefreshToken,
-    loading,
-    isPublic: currentUserIsPublic,
-    avatar: currentUserAvatar,
-  } = useFetchUserData();
+const initialFilterState = {
+  songOnly: false,
+  albumOnly: false,
+  artistOnly: false,
+  userOnly: false,
+};
 
-  // Fetch search results
-  async function getSearchResults() {
-    try {
-      setSearchLoading(true);
+function filterReducer(state, action) {
+  switch (action.type) {
+    case "TOGGLE_SONG":
+      return {
+        songOnly: !state.songOnly,
+        albumOnly: false,
+        artistOnly: false,
+        userOnly: false,
+      };
 
-      if (!auth.currentUser?.uid) {
-        setSearchResults([]);
+    case "TOGGLE_ALBUM":
+      return {
+        songOnly: false,
+        albumOnly: !state.albumOnly,
+        artistOnly: false,
+        userOnly: false,
+      };
+
+    case "TOGGLE_ARTIST":
+      return {
+        songOnly: false,
+        albumOnly: false,
+        artistOnly: !state.artistOnly,
+        userOnly: false,
+      };
+
+    case "TOGGLE_USER":
+      return {
+        songOnly: false,
+        albumOnly: false,
+        artistOnly: false,
+        userOnly: !state.userOnly,
+      };
+
+    case "RESET":
+      return initialFilterState;
+
+    default:
+      return state;
+  }
+}
+
+export default function Search({
+  navigation,
+  route,
+}) {
+  const { width } = useWindowDimensions();
+
+  const isWeb =
+    Platform.OS === "web";
+
+  const isDesktopWeb =
+    isWeb &&
+    width >= DESKTOP_BREAKPOINT;
+
+  const isMobileWeb =
+    isWeb &&
+    width < DESKTOP_BREAKPOINT;
+
+  const isCompact =
+    width < 600;
+
+  const searchQuery =
+    route?.params?.searchQuery?.trim() ||
+    "";
+
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  const [
+    searchResult,
+    setSearchResults,
+  ] = useState([]);
+
+  const [
+    searchLoading,
+    setSearchLoading,
+  ] = useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [
+    followingUsers,
+    setFollowingUsers,
+  ] = useState({});
+
+  const [
+    followRequests,
+    setFollowRequests,
+  ] = useState({});
+
+  const [
+    followLoading,
+    setFollowLoading,
+  ] = useState({});
+
+  const [
+    notificationsCount,
+    setNotificationsCount,
+  ] = useState(0);
+
+  const [filter, dispatchFilter] =
+    useReducer(
+      filterReducer,
+      initialFilterState
+    );
+
+  /*
+   * Keep the sidebar permanently open on desktop.
+   */
+  useEffect(() => {
+    if (isDesktopWeb) {
+      setMenuOpen(true);
+    } else {
+      setMenuOpen(false);
+    }
+  }, [isDesktopWeb]);
+
+  /*
+   * Safely read JSON from the backend.
+   */
+  const parseResponse = useCallback(
+    async (
+      response,
+      fallbackMessage
+    ) => {
+      if (!response) {
+        throw new Error(
+          "The backend returned no response."
+        );
+      }
+
+      const responseText =
+        await response.text();
+
+      let data = {};
+
+      try {
+        data = responseText
+          ? JSON.parse(responseText)
+          : {};
+      } catch {
+        throw new Error(
+          responseText ||
+            "The backend returned an invalid response."
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            `${fallbackMessage} HTTP ${response.status}`
+        );
+      }
+
+      return data;
+    },
+    []
+  );
+
+  /*
+   * Normalize all search result types.
+   */
+  const normalizeSearchItem =
+    useCallback((item) => {
+      const rawType =
+        item?.type ||
+        item?.itemType ||
+        item?.category ||
+        "";
+
+      const type =
+        String(rawType).toLowerCase();
+
+      const id =
+        item?.id ||
+        item?.listenableId ||
+        item?.listenable_id ||
+        item?.userId ||
+        item?.uid ||
+        "";
+
+      const rawArtist =
+        item?.artist ||
+        item?.artistName ||
+        null;
+
+      const artistName =
+        typeof rawArtist === "string"
+          ? rawArtist
+          : rawArtist?.name ||
+            item?.artistName ||
+            "";
+
+      const artist =
+        typeof rawArtist === "string"
+          ? {
+              name: rawArtist,
+            }
+          : rawArtist ||
+            (
+              artistName
+                ? {
+                    name: artistName,
+                  }
+                : null
+            );
+
+      const album =
+        item?.album || null;
+
+      const albumName =
+        item?.albumName ||
+        (
+          typeof album === "string"
+            ? album
+            : album?.title ||
+              album?.name ||
+              ""
+        );
+
+      const image =
+        item?.image ||
+        item?.coverArt ||
+        item?.avatar ||
+        album?.cover_xl ||
+        album?.cover_big ||
+        album?.cover_medium ||
+        "";
+
+      return {
+        ...item,
+
+        id: String(id),
+
+        userId:
+          type === "user"
+            ? String(
+                item?.userId ||
+                  item?.uid ||
+                  id
+              )
+            : item?.userId,
+
+        type,
+
+        name:
+          item?.name ||
+          item?.title ||
+          item?.username ||
+          "Unknown",
+
+        title:
+          item?.title ||
+          item?.name ||
+          "",
+
+        username:
+          item?.username ||
+          item?.name ||
+          "",
+
+        artist,
+
+        artistName,
+
+        album,
+
+        albumName,
+
+        image,
+
+        coverArt:
+          item?.coverArt ||
+          image,
+      };
+    }, []);
+
+  /*
+   * Fetch search results.
+   */
+  const getSearchResults =
+    useCallback(
+      async (isRefresh = false) => {
+        const currentUser =
+          auth.currentUser;
+
+        if (!currentUser?.uid) {
+          setSearchResults([]);
+          setSearchLoading(false);
+          setRefreshing(false);
+
+          navigation.navigate("Home");
+
+          return;
+        }
+
+        if (!searchQuery) {
+          setSearchResults([]);
+          setSearchLoading(false);
+          setRefreshing(false);
+
+          return;
+        }
+
+        try {
+          if (isRefresh) {
+            setRefreshing(true);
+          } else {
+            setSearchLoading(true);
+          }
+
+          const response =
+            await postSearchResults(
+              searchQuery,
+              currentUser.uid
+            );
+
+          const data =
+            await parseResponse(
+              response,
+              "Search failed."
+            );
+
+          const rawResults =
+            Array.isArray(data)
+              ? data
+              : Array.isArray(
+                    data?.searchResult
+                )
+                ? data.searchResult
+                : Array.isArray(
+                      data?.results
+                  )
+                  ? data.results
+                  : [];
+
+          const normalized =
+            rawResults
+              .map(
+                normalizeSearchItem
+              )
+              .filter(
+                (item) =>
+                  Boolean(
+                    item?.type
+                  )
+              );
+
+          setSearchResults(
+            normalized
+          );
+
+          /*
+           * Save initial following state from search results.
+           */
+          setFollowingUsers(
+            normalized.reduce(
+              (
+                result,
+                item
+              ) => {
+                if (
+                  item?.type ===
+                    "user" &&
+                  item?.userId
+                ) {
+                  result[
+                    item.userId
+                  ] =
+                    Boolean(
+                      item?.isFollowing
+                    );
+                }
+
+                return result;
+              },
+              {}
+            )
+          );
+        } catch (error) {
+          console.error(
+            "[Search] Search error:",
+            error
+          );
+
+          setSearchResults([]);
+
+          Alert.alert(
+            "Search failed",
+            error?.message ||
+              "Unable to complete your search."
+          );
+        } finally {
+          setSearchLoading(false);
+          setRefreshing(false);
+        }
+      },
+      [
+        navigation,
+        normalizeSearchItem,
+        parseResponse,
+        searchQuery,
+      ]
+    );
+
+  /*
+   * Fetch pending notification count.
+   */
+  const loadNotifications =
+    useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        setNotificationsCount(0);
         return;
       }
 
-      const results = await postSearchResults(
-        searchQuery,
-        auth.currentUser.uid
-      );
-
-      if (!results) {
-        throw new Error("Search API returned no response.");
-      }
-
-      const json = await results.json();
-
-      if (!results.ok) {
-        throw new Error(
-          json?.error || `Search failed with status ${results.status}`
-        );
-      }
-
-      const normalizedResults = Array.isArray(json)
-        ? json
-        : Array.isArray(json.searchResult)
-          ? json.searchResult
-          : Array.isArray(json.results)
-            ? json.results
-            : [];
-
-      setSearchResults(normalizedResults);
-    } catch (error) {
-      console.error("Error fetching search results:", error);
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  }
-
-  // Reducer for toggling filters: Songs, Albums, Artists, Users
-  const [filter, dispatchFilter] = useReducer(
-    (state, action) => {
-      switch (action.type) {
-        case "TOGGLE_SONG":
-          return {
-            songOnly: !state.songOnly,
-            albumOnly: false,
-            artistOnly: false,
-            userOnly: false,
-          };
-        case "TOGGLE_ALBUM":
-          return {
-            songOnly: false,
-            albumOnly: !state.albumOnly,
-            artistOnly: false,
-            userOnly: false,
-          };
-        case "TOGGLE_ARTIST":
-          return {
-            songOnly: false,
-            albumOnly: false,
-            artistOnly: !state.artistOnly,
-            userOnly: false,
-          };
-        case "TOGGLE_USER":
-          return {
-            songOnly: false,
-            albumOnly: false,
-            artistOnly: false,
-            userOnly: !state.userOnly,
-          };
-        default:
-          return state;
-      }
-    },
-    {
-      songOnly: false,
-      albumOnly: false,
-      artistOnly: false,
-      userOnly: false,
-    }
-  );
-
-  // 1) Fetch search results on mount
-  useEffect(() => {
-    getSearchResults();
-  }, [searchQuery]);
-
-  // 2) Fetch notifications count
-  useEffect(() => {
-    async function fetchNotificationsCount() {
       try {
-        const resp = await getFollowRequests(auth.currentUser.uid);
-        if (resp.ok) {
-          const requests = await resp.json();
-          setNotificationsCount(requests.length);
-        }
-      } catch (error) {
-        console.error("Error fetching notifications count:", error);
-      }
-    }
-    fetchNotificationsCount();
-  }, []);
-
-  // 3) Check if the current user already requested to follow each user
-  useEffect(() => {
-    async function checkFollowRequestForUser(userId) {
-      try {
-        const resp = await getFollowRequests(userId);
-        if (resp.ok) {
-          const requests = await resp.json();
-          const alreadyRequested = requests.some(
-            (req) => req.userId === auth.currentUser.uid
+        const response =
+          await getFollowRequests(
+            currentUser.uid
           );
-          setFollowRequests((prev) => ({ ...prev, [userId]: alreadyRequested }));
-        }
+
+        const data =
+          await parseResponse(
+            response,
+            "Unable to load notifications."
+          );
+
+        const requests =
+          Array.isArray(data)
+            ? data
+            : Array.isArray(
+                  data?.requests
+              )
+              ? data.requests
+              : [];
+
+        setNotificationsCount(
+          requests.length
+        );
       } catch (error) {
         console.error(
-          "Error fetching follow request status for user",
-          userId,
+          "[Search] Notifications error:",
           error
         );
-      }
-    }
-    if (searchResult) {
-      searchResult.forEach((item) => {
-        if (item.type === "user") {
-          checkFollowRequestForUser(item.userId);
-        }
-      });
-    }
-  }, [searchResult]);
 
-  // Follow a user (or request to follow if private)
-  async function handleFollow(targetUser) {
-    const userIsPublic =
-      targetUser.isPublic === true || targetUser.isPublic === "true";
-    if (userIsPublic) {
-      try {
-        const resp = await followUser(auth.currentUser.uid, targetUser.userId);
-        if (resp.ok) {
-          setFollowingUsers((prev) => ({ ...prev, [targetUser.userId]: true }));
-        }
-      } catch (error) {
-        console.error("Error following user:", error);
+        setNotificationsCount(0);
       }
-    } else {
-      // private => request
-      if (!followRequests[targetUser.userId]) {
+    }, [parseResponse]);
+
+  /*
+   * Check pending follow requests for private users.
+   */
+  const loadFollowRequestStatuses =
+    useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        return;
+      }
+
+      const userResults =
+        searchResult.filter(
+          (item) =>
+            item?.type ===
+              "user" &&
+            item?.userId &&
+            item.userId !==
+              currentUser.uid
+        );
+
+      if (
+        userResults.length === 0
+      ) {
+        return;
+      }
+
+      await Promise.all(
+        userResults.map(
+          async (user) => {
+            try {
+              const response =
+                await getFollowRequests(
+                  user.userId
+                );
+
+              if (!response?.ok) {
+                return;
+              }
+
+              const data =
+                await response.json();
+
+              const requests =
+                Array.isArray(data)
+                  ? data
+                  : Array.isArray(
+                        data?.requests
+                    )
+                    ? data.requests
+                    : [];
+
+              const requested =
+                requests.some(
+                  (requestItem) =>
+                    String(
+                      requestItem?.userId ||
+                        requestItem?.requesterId ||
+                        requestItem?.fromUserId ||
+                        ""
+                    ) ===
+                    String(
+                      currentUser.uid
+                    )
+                );
+
+              setFollowRequests(
+                (current) => ({
+                  ...current,
+                  [user.userId]:
+                    requested,
+                })
+              );
+            } catch (error) {
+              console.warn(
+                `[Search] Could not check follow request for ${user.userId}:`,
+                error
+              );
+            }
+          }
+        )
+      );
+    }, [searchResult]);
+
+  /*
+   * Run search whenever query changes.
+   */
+  useEffect(() => {
+    dispatchFilter({
+      type: "RESET",
+    });
+
+    getSearchResults(false);
+  }, [
+    getSearchResults,
+    searchQuery,
+  ]);
+
+  /*
+   * Reload notification count when the page is focused.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [loadNotifications])
+  );
+
+  useEffect(() => {
+    loadFollowRequestStatuses();
+  }, [
+    loadFollowRequestStatuses,
+  ]);
+
+  const handleRefresh =
+    useCallback(async () => {
+      await Promise.all([
+        getSearchResults(true),
+        loadNotifications(),
+      ]);
+    }, [
+      getSearchResults,
+      loadNotifications,
+    ]);
+
+  /*
+   * Follow a public user or request access to a private user.
+   */
+  const handleFollow =
+    useCallback(
+      async (targetUser) => {
+        const currentUser =
+          auth.currentUser;
+
+        const targetUserId =
+          String(
+            targetUser?.userId ||
+              ""
+          );
+
+        if (
+          !currentUser?.uid ||
+          !targetUserId ||
+          followLoading[
+            targetUserId
+          ]
+        ) {
+          return;
+        }
+
+        const userIsPublic =
+          targetUser?.isPublic ===
+            true ||
+          targetUser?.isPublic ===
+            "true" ||
+          targetUser?.isPublic ===
+            1;
+
+        setFollowLoading(
+          (current) => ({
+            ...current,
+            [targetUserId]: true,
+          })
+        );
+
         try {
-          const resp = await requestFollow(auth.currentUser.uid, targetUser.userId);
-          if (resp.ok) {
-            setFollowRequests((prev) => ({ ...prev, [targetUser.userId]: true }));
-            Alert.alert(
-              "Request Sent",
-              "Your request to follow this private account was sent."
+          if (userIsPublic) {
+            setFollowingUsers(
+              (current) => ({
+                ...current,
+                [targetUserId]:
+                  true,
+              })
+            );
+
+            const response =
+              await followUser(
+                currentUser.uid,
+                targetUserId
+              );
+
+            await parseResponse(
+              response,
+              "Unable to follow this user."
             );
           } else {
-            console.error("Failed to request follow");
+            if (
+              followRequests[
+                targetUserId
+              ]
+            ) {
+              return;
+            }
+
+            const response =
+              await requestFollow(
+                currentUser.uid,
+                targetUserId
+              );
+
+            await parseResponse(
+              response,
+              "Unable to send the follow request."
+            );
+
+            setFollowRequests(
+              (current) => ({
+                ...current,
+                [targetUserId]:
+                  true,
+              })
+            );
+
+            Alert.alert(
+              "Request sent",
+              "Your request to follow this private account was sent."
+            );
           }
         } catch (error) {
-          console.error("Error requesting follow:", error);
+          console.error(
+            "[Search] Follow error:",
+            error
+          );
+
+          if (userIsPublic) {
+            setFollowingUsers(
+              (current) => ({
+                ...current,
+                [targetUserId]:
+                  false,
+              })
+            );
+          }
+
+          Alert.alert(
+            "Unable to follow",
+            error?.message ||
+              "Please try again."
+          );
+        } finally {
+          setFollowLoading(
+            (current) => {
+              const updated = {
+                ...current,
+              };
+
+              delete updated[
+                targetUserId
+              ];
+
+              return updated;
+            }
+          );
         }
+      },
+      [
+        followLoading,
+        followRequests,
+        parseResponse,
+      ]
+    );
+
+  /*
+   * Unfollow a user.
+   */
+  const handleUnfollow =
+    useCallback(
+      async (targetUser) => {
+        const currentUser =
+          auth.currentUser;
+
+        const targetUserId =
+          String(
+            targetUser?.userId ||
+              ""
+          );
+
+        if (
+          !currentUser?.uid ||
+          !targetUserId ||
+          followLoading[
+            targetUserId
+          ]
+        ) {
+          return;
+        }
+
+        setFollowLoading(
+          (current) => ({
+            ...current,
+            [targetUserId]: true,
+          })
+        );
+
+        setFollowingUsers(
+          (current) => ({
+            ...current,
+            [targetUserId]:
+              false,
+          })
+        );
+
+        try {
+          const response =
+            await unfollowUser(
+              currentUser.uid,
+              targetUserId
+            );
+
+          await parseResponse(
+            response,
+            "Unable to unfollow this user."
+          );
+        } catch (error) {
+          console.error(
+            "[Search] Unfollow error:",
+            error
+          );
+
+          setFollowingUsers(
+            (current) => ({
+              ...current,
+              [targetUserId]:
+                true,
+            })
+          );
+
+          Alert.alert(
+            "Unable to unfollow",
+            error?.message ||
+              "Please try again."
+          );
+        } finally {
+          setFollowLoading(
+            (current) => {
+              const updated = {
+                ...current,
+              };
+
+              delete updated[
+                targetUserId
+              ];
+
+              return updated;
+            }
+          );
+        }
+      },
+      [
+        followLoading,
+        parseResponse,
+      ]
+    );
+
+  const formatUsername =
+    useCallback((name) => {
+      const cleanName =
+        String(name || "").trim();
+
+      if (!cleanName) {
+        return "Treble User";
       }
-    }
-  }
 
-  // Unfollow
-  async function handleUnfollow(targetUser) {
-    try {
-      const response = await unfollowUser(auth.currentUser.uid, targetUser.userId);
-      if (response.ok) {
-        setFollowingUsers((prev) => ({ ...prev, [targetUser.userId]: false }));
+      return (
+        cleanName
+          .charAt(0)
+          .toUpperCase() +
+        cleanName.slice(1)
+      );
+    }, []);
+
+  const getAvatarSource =
+    useCallback((avatar) => {
+      if (
+        avatar &&
+        typeof avatar ===
+          "string" &&
+        (
+          avatar.startsWith(
+            "data:"
+          ) ||
+          avatar.startsWith(
+            "http://"
+          ) ||
+          avatar.startsWith(
+            "https://"
+          )
+        )
+      ) {
+        return {
+          uri: avatar,
+        };
       }
-    } catch (error) {
-      console.error("Error unfollowing user:", error);
-    }
-  }
 
-  // Helper: Capitalize the first letter
-  const formatUsername = (name) => {
-    if (!name) return "";
-    return name.charAt(0).toUpperCase() + name.slice(1);
-  };
+      return FALLBACK_AVATAR;
+    }, []);
 
-  // Helper: Fallback if no base64
-  const getAvatarSource = (avatar) => {
-    const fallback = require("../images/avatarIcon.png");
-    return avatar && avatar.startsWith("data:") ? { uri: avatar } : fallback;
-  };
+  const safeSearchResults =
+    useMemo(
+      () =>
+        Array.isArray(
+          searchResult
+        )
+          ? searchResult
+          : [],
+      [searchResult]
+    );
 
-  // Decide which sections to show
+  const songs = useMemo(
+    () =>
+      safeSearchResults.filter(
+        (item) =>
+          item?.type === "track"
+      ),
+    [safeSearchResults]
+  );
+
+  const albums = useMemo(
+    () =>
+      safeSearchResults.filter(
+        (item) =>
+          item?.type === "album"
+      ),
+    [safeSearchResults]
+  );
+
+  const artists = useMemo(
+    () =>
+      safeSearchResults.filter(
+        (item) =>
+          item?.type === "artist"
+      ),
+    [safeSearchResults]
+  );
+
+  const users = useMemo(
+    () =>
+      safeSearchResults.filter(
+        (item) =>
+          item?.type === "user"
+      ),
+    [safeSearchResults]
+  );
+
   const shouldShowTrack =
-    !filter.albumOnly && !filter.artistOnly && !filter.userOnly;
+    !filter.albumOnly &&
+    !filter.artistOnly &&
+    !filter.userOnly;
+
   const shouldShowAlbum =
-    !filter.songOnly && !filter.artistOnly && !filter.userOnly;
+    !filter.songOnly &&
+    !filter.artistOnly &&
+    !filter.userOnly;
+
   const shouldShowArtist =
-    !filter.songOnly && !filter.albumOnly && !filter.userOnly;
+    !filter.songOnly &&
+    !filter.albumOnly &&
+    !filter.userOnly;
+
   const shouldShowUser =
-    !filter.songOnly && !filter.albumOnly && !filter.artistOnly;
+    !filter.songOnly &&
+    !filter.albumOnly &&
+    !filter.artistOnly;
 
+  const totalResults =
+    safeSearchResults.length;
 
-  const safeSearchResults = Array.isArray(searchResult)
-  ? searchResult
-  : [];
+  const renderEmptySection =
+    useCallback((label) => {
+      return (
+        <Text
+          style={
+            styles.emptySectionText
+          }
+        >
+          No {label.toLowerCase()} found.
+        </Text>
+      );
+    }, []);
 
   return (
-    <View style={styles.container}>
-      {/* Search Bar */}
-      <SearchBar />
-
-      {/* Notifications Icon + Badge */}
-      <TouchableOpacity
-        style={styles.notificationsIcon}
-        onPress={() => navigation.navigate("Notifications")}
+    <View
+      style={[
+        styles.container,
+        isWeb &&
+          styles.webContainer,
+      ]}
+    >
+      {/* =====================================================
+          TOP HEADER
+      ===================================================== */}
+      <View
+        style={[
+          styles.pageHeader,
+          isDesktopWeb &&
+            styles.desktopPageHeader,
+          isMobileWeb &&
+            styles.mobilePageHeader,
+        ]}
       >
-        <Image
-          source={require("../images/notificationsIcon2.png")}
-          style={styles.notifIcon}
-        />
-        {notificationsCount > 0 && (
-          <View style={styles.notificationBadge}>
-            <Text style={styles.notificationBadgeText}>
-              {notificationsCount}
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
+        <View
+          style={
+            styles.searchContainer
+          }
+        >
+          <SearchBar />
+        </View>
 
-      {/* Sidebar */}
-      <View style={styles.sideMenu}>
-        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+        <TouchableOpacity
+          style={
+            styles.notificationsButton
+          }
+          onPress={() =>
+            navigation.navigate(
+              "Notifications"
+            )
+          }
+        >
+          <Image
+            source={require(
+              "../images/notificationsIcon2.png"
+            )}
+            style={
+              styles.notificationIcon
+            }
+          />
+
+          {notificationsCount >
+          0 ? (
+            <View
+              style={
+                styles.notificationBadge
+              }
+            >
+              <Text
+                style={
+                  styles.notificationBadgeText
+                }
+              >
+                {notificationsCount >
+                99
+                  ? "99+"
+                  : notificationsCount}
+              </Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
       </View>
 
-      {/* Main Content */}
-      <View style={styles.content}>
-        <SafeAreaProvider>
-          <SafeAreaView>
-            <ScrollView>
-              {searchLoading ? (
-                <View style={styles.loaderContainer}>
-                  <ActivityIndicator size="large" color="white" />
+      {/* =====================================================
+          SIDEBAR
+      ===================================================== */}
+      <View
+        style={[
+          styles.sideMenu,
+          isDesktopWeb &&
+            styles.desktopSideMenu,
+          isMobileWeb &&
+            styles.mobileSideMenu,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={
+            isDesktopWeb
+              ? true
+              : menuOpen
+          }
+          setMenuOpen={
+            isDesktopWeb
+              ? () => {}
+              : setMenuOpen
+          }
+          isDesktop={
+            isDesktopWeb
+          }
+        />
+      </View>
+
+      {/* =====================================================
+          PAGE CONTENT
+      ===================================================== */}
+      <View
+        style={[
+          styles.pageContent,
+          isDesktopWeb &&
+            styles.desktopPageContent,
+          isMobileWeb &&
+            styles.mobilePageContent,
+        ]}
+      >
+        <View
+          style={[
+            styles.contentInner,
+            isDesktopWeb &&
+              styles.desktopContentInner,
+          ]}
+        >
+          <View
+            style={
+              styles.titleContainer
+            }
+          >
+            <Text
+              style={
+                styles.pageTitle
+              }
+            >
+              Search Results
+            </Text>
+
+            <Text
+              style={
+                styles.pageDescription
+              }
+            >
+              {searchQuery
+                ? `Results for “${searchQuery}”`
+                : "Enter a search to find music and users."}
+            </Text>
+
+            {!searchLoading &&
+            searchQuery ? (
+              <Text
+                style={
+                  styles.resultCount
+                }
+              >
+                {totalResults}{" "}
+                {totalResults === 1
+                  ? "result"
+                  : "results"}
+              </Text>
+            ) : null}
+          </View>
+
+          {searchLoading ? (
+            <View
+              style={
+                styles.loaderContainer
+              }
+            >
+              <ActivityIndicator
+                size="large"
+                color="#ffffff"
+              />
+
+              <Text
+                style={
+                  styles.loadingText
+                }
+              >
+                Searching...
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              style={[
+                styles.resultsScroll,
+                isWeb &&
+                  styles.webResultsScroll,
+              ]}
+              contentContainerStyle={[
+                styles.resultsContent,
+                totalResults === 0 &&
+                  styles.emptyResultsContent,
+              ]}
+              refreshControl={
+                <RefreshControl
+                  refreshing={
+                    refreshing
+                  }
+                  onRefresh={
+                    handleRefresh
+                  }
+                  tintColor="#ffffff"
+                  colors={[
+                    "#ffffff",
+                  ]}
+                  progressBackgroundColor={
+                    colours.darkblue
+                  }
+                />
+              }
+              showsVerticalScrollIndicator={
+                false
+              }
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* FILTER CHIPS */}
+              <View
+                style={[
+                  styles.chipContainer,
+                  isCompact &&
+                    styles.compactChipContainer,
+                ]}
+              >
+                <Chip
+                  title="Songs"
+                  onPress={() =>
+                    dispatchFilter({
+                      type:
+                        "TOGGLE_SONG",
+                    })
+                  }
+                  type={
+                    filter.songOnly
+                      ? "solid"
+                      : "outline"
+                  }
+                  buttonStyle={[
+                    styles.filterChip,
+                    filter.songOnly &&
+                      styles.selectedFilterChip,
+                  ]}
+                  titleStyle={
+                    styles.filterChipText
+                  }
+                  containerStyle={
+                    styles.filterChipContainer
+                  }
+                />
+
+                <Chip
+                  title="Albums"
+                  onPress={() =>
+                    dispatchFilter({
+                      type:
+                        "TOGGLE_ALBUM",
+                    })
+                  }
+                  type={
+                    filter.albumOnly
+                      ? "solid"
+                      : "outline"
+                  }
+                  buttonStyle={[
+                    styles.filterChip,
+                    filter.albumOnly &&
+                      styles.selectedFilterChip,
+                  ]}
+                  titleStyle={
+                    styles.filterChipText
+                  }
+                  containerStyle={
+                    styles.filterChipContainer
+                  }
+                />
+
+                <Chip
+                  title="Artists"
+                  onPress={() =>
+                    dispatchFilter({
+                      type:
+                        "TOGGLE_ARTIST",
+                    })
+                  }
+                  type={
+                    filter.artistOnly
+                      ? "solid"
+                      : "outline"
+                  }
+                  buttonStyle={[
+                    styles.filterChip,
+                    filter.artistOnly &&
+                      styles.selectedFilterChip,
+                  ]}
+                  titleStyle={
+                    styles.filterChipText
+                  }
+                  containerStyle={
+                    styles.filterChipContainer
+                  }
+                />
+
+                <Chip
+                  title="Users"
+                  onPress={() =>
+                    dispatchFilter({
+                      type:
+                        "TOGGLE_USER",
+                    })
+                  }
+                  type={
+                    filter.userOnly
+                      ? "solid"
+                      : "outline"
+                  }
+                  buttonStyle={[
+                    styles.filterChip,
+                    filter.userOnly &&
+                      styles.selectedFilterChip,
+                  ]}
+                  titleStyle={
+                    styles.filterChipText
+                  }
+                  containerStyle={
+                    styles.filterChipContainer
+                  }
+                />
+              </View>
+
+              {totalResults === 0 ? (
+                <View
+                  style={
+                    styles.emptyContainer
+                  }
+                >
+                  <Text
+                    style={
+                      styles.emptyTitle
+                    }
+                  >
+                    No results found
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.emptyDescription
+                    }
+                  >
+                    Try searching for a different song, album, artist, or user.
+                  </Text>
                 </View>
               ) : (
-                <View key="searchResults" style={{ paddingBottom: 50 }}>
-                  {/* Filter Chips */}
-                  <View style={styles.chipContainer}>
-                    <Chip
-                      title="Songs"
-                      onPress={() => dispatchFilter({ type: "TOGGLE_SONG" })}
-                      type={filter.songOnly ? "solid" : "outline"}
-                    />
-                    <Chip
-                      title="Albums"
-                      onPress={() => dispatchFilter({ type: "TOGGLE_ALBUM" })}
-                      type={filter.albumOnly ? "solid" : "outline"}
-                    />
-                    <Chip
-                      title="Artists"
-                      onPress={() => dispatchFilter({ type: "TOGGLE_ARTIST" })}
-                      type={filter.artistOnly ? "solid" : "outline"}
-                    />
-                    <Chip
-                      title="Users"
-                      onPress={() => dispatchFilter({ type: "TOGGLE_USER" })}
-                      type={filter.userOnly ? "solid" : "outline"}
-                    />
-                  </View>
+                <>
+                  {/* SONGS */}
+                  {shouldShowTrack ? (
+                    <View
+                      style={
+                        styles.resultSection
+                      }
+                    >
+                      <SectionDivider
+                        title="Songs"
+                      />
 
-                  {/* Songs Section */}
-                  {shouldShowTrack && (
-                    <View key="SongsView">
-                      <SectionDivider title="Songs" />
-                      {safeSearchResults.map((item) => {
-                        if (item.type === "track") {
-                          return (
-                            <MusicCard
-                              key={item.id}
-                              id={item.id}
-                              image={item.image}
-                              name={item.name}
-                              artist={item.artist}
-                              album={item.albumName || item.album?.title || ""}
-                              onPressCard={() =>
-                                navigation.navigate("SongPage", { track: item })
-                              }
-                            />
-                          );
-                        }
-                        return null;
-                      })}
-                    </View>
-                  )}
-
-                  {/* Albums Section */}
-                  {shouldShowAlbum && (
-                    <View key="AlbumsView">
-                      <SectionDivider title="Albums" />
-                      {safeSearchResults.map((item) => {
-                        if (item.type === "album") {
-                          return (
-                            <MusicCard
-                              key={item.id}
-                              id={item.id}
-                              image={item.image}
-                              name={item.name}
-                              artist={item.artist}
-                              onPressCard={() =>
-                                navigation.navigate("AlbumPage", { album: item })
-                              }
-                            />
-                          );
-                        }
-                        return null;
-                      })}
-                    </View>
-                  )}
-
-                  {/* Artists Section */}
-                  {shouldShowArtist && (
-                    <View key="ArtistsView">
-                      <SectionDivider title="Artists" />
-                      {safeSearchResults.map((item) => {
-                        if (item.type === "artist") {
-                          return (
-                            <MusicCard
-                              key={item.id}
-                              id={item.id}
-                              image={item.image}
-                              artist={item.name}
-                              onPressCard={() =>
-                                navigation.navigate("ArtistPage", { artist: item })
-                              }
-                            />
-                          );
-                        }
-                        return null;
-                      })}
-                    </View>
-                  )}
-
-                  {/* Users Section */}
-                  {shouldShowUser && (
-                    <View key="UsersView">
-                      <SectionDivider title="Users" />
-                      {safeSearchResults.map((item) => {
-                        if (item.type === "user") {
-                          const isCurrentUser = item.userId === auth.currentUser.uid;
-                          const isFollowing = followingUsers.hasOwnProperty(item.userId)
-                            ? followingUsers[item.userId]
-                            : item.isFollowing;
-                          const alreadyRequested =
-                            followRequests[item.userId] || false;
-
-                          // Convert isPublic to boolean
-                          const userIsPublic =
-                            item.isPublic === true || item.isPublic === "true";
-                          let finalButtonLabel = "Follow";
-                          if (isFollowing) {
-                            finalButtonLabel = "Following";
-                          } else if (!userIsPublic && alreadyRequested) {
-                            finalButtonLabel = "Requested";
-                          }
-
-                          // Determine the correct avatar
-                          const userAvatar = getAvatarSource(item.avatar);
-
-                          const onFollow = !isCurrentUser
-                            ? () => {
-                                if (isFollowing) {
-                                  handleUnfollow(item);
-                                } else {
-                                  handleFollow(item);
+                      {songs.length >
+                      0
+                        ? songs.map(
+                            (item) => (
+                              <View
+                                key={`track-${item.id}`}
+                                style={
+                                  styles.cardWrapper
                                 }
-                              }
-                            : undefined;
-
-                          return (
-                            <MusicCard
-                              key={item.userId}
-                              id={item.userId}
-                              name={formatUsername(item.username)}
-                              image={item.avatar}
-                              isPublic={item.isPublic}
-                              onFollow={onFollow}
-                              isFollowing={isFollowing}
-                              buttonLabel={finalButtonLabel}
-                              userCard={true}
-                              canFollow={!isCurrentUser}
-                              onPressCard={() =>
-                                navigation.navigate("UserProfiles", {
-                                  userId: item.userId,
-                                })
-                              }
-                            />
-                          );
-                        }
-                        return null;
-                      })}
+                              >
+                                <MusicCard
+                                  id={
+                                    item.id
+                                  }
+                                  image={
+                                    item.image
+                                  }
+                                  name={
+                                    item.name ||
+                                    item.title
+                                  }
+                                  artist={
+                                    item.artist
+                                  }
+                                  album={
+                                    item.albumName ||
+                                    item.album
+                                      ?.title ||
+                                    ""
+                                  }
+                                  onPressCard={() =>
+                                    navigation.navigate(
+                                      "SongPage",
+                                      {
+                                        track:
+                                          item,
+                                      }
+                                    )
+                                  }
+                                />
+                              </View>
+                            )
+                          )
+                        : renderEmptySection(
+                            "Songs"
+                          )}
                     </View>
-                  )}
-                </View>
+                  ) : null}
+
+                  {/* ALBUMS */}
+                  {shouldShowAlbum ? (
+                    <View
+                      style={
+                        styles.resultSection
+                      }
+                    >
+                      <SectionDivider
+                        title="Albums"
+                      />
+
+                      {albums.length >
+                      0
+                        ? albums.map(
+                            (item) => (
+                              <View
+                                key={`album-${item.id}`}
+                                style={
+                                  styles.cardWrapper
+                                }
+                              >
+                                <MusicCard
+                                  id={
+                                    item.id
+                                  }
+                                  image={
+                                    item.image
+                                  }
+                                  name={
+                                    item.name ||
+                                    item.title
+                                  }
+                                  artist={
+                                    item.artist
+                                  }
+                                  onPressCard={() =>
+                                    navigation.navigate(
+                                      "AlbumPage",
+                                      {
+                                        album:
+                                          item,
+                                      }
+                                    )
+                                  }
+                                />
+                              </View>
+                            )
+                          )
+                        : renderEmptySection(
+                            "Albums"
+                          )}
+                    </View>
+                  ) : null}
+
+                  {/* ARTISTS */}
+                  {shouldShowArtist ? (
+                    <View
+                      style={
+                        styles.resultSection
+                      }
+                    >
+                      <SectionDivider
+                        title="Artists"
+                      />
+
+                      {artists.length >
+                      0
+                        ? artists.map(
+                            (item) => (
+                              <View
+                                key={`artist-${item.id}`}
+                                style={
+                                  styles.cardWrapper
+                                }
+                              >
+                                <MusicCard
+                                  id={
+                                    item.id
+                                  }
+                                  image={
+                                    item.image
+                                  }
+                                  name={
+                                    item.name
+                                  }
+                                  artist={
+                                    item.name
+                                  }
+                                  onPressCard={() =>
+                                    navigation.navigate(
+                                      "ArtistPage",
+                                      {
+                                        artist:
+                                          item,
+                                      }
+                                    )
+                                  }
+                                />
+                              </View>
+                            )
+                          )
+                        : renderEmptySection(
+                            "Artists"
+                          )}
+                    </View>
+                  ) : null}
+
+                  {/* USERS */}
+                  {shouldShowUser ? (
+                    <View
+                      style={
+                        styles.resultSection
+                      }
+                    >
+                      <SectionDivider
+                        title="Users"
+                      />
+
+                      {users.length >
+                      0
+                        ? users.map(
+                            (item) => {
+                              const currentUserId =
+                                String(
+                                  auth
+                                    .currentUser
+                                    ?.uid ||
+                                    ""
+                                );
+
+                              const userId =
+                                String(
+                                  item?.userId ||
+                                    ""
+                                );
+
+                              const isCurrentUser =
+                                userId ===
+                                currentUserId;
+
+                              const isFollowing =
+                                Object.prototype.hasOwnProperty.call(
+                                  followingUsers,
+                                  userId
+                                )
+                                  ? Boolean(
+                                      followingUsers[
+                                        userId
+                                      ]
+                                    )
+                                  : Boolean(
+                                      item?.isFollowing
+                                    );
+
+                              const alreadyRequested =
+                                Boolean(
+                                  followRequests[
+                                    userId
+                                  ]
+                                );
+
+                              const userIsPublic =
+                                item?.isPublic ===
+                                  true ||
+                                item?.isPublic ===
+                                  "true" ||
+                                item?.isPublic ===
+                                  1;
+
+                              const isUpdating =
+                                Boolean(
+                                  followLoading[
+                                    userId
+                                  ]
+                                );
+
+                              let finalButtonLabel =
+                                "Follow";
+
+                              if (
+                                isUpdating
+                              ) {
+                                finalButtonLabel =
+                                  "Loading...";
+                              } else if (
+                                isFollowing
+                              ) {
+                                finalButtonLabel =
+                                  "Following";
+                              } else if (
+                                !userIsPublic &&
+                                alreadyRequested
+                              ) {
+                                finalButtonLabel =
+                                  "Requested";
+                              }
+
+                              const avatar =
+                                item?.avatar ||
+                                item?.image ||
+                                "";
+
+                              return (
+                                <View
+                                  key={`user-${userId}`}
+                                  style={
+                                    styles.cardWrapper
+                                  }
+                                >
+                                  <MusicCard
+                                    id={
+                                      userId
+                                    }
+                                    name={formatUsername(
+                                      item?.username
+                                    )}
+                                    image={
+                                      avatar
+                                    }
+                                    imageSource={getAvatarSource(
+                                      avatar
+                                    )}
+                                    isPublic={
+                                      item?.isPublic
+                                    }
+                                    isFollowing={
+                                      isFollowing
+                                    }
+                                    buttonLabel={
+                                      finalButtonLabel
+                                    }
+                                    userCard
+                                    canFollow={
+                                      !isCurrentUser
+                                    }
+                                    disabled={
+                                      isUpdating ||
+                                      (
+                                        !userIsPublic &&
+                                        alreadyRequested &&
+                                        !isFollowing
+                                      )
+                                    }
+                                    followLoading={
+                                      isUpdating
+                                    }
+                                    onFollow={
+                                      !isCurrentUser
+                                        ? () => {
+                                            if (
+                                              isUpdating
+                                            ) {
+                                              return;
+                                            }
+
+                                            if (
+                                              isFollowing
+                                            ) {
+                                              handleUnfollow(
+                                                item
+                                              );
+                                            } else {
+                                              handleFollow(
+                                                item
+                                              );
+                                            }
+                                          }
+                                        : undefined
+                                    }
+                                    onPressCard={() =>
+                                      navigation.navigate(
+                                        "UserProfiles",
+                                        {
+                                          userId,
+                                        }
+                                      )
+                                    }
+                                  />
+                                </View>
+                              );
+                            }
+                          )
+                        : renderEmptySection(
+                            "Users"
+                          )}
+                    </View>
+                  ) : null}
+                </>
               )}
             </ScrollView>
-          </SafeAreaView>
-        </SafeAreaProvider>
+          )}
+        </View>
       </View>
 
-      {/* Bottom Navigation Bar */}
-      <View style={styles.bottomNavBar}>
+      {/* =====================================================
+          BOTTOM NAVIGATION
+      ===================================================== */}
+      <View
+        style={[
+          styles.bottomNavBar,
+          isDesktopWeb &&
+            styles.desktopBottomNavBar,
+        ]}
+      >
         <BottomNavbar />
       </View>
     </View>
   );
 }
 
-// ------------------- Styles -------------------
 const styles = StyleSheet.create({
+  /* =====================================================
+     PAGE
+  ===================================================== */
+
   container: {
     flex: 1,
-    backgroundColor: colours.bluegrey,
+    minHeight: 0,
+
+    backgroundColor:
+      colours.background,
   },
-  notificationsIcon: {
-    width: 40,
-    height: 40,
+
+  webContainer: {
+    width: "100%",
+    height: "100vh",
+
+    minHeight: 0,
+
+    overflow: "hidden",
+  },
+
+  /* =====================================================
+     HEADER
+  ===================================================== */
+
+  pageHeader: {
     position: "absolute",
-    top: 70,
-    right: 20,
+
+    top: 0,
+    left: 0,
+    right: 0,
+
+    zIndex: 50,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    paddingHorizontal: 18,
+
+    backgroundColor:
+      colours.background,
   },
-  notifIcon: {
-    width: "90%",
-    height: "90%",
+
+  desktopPageHeader: {
+    left:
+      DESKTOP_SIDEBAR_WIDTH,
+
+    height:
+      DESKTOP_HEADER_HEIGHT,
+
+    paddingTop: 9,
+    paddingBottom: 9,
+    paddingLeft: 32,
+    paddingRight: 32,
+  },
+
+  mobilePageHeader: {
+    height: 105,
+
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
+
+  searchContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  notificationsButton: {
+    position: "relative",
+
+    width: 48,
+    height: 48,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    marginLeft: 14,
+
+    borderRadius: 24,
+
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
+  },
+
+  notificationIcon: {
+    width: 29,
+    height: 29,
+
     resizeMode: "contain",
-    left: 10,
-    top: 2,
   },
+
   notificationBadge: {
     position: "absolute",
-    top: -5,
-    right: -5,
-    backgroundColor: "red",
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+
+    top: -4,
+    right: -4,
+
+    minWidth: 21,
+    height: 21,
+
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 10,
+
+    paddingHorizontal: 5,
+
+    borderWidth: 2,
+    borderColor:
+      colours.background,
+
+    borderRadius: 11,
+
+    backgroundColor:
+      "#ff334f",
   },
+
   notificationBadgeText: {
-    color: "black",
-    fontSize: 12,
-    fontWeight: "bold",
+    color: "#ffffff",
+
+    fontSize: 10,
+    fontWeight: "800",
   },
+
+  /* =====================================================
+     SIDEBAR
+  ===================================================== */
+
   sideMenu: {
     position: "absolute",
+
     top: 40,
-    right: 525,
+    left: 0,
     bottom: 0,
-    shadowColor: "#000",
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 10,
+
+    zIndex: 100,
+    elevation: 20,
   },
-  content: {
-    flex: 1,
-    marginTop: 120,
-    paddingBottom: 100,
-    justifyContent: "center",
-    alignItems: "center",
+
+  desktopSideMenu: {
+    position: "fixed",
+
+    top: 0,
+    left: 0,
+    right: undefined,
+    bottom: 0,
+
+    width:
+      DESKTOP_SIDEBAR_WIDTH,
+
+    height: "100vh",
+
+    overflow: "hidden",
+
+    zIndex: 100,
+    elevation: 20,
   },
-  bottomNavBar: {
+
+  mobileSideMenu: {
     position: "absolute",
+
+    top: 40,
+    left: 0,
+    right: undefined,
     bottom: 0,
+
+    zIndex: 100,
+  },
+
+  /* =====================================================
+     CONTENT
+  ===================================================== */
+
+  pageContent: {
+    flex: 1,
+    minHeight: 0,
+
+    overflow: "hidden",
+  },
+
+  desktopPageContent: {
+    position: "absolute",
+
+    top:
+      DESKTOP_HEADER_HEIGHT,
+
+    left:
+      DESKTOP_SIDEBAR_WIDTH,
+
+    right: 0,
+
+    bottom:
+      BOTTOM_NAV_HEIGHT,
+
+    minHeight: 0,
+
+    paddingTop: 18,
+    paddingLeft: 28,
+    paddingRight: 28,
+
+    overflow: "hidden",
+  },
+
+  mobilePageContent: {
+    position: "absolute",
+
+    top: 105,
+    left: 0,
+    right: 0,
+
+    bottom:
+      BOTTOM_NAV_HEIGHT,
+
+    minHeight: 0,
+
+    paddingTop: 14,
+    paddingHorizontal: 12,
+
+    overflow: "hidden",
+  },
+
+  contentInner: {
+    flex: 1,
+    minHeight: 0,
+
     width: "100%",
   },
-  chipContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 20,
-    marginVertical: 10,
+
+  desktopContentInner: {
+    width: "100%",
+    maxWidth:
+      MAX_CONTENT_WIDTH,
+
+    alignSelf: "center",
   },
+
+  /* =====================================================
+     PAGE TITLE
+  ===================================================== */
+
+  titleContainer: {
+    width: "100%",
+
+    marginBottom: 14,
+  },
+
+  pageTitle: {
+    color: "#ffffff",
+
+    fontSize: 30,
+    lineHeight: 37,
+    fontWeight: "800",
+  },
+
+  pageDescription: {
+    color:
+      "rgba(255,255,255,0.58)",
+
+    fontSize: 14,
+    lineHeight: 20,
+
+    marginTop: 3,
+  },
+
+  resultCount: {
+    color:
+      colours.lightblue,
+
+    fontSize: 13,
+    fontWeight: "700",
+
+    marginTop: 7,
+  },
+
+  /* =====================================================
+     LOADING
+  ===================================================== */
+
   loaderContainer: {
-    marginTop: 10,
+    flex: 1,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    paddingBottom: 80,
+  },
+
+  loadingText: {
+    color:
+      "rgba(255,255,255,0.65)",
+
+    fontSize: 14,
+
+    marginTop: 12,
+  },
+
+  /* =====================================================
+     RESULTS SCROLLING
+  ===================================================== */
+
+  resultsScroll: {
+    flex: 1,
+    minHeight: 0,
+
+    width: "100%",
+  },
+
+  webResultsScroll: {
+    height: "100%",
+
+    overflowY: "auto",
+    overflowX: "hidden",
+
+    WebkitOverflowScrolling:
+      "touch",
+
+    overscrollBehaviorY:
+      "contain",
+
+    scrollbarWidth: "none",
+    msOverflowStyle: "none",
+  },
+
+  resultsContent: {
+    width: "100%",
+
+    paddingBottom: 50,
+  },
+
+  emptyResultsContent: {
+    flexGrow: 1,
+  },
+
+  /* =====================================================
+     FILTER CHIPS
+  ===================================================== */
+
+  chipContainer: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+
+    flexWrap: "wrap",
+
+    gap: 10,
+
+    marginBottom: 16,
+  },
+
+  compactChipContainer: {
+    justifyContent:
+      "flex-start",
+  },
+
+  filterChipContainer: {
+    margin: 0,
+  },
+
+  filterChip: {
+    minHeight: 38,
+
+    paddingHorizontal: 15,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.2)",
+
+    borderRadius: 19,
+
+    backgroundColor:
+      "rgba(255,255,255,0.04)",
+  },
+
+  selectedFilterChip: {
+    borderColor:
+      colours.lightblue,
+
+    backgroundColor:
+      colours.lightblue,
+  },
+
+  filterChipText: {
+    color: "#ffffff",
+
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  /* =====================================================
+     RESULT SECTIONS
+  ===================================================== */
+
+  resultSection: {
+    width: "100%",
+
+    marginBottom: 20,
+  },
+
+  cardWrapper: {
+    width: "100%",
+    maxWidth: 780,
+
+    alignSelf: "center",
+
+    marginBottom: 12,
+  },
+
+  emptySectionText: {
+    color:
+      "rgba(255,255,255,0.48)",
+
+    fontSize: 14,
+
+    textAlign: "center",
+
+    paddingVertical: 22,
+  },
+
+  /* =====================================================
+     EMPTY SEARCH
+  ===================================================== */
+
+  emptyContainer: {
+    flex: 1,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    paddingHorizontal: 24,
+    paddingBottom: 80,
+  },
+
+  emptyTitle: {
+    color: "#ffffff",
+
+    fontSize: 21,
+    lineHeight: 27,
+    fontWeight: "800",
+
+    textAlign: "center",
+  },
+
+  emptyDescription: {
+    maxWidth: 420,
+
+    color:
+      "rgba(255,255,255,0.55)",
+
+    fontSize: 14,
+    lineHeight: 20,
+
+    textAlign: "center",
+
+    marginTop: 6,
+  },
+
+  /* =====================================================
+     BOTTOM NAVIGATION
+  ===================================================== */
+
+  bottomNavBar: {
+    position: "absolute",
+
+    left: 0,
+    right: 0,
+    bottom: 0,
+
+    zIndex: 90,
+  },
+
+  desktopBottomNavBar: {
+    left:
+      DESKTOP_SIDEBAR_WIDTH,
+
+    right: 0,
   },
 });
