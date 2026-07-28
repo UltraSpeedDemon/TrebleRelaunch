@@ -61,9 +61,16 @@ export default function Feed({ navigation }) {
   const { width } = useWindowDimensions();
 
   const isWeb = Platform.OS === "web";
-  const isDesktopWeb = isWeb && width >= 900;
-  const isTablet = width >= 700 && width < 1100;
-  const isCompact = width < 700;
+
+  /*
+  * Sidebar stays permanently open for tablets, laptops,
+  * desktops and all web screens 768px or wider.
+  */
+  const isDesktopWeb = isWeb && width >= 768;
+  const isMobileWeb = isWeb && width < 768;
+
+  const isTablet = width >= 768 && width < 1100;
+  const isCompact = width < 768;
 
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -96,6 +103,13 @@ export default function Feed({ navigation }) {
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const isFocused = useIsFocused();
+  useEffect(() => {
+    if (isDesktopWeb) {
+      setMenuOpen(true);
+    } else if (isMobileWeb) {
+      setMenuOpen(false);
+    }
+  }, [isDesktopWeb, isMobileWeb]);
 
   const getItemInfo = useCallback((item) => {
     return item?.item_info || item || {};
@@ -1829,7 +1843,8 @@ export default function Feed({ navigation }) {
       <View
         style={[
           styles.pageHeader,
-          isWeb && styles.webPageHeader,
+          isDesktopWeb && styles.desktopPageHeader,
+          isMobileWeb && styles.mobileWebPageHeader,
         ]}
       >
         <View style={styles.searchContainer}>
@@ -1863,13 +1878,19 @@ export default function Feed({ navigation }) {
       <View
         style={[
           styles.sideMenu,
-          isWeb && styles.sideMenuWeb,
+          isDesktopWeb && styles.desktopSideMenu,
+          isMobileWeb && styles.mobileSideMenu,
         ]}
         pointerEvents="box-none"
       >
         <Sidebar
-          menuOpen={menuOpen}
-          setMenuOpen={setMenuOpen}
+          menuOpen={isDesktopWeb ? true : menuOpen}
+          setMenuOpen={
+            isDesktopWeb
+              ? () => {}
+              : setMenuOpen
+          }
+          isDesktop={isDesktopWeb}
         />
       </View>
 
@@ -1879,7 +1900,8 @@ export default function Feed({ navigation }) {
       <View
         style={[
           styles.content,
-          isWeb && styles.webContent,
+          isDesktopWeb && styles.desktopContent,
+          isMobileWeb && styles.mobileWebContent,
         ]}
       >
         <View
@@ -1913,18 +1935,26 @@ export default function Feed({ navigation }) {
             data={combinedFeed}
             renderItem={renderFeedItem}
             keyExtractor={keyExtractor}
+
+            /*
+            * The FlatList is the dedicated scroll container.
+            * Mouse wheel, trackpad and touch scrolling all work here.
+            */
             style={[
               styles.feedList,
               isWeb && styles.webFeedList,
             ]}
+
             contentContainerStyle={[
               styles.feedContent,
               isWeb && styles.webFeedContent,
               combinedFeed.length === 0 &&
                 styles.emptyFeedContent,
             ]}
+
             ListEmptyComponent={renderEmptyFeed}
             ListFooterComponent={renderListFooter}
+
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -1934,15 +1964,23 @@ export default function Feed({ navigation }) {
                 progressBackgroundColor={colours.foreground}
               />
             }
+
             onEndReached={loadMoreFeed}
-            onEndReachedThreshold={0.4}
+            onEndReachedThreshold={0.35}
+
             showsVerticalScrollIndicator={true}
+
             onViewableItemsChanged={handleViewableItemsChanged}
+
             viewabilityConfig={{
               itemVisiblePercentThreshold: 60,
             }}
+
             keyboardShouldPersistTaps="handled"
-            removeClippedSubviews={Platform.OS !== "web"}
+            keyboardDismissMode="on-drag"
+            nestedScrollEnabled={true}
+            scrollEnabled={true}
+            removeClippedSubviews={false}
           />
         )}
       </View>
@@ -2101,11 +2139,8 @@ const styles = StyleSheet.create({
     backgroundColor: colours.background,
   },
 
-  /*
-   * Keep the app exactly one browser-window high.
-   * The FlatList below becomes the scrolling area.
-   */
   webContainer: {
+    width: "100%",
     height: "100vh",
     minHeight: 0,
     overflow: "hidden",
@@ -2121,16 +2156,34 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 50,
+
     flexDirection: "row",
     alignItems: "center",
+
     paddingTop: 50,
     paddingHorizontal: 20,
   },
 
-  webPageHeader: {
+  desktopPageHeader: {
+    top: 0,
+    left: 280,
+    right: 0,
+
+    height: 105,
+
     paddingTop: 24,
-    paddingLeft: 190,
+    paddingLeft: 32,
     paddingRight: 32,
+
+    backgroundColor: colours.background,
+  },
+
+  mobileWebPageHeader: {
+    left: 0,
+    right: 0,
+
+    paddingTop: 20,
+    paddingHorizontal: 18,
   },
 
   searchContainer: {
@@ -2190,14 +2243,30 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
 
-  sideMenuWeb: {
+  desktopSideMenu: {
+    position: "fixed",
     top: 0,
     left: 0,
     right: undefined,
-    bottom: undefined,
+    bottom: 0,
+
+    width: 280,
     height: "100vh",
+
     zIndex: 100,
+    elevation: 20,
+
+    overflow: "hidden",
   },
+
+  mobileSideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 0,
+    right: undefined,
+    bottom: 0,
+    zIndex: 100,
+},
 
   /* =========================================================
      MAIN CONTENT
@@ -2206,37 +2275,59 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     minHeight: 0,
+
     paddingHorizontal: 16,
     paddingTop: 125,
     paddingBottom: 80,
   },
 
-  webContent: {
-    flex: 1,
-    width: "100%",
-    maxWidth: 1040,
-    alignSelf: "center",
+  desktopContent: {
+    position: "absolute",
+
+    top: 105,
+    left: 280,
+    right: 0,
+    bottom: 0,
+
+    width: "auto",
+    maxWidth: undefined,
+
     minHeight: 0,
 
-    /*
-     * Leaves enough room for the search bar.
-     * The title now appears clearly below it.
-     */
-    paddingTop: 125,
+    paddingTop: 18,
     paddingBottom: 0,
-    paddingLeft: 100,
-    paddingRight: 28,
+    paddingLeft: 32,
+    paddingRight: 32,
+
+    overflow: "hidden",
+  },
+
+  mobileWebContent: {
+    position: "absolute",
+
+    top: 105,
+    left: 0,
+    right: 0,
+    bottom: 0,
+
+    minHeight: 0,
+
+    paddingTop: 14,
+    paddingBottom: 75,
+    paddingHorizontal: 14,
+
+    overflow: "hidden",
   },
 
   titleRow: {
     width: "100%",
     maxWidth: 760,
     alignSelf: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
 
   webTitleRow: {
-    marginBottom: 18,
+    marginBottom: 14,
   },
 
   header: {
@@ -2272,21 +2363,33 @@ const styles = StyleSheet.create({
   feedList: {
     flex: 1,
     minHeight: 0,
+    width: "100%",
   },
 
   webFeedList: {
-    height: "100%",
+    flex: 1,
     minHeight: 0,
+    height: "100%",
+
     overflowY: "auto",
     overflowX: "hidden",
+
+    /*
+    * Improves touchpad and touch scrolling on browsers.
+    */
+    WebkitOverflowScrolling: "touch",
+    overscrollBehaviorY: "contain",
   },
 
   feedContent: {
+    flexGrow: 0,
     paddingBottom: 120,
   },
 
   webFeedContent: {
-    paddingBottom: 60,
+    width: "100%",
+    paddingTop: 2,
+    paddingBottom: 80,
   },
 
   emptyFeedContent: {
