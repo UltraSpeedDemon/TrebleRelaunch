@@ -320,7 +320,8 @@ export default function Search({
           item?.name ||
           "",
 
-        artist,
+        artist:
+  artistName,
 
         artistName,
 
@@ -1370,7 +1371,9 @@ export default function Search({
                                     item.title
                                   }
                                   artist={
-                                    item.artist
+                                    item.artistName ||
+                                    item.artist?.name ||
+                                    ""
                                   }
                                   album={
                                     item.albumName ||
@@ -1430,7 +1433,9 @@ export default function Search({
                                     item.title
                                   }
                                   artist={
-                                    item.artist
+                                    item.artistName ||
+                                    item.artist?.name ||
+                                    ""
                                   }
                                   onPressCard={() =>
                                     navigation.navigate(

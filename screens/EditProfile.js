@@ -55,16 +55,22 @@ const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const BOTTOM_NAV_HEIGHT = 72;
 const MAX_CONTENT_WIDTH = 760;
-
 const AVATAR_SIZE = 512;
 
 const FALLBACK_AVATAR =
   require("../images/avatarIcon.png");
 
+function wait(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 export default function EditProfile({
   navigation,
 }) {
-  const { width } = useWindowDimensions();
+  const { width } =
+    useWindowDimensions();
 
   const isWeb =
     Platform.OS === "web";
@@ -80,40 +86,66 @@ export default function EditProfile({
   const isCompact =
     width < 600;
 
-  const [username, setUsername] =
-    useState("");
+  const [
+    username,
+    setUsername,
+  ] = useState("");
 
   const [
     originalUsername,
     setOriginalUsername,
   ] = useState("");
 
-  const [email, setEmail] =
-    useState("");
+  const [
+    email,
+    setEmail,
+  ] = useState("");
 
-  const [avatar, setAvatar] =
-    useState(null);
+  const [
+    avatar,
+    setAvatar,
+  ] = useState(null);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const [saving, setSaving] =
-    useState(false);
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
 
   const [
     uploadingAvatar,
     setUploadingAvatar,
   ] = useState(false);
 
-  const [isPublic, setIsPublic] =
-    useState(true);
+  const [
+    successMessage,
+    setSuccessMessage,
+  ] = useState("");
 
-  const [menuOpen, setMenuOpen] =
-    useState(false);
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
 
-  /*
-   * Keep the sidebar permanently open on desktop.
-   */
+  const [
+    isPublic,
+    setIsPublic,
+  ] = useState(true);
+
+  const [
+    originalIsPublic,
+    setOriginalIsPublic,
+  ] = useState(true);
+
+  const [
+    menuOpen,
+    setMenuOpen,
+  ] = useState(false);
+
   useEffect(() => {
     if (isDesktopWeb) {
       setMenuOpen(true);
@@ -122,9 +154,6 @@ export default function EditProfile({
     }
   }, [isDesktopWeb]);
 
-  /*
-   * Safely parse backend responses.
-   */
   const parseResponse = useCallback(
     async (
       response,
@@ -156,6 +185,7 @@ export default function EditProfile({
       if (!response.ok) {
         throw new Error(
           data?.error ||
+            data?.message ||
             `${fallbackMessage} HTTP ${response.status}`
         );
       }
@@ -165,9 +195,28 @@ export default function EditProfile({
     []
   );
 
-  /*
-   * Load the current profile.
-   */
+  const refreshEntirePage =
+    useCallback(async () => {
+      await wait(1200);
+
+      if (
+        Platform.OS === "web" &&
+        typeof window !== "undefined"
+      ) {
+        window.location.reload();
+        return;
+      }
+
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: "Profile",
+          },
+        ],
+      });
+    }, [navigation]);
+
   const fetchUserData =
     useCallback(async () => {
       const currentUser =
@@ -176,15 +225,21 @@ export default function EditProfile({
       if (!currentUser?.uid) {
         setLoading(false);
 
-        navigation.navigate(
-          "Home"
-        );
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: "Home",
+            },
+          ],
+        });
 
         return;
       }
 
       try {
         setLoading(true);
+        setErrorMessage("");
 
         const response =
           await getUser(
@@ -221,6 +276,12 @@ export default function EditProfile({
         const publicValue =
           userData?.isPublic;
 
+        const finalIsPublic =
+          publicValue === true ||
+          publicValue === "true" ||
+          publicValue === 1 ||
+          publicValue === undefined;
+
         setUsername(
           finalUsername
         );
@@ -229,17 +290,20 @@ export default function EditProfile({
           finalUsername
         );
 
-        setEmail(finalEmail);
+        setEmail(
+          finalEmail
+        );
 
-        setAvatar(finalAvatar);
+        setAvatar(
+          finalAvatar
+        );
 
         setIsPublic(
-          publicValue === true ||
-            publicValue ===
-              "true" ||
-            publicValue === 1 ||
-            publicValue ===
-              undefined
+          finalIsPublic
+        );
+
+        setOriginalIsPublic(
+          finalIsPublic
         );
       } catch (error) {
         console.error(
@@ -247,11 +311,22 @@ export default function EditProfile({
           error
         );
 
-        Alert.alert(
-          "Unable to load profile",
+        const message =
           error?.message ||
-            "Please try again."
+          "Please try again.";
+
+        setErrorMessage(
+          message
         );
+
+        if (
+          Platform.OS !== "web"
+        ) {
+          Alert.alert(
+            "Unable to load profile",
+            message
+          );
+        }
       } finally {
         setLoading(false);
       }
@@ -266,9 +341,6 @@ export default function EditProfile({
     }, [fetchUserData])
   );
 
-  /*
-   * Convert the selected image to a Blob.
-   */
   const createImageBlob =
     useCallback(async (uri) => {
       if (!uri) {
@@ -289,9 +361,6 @@ export default function EditProfile({
       return response.blob();
     }, []);
 
-  /*
-   * Resize and crop the avatar to a square.
-   */
   const prepareAvatar =
     useCallback(async (asset) => {
       if (!asset?.uri) {
@@ -363,155 +432,150 @@ export default function EditProfile({
       );
     }, []);
 
-  /*
-   * Upload an avatar to Firebase Storage and update OrientDB.
-   */
   const uploadAvatarToFirebase =
-  useCallback(
-    async (asset) => {
-      const currentUser =
-        auth.currentUser;
+    useCallback(
+      async (asset) => {
+        const currentUser =
+          auth.currentUser;
 
-      if (!currentUser?.uid) {
-        throw new Error(
-          "No user is logged in."
-        );
-      }
-
-      try {
-        setUploadingAvatar(true);
-
-        const preparedImage =
-          await prepareAvatar(asset);
-
-        const blob =
-          await createImageBlob(
-            preparedImage.uri
+        if (!currentUser?.uid) {
+          setErrorMessage(
+            "No user is currently signed in."
           );
 
-        const storageReference =
-          ref(
-            storage,
-            `avatars/${currentUser.uid}.jpg`
-          );
+          return;
+        }
 
-        await uploadBytes(
-          storageReference,
-          blob,
-          {
-            contentType:
-              "image/jpeg",
-            cacheControl:
-              "public,max-age=3600",
-          }
-        );
+        try {
+          setUploadingAvatar(true);
+          setSuccessMessage("");
+          setErrorMessage("");
 
-        const downloadURL =
-          await getDownloadURL(
-            storageReference
-          );
+          const preparedImage =
+            await prepareAvatar(
+              asset
+            );
 
-        /*
-         * Add a version parameter so browsers do not
-         * continue showing the old cached avatar.
-         */
-        const avatarURL =
-          `${downloadURL}${
-            downloadURL.includes("?")
-              ? "&"
-              : "?"
-          }updated=${Date.now()}`;
+          const blob =
+            await createImageBlob(
+              preparedImage.uri
+            );
 
-        /*
-         * Save the avatar in the Treble backend.
-         */
-        const updateResponse =
-          await updateUser(
-            currentUser.uid,
+          const storageReference =
+            ref(
+              storage,
+              `avatars/${currentUser.uid}.jpg`
+            );
+
+          await uploadBytes(
+            storageReference,
+            blob,
             {
-              avatar: avatarURL,
+              contentType:
+                "image/jpeg",
+
+              cacheControl:
+                "public,max-age=3600",
             }
           );
 
-        await parseResponse(
-          updateResponse,
-          "Unable to save the avatar."
-        );
+          const downloadURL =
+            await getDownloadURL(
+              storageReference
+            );
 
-        /*
-         * Also save it to Firebase Authentication.
-         */
-        await updateProfile(
-          currentUser,
-          {
-            photoURL: avatarURL,
-          }
-        );
+          const separator =
+            downloadURL.includes("?")
+              ? "&"
+              : "?";
 
-        /*
-         * Update the picture immediately on this page.
-         */
-        setAvatar(avatarURL);
+          const avatarURL =
+            `${downloadURL}${separator}updated=${Date.now()}`;
 
-        if (
-          Platform.OS === "web"
-        ) {
-          window.alert(
-            "Your profile picture was updated successfully."
+          const updateResponse =
+            await updateUser(
+              currentUser.uid,
+              {
+                avatar:
+                  avatarURL,
+              }
+            );
+
+          await parseResponse(
+            updateResponse,
+            "Unable to save the avatar."
           );
-        } else {
-          Alert.alert(
-            "Avatar updated",
-            "Your profile picture was updated successfully."
+
+          await updateProfile(
+            currentUser,
+            {
+              photoURL:
+                avatarURL,
+            }
           );
-        }
-      } catch (error) {
-        console.error(
-          "[EditProfile] Avatar upload error:",
-          error
-        );
 
-        const message =
-          error?.message ||
-          "Please try another image.";
+          setAvatar(
+            avatarURL
+          );
 
-        if (
-          Platform.OS === "web"
-        ) {
-          window.alert(
+          setSuccessMessage(
+            "Your profile picture was updated successfully. Refreshing your profile..."
+          );
+
+          await refreshEntirePage();
+        } catch (error) {
+          console.error(
+            "[EditProfile] Avatar upload error:",
+            error
+          );
+
+          const message =
+            error?.message ||
+            "Please try another image.";
+
+          setErrorMessage(
             `Unable to update avatar: ${message}`
           );
-        } else {
-          Alert.alert(
-            "Unable to update avatar",
-            message
-          );
+
+          if (
+            Platform.OS !== "web"
+          ) {
+            Alert.alert(
+              "Unable to update avatar",
+              message
+            );
+          }
+        } finally {
+          setUploadingAvatar(false);
         }
-      } finally {
-        setUploadingAvatar(false);
-      }
-    },
-    [
-      createImageBlob,
-      parseResponse,
-      prepareAvatar,
-    ]
-  );
-  /*
-   * Open the image picker.
-   */
+      },
+      [
+        createImageBlob,
+        parseResponse,
+        prepareAvatar,
+        refreshEntirePage,
+      ]
+    );
+
   const handlePickAvatar =
     useCallback(async () => {
-      if (uploadingAvatar) {
+      if (
+        uploadingAvatar ||
+        saving
+      ) {
         return;
       }
 
       try {
+        setSuccessMessage("");
+        setErrorMessage("");
+
         if (
           Platform.OS !== "web"
         ) {
           const permissionResult =
-            await ImagePicker.requestMediaLibraryPermissionsAsync();
+            await ImagePicker
+              .requestMediaLibraryPermissionsAsync();
 
           if (
             !permissionResult.granted
@@ -526,20 +590,22 @@ export default function EditProfile({
         }
 
         const result =
-          await ImagePicker.launchImageLibraryAsync(
-            {
+          await ImagePicker
+            .launchImageLibraryAsync({
               mediaTypes:
                 ImagePicker
                   .MediaTypeOptions
                   .Images,
 
-              allowsEditing: true,
+              allowsEditing:
+                true,
 
-              aspect: [1, 1],
+              aspect:
+                [1, 1],
 
-              quality: 0.9,
-            }
-          );
+              quality:
+                0.9,
+            });
 
         if (
           result.canceled ||
@@ -557,33 +623,37 @@ export default function EditProfile({
           error
         );
 
-        Alert.alert(
-          "Unable to select image",
+        const message =
           error?.message ||
-            "Please try again."
+          "Please try again.";
+
+        setErrorMessage(
+          `Unable to select image: ${message}`
         );
+
+        if (
+          Platform.OS !== "web"
+        ) {
+          Alert.alert(
+            "Unable to select image",
+            message
+          );
+        }
       }
     }, [
+      saving,
       uploadAvatarToFirebase,
       uploadingAvatar,
     ]);
 
-  /*
-   * Save username and privacy settings.
-   */
   const handleSave =
     useCallback(async () => {
       const currentUser =
         auth.currentUser;
 
       if (!currentUser?.uid) {
-        Alert.alert(
-          "Not signed in",
-          "Please sign in again."
-        );
-
-        navigation.navigate(
-          "Home"
+        setErrorMessage(
+          "You are not signed in. Please sign in again."
         );
 
         return;
@@ -592,9 +662,11 @@ export default function EditProfile({
       const newUsername =
         username.trim();
 
+      setSuccessMessage("");
+      setErrorMessage("");
+
       if (!newUsername) {
-        Alert.alert(
-          "Username required",
+        setErrorMessage(
           "Please enter a username."
         );
 
@@ -604,8 +676,7 @@ export default function EditProfile({
       if (
         newUsername.length < 3
       ) {
-        Alert.alert(
-          "Username too short",
+        setErrorMessage(
           "Your username must contain at least three characters."
         );
 
@@ -615,8 +686,7 @@ export default function EditProfile({
       if (
         newUsername.length > 30
       ) {
-        Alert.alert(
-          "Username too long",
+        setErrorMessage(
           "Your username must contain 30 characters or fewer."
         );
 
@@ -628,8 +698,7 @@ export default function EditProfile({
           newUsername
         )
       ) {
-        Alert.alert(
-          "Invalid username",
+        setErrorMessage(
           "Use only letters, numbers, periods, underscores, or hyphens."
         );
 
@@ -687,45 +756,51 @@ export default function EditProfile({
           newUsername
         );
 
-        Alert.alert(
-          "Profile updated",
-          "Your profile was updated successfully.",
-          [
-            {
-              text: "OK",
-              onPress: () =>
-                navigation.navigate(
-                  "Profile"
-                ),
-            },
-          ]
+        setOriginalIsPublic(
+          Boolean(isPublic)
         );
+
+        setSuccessMessage(
+          "Your profile was updated successfully. Refreshing your profile..."
+        );
+
+        await refreshEntirePage();
       } catch (error) {
         console.error(
           "[EditProfile] Save error:",
           error
         );
 
-        Alert.alert(
-          "Unable to save profile",
+        const message =
           error?.message ||
-            "Please try again."
+          "Please try again.";
+
+        setErrorMessage(
+          `Unable to save profile: ${message}`
         );
+
+        if (
+          Platform.OS !== "web"
+        ) {
+          Alert.alert(
+            "Unable to save profile",
+            message
+          );
+        }
       } finally {
         setSaving(false);
       }
     }, [
       avatar,
       isPublic,
-      navigation,
       parseResponse,
+      refreshEntirePage,
       username,
     ]);
 
-  const avatarSource =
+  const avatarIsValid =
     avatar &&
-    typeof avatar ===
-      "string" &&
+    typeof avatar === "string" &&
     (
       avatar.startsWith(
         "data:"
@@ -736,23 +811,43 @@ export default function EditProfile({
       avatar.startsWith(
         "https://"
       )
-    )
+    );
+
+  const avatarSource =
+    avatarIsValid
       ? {
           uri: avatar,
         }
       : FALLBACK_AVATAR;
 
-    const hasChanges =
+  const hasUsernameChanges =
     username.trim() !==
     originalUsername.trim();
 
+  const hasPrivacyChanges =
+    Boolean(isPublic) !==
+    Boolean(originalIsPublic);
+
+  const hasChanges =
+    hasUsernameChanges ||
+    hasPrivacyChanges;
+
+  const pageBusy =
+    saving ||
+    uploadingAvatar;
+
   if (loading) {
     return (
-      <View style={styles.loader}>
+      <View
+        style={
+          styles.loader
+        }
+      >
         <ActivityIndicator
           size="large"
           color={
-            colours.lightblue
+            colours.lightblue ||
+            "#54b7ee"
           }
         />
 
@@ -771,18 +866,18 @@ export default function EditProfile({
     <View
       style={[
         styles.container,
+
         isWeb &&
           styles.webContainer,
       ]}
     >
-      {/* =====================================================
-          SIDEBAR
-      ===================================================== */}
       <View
         style={[
           styles.sideMenu,
+
           isDesktopWeb &&
             styles.desktopSideMenu,
+
           isMobileWeb &&
             styles.mobileSideMenu,
         ]}
@@ -805,14 +900,13 @@ export default function EditProfile({
         />
       </View>
 
-      {/* =====================================================
-          PAGE CONTENT
-      ===================================================== */}
       <View
         style={[
           styles.pageContent,
+
           isDesktopWeb &&
             styles.desktopPageContent,
+
           isMobileWeb &&
             styles.mobilePageContent,
         ]}
@@ -820,11 +914,13 @@ export default function EditProfile({
         <ScrollView
           style={[
             styles.profileScroll,
+
             isWeb &&
               styles.webProfileScroll,
           ]}
           contentContainerStyle={[
             styles.scrollContent,
+
             isDesktopWeb &&
               styles.desktopScrollContent,
           ]}
@@ -833,7 +929,6 @@ export default function EditProfile({
           }
           keyboardShouldPersistTaps="handled"
         >
-          {/* PAGE TITLE */}
           <View
             style={
               styles.pageHeader
@@ -852,14 +947,90 @@ export default function EditProfile({
                 styles.pageDescription
               }
             >
-              Update your account details, profile picture, and privacy settings.
+              Update your username, profile picture, and privacy settings.
             </Text>
           </View>
 
-          {/* AVATAR CARD */}
+          {successMessage ? (
+            <View
+              style={
+                styles.successBanner
+              }
+            >
+              <Text
+                style={
+                  styles.successIcon
+                }
+              >
+                ✓
+              </Text>
+
+              <View
+                style={
+                  styles.messageTextContainer
+                }
+              >
+                <Text
+                  style={
+                    styles.successTitle
+                  }
+                >
+                  Successfully saved
+                </Text>
+
+                <Text
+                  style={
+                    styles.successText
+                  }
+                >
+                  {successMessage}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          {errorMessage ? (
+            <View
+              style={
+                styles.errorBanner
+              }
+            >
+              <Text
+                style={
+                  styles.errorIcon
+                }
+              >
+                !
+              </Text>
+
+              <View
+                style={
+                  styles.messageTextContainer
+                }
+              >
+                <Text
+                  style={
+                    styles.errorTitle
+                  }
+                >
+                  Something went wrong
+                </Text>
+
+                <Text
+                  style={
+                    styles.errorText
+                  }
+                >
+                  {errorMessage}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
           <View
             style={[
               styles.profileHeader,
+
               isCompact &&
                 styles.compactProfileHeader,
             ]}
@@ -872,9 +1043,11 @@ export default function EditProfile({
                 handlePickAvatar
               }
               disabled={
-                uploadingAvatar
+                pageBusy
               }
-              activeOpacity={0.8}
+              activeOpacity={
+                0.8
+              }
             >
               <Image
                 key={
@@ -882,8 +1055,12 @@ export default function EditProfile({
                     ? avatar
                     : "fallback-avatar"
                 }
-                source={avatarSource}
-                style={styles.avatar}
+                source={
+                  avatarSource
+                }
+                style={
+                  styles.avatar
+                }
                 onError={(event) => {
                   console.error(
                     "[EditProfile] Avatar display error:",
@@ -932,36 +1109,41 @@ export default function EditProfile({
                   styles.editInfoText
                 }
               >
-                Select a square image. It will be cropped and resized automatically.
+                Select an image. It will be cropped and resized automatically.
               </Text>
 
               <TouchableOpacity
                 style={[
                   styles.changePhotoButton,
-                  uploadingAvatar &&
+
+                  pageBusy &&
                     styles.disabledButton,
                 ]}
                 onPress={
                   handlePickAvatar
                 }
                 disabled={
-                  uploadingAvatar
+                  pageBusy
                 }
               >
-                <Text
-                  style={
-                    styles.changePhotoButtonText
-                  }
-                >
-                  {uploadingAvatar
-                    ? "Uploading..."
-                    : "Change Photo"}
-                </Text>
+                {uploadingAvatar ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.changePhotoButtonText
+                    }
+                  >
+                    Change Photo
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* ACCOUNT DETAILS */}
           <View
             style={
               styles.formCard
@@ -997,17 +1179,33 @@ export default function EditProfile({
               </Text>
 
               <TextInput
-                style={styles.input}
-                value={username}
-                onChangeText={setUsername}
+                style={
+                  styles.input
+                }
+                value={
+                  username
+                }
+                onChangeText={(value) => {
+                  setUsername(
+                    value
+                  );
+
+                  setSuccessMessage("");
+                  setErrorMessage("");
+                }}
                 placeholder="Enter your username"
                 placeholderTextColor="rgba(255,255,255,0.35)"
                 autoCapitalize="words"
                 autoCorrect={false}
                 spellCheck={false}
                 maxLength={30}
-                editable={!saving}
+                editable={
+                  !pageBusy
+                }
                 returnKeyType="done"
+                onSubmitEditing={
+                  handleSave
+                }
               />
 
               <Text
@@ -1037,8 +1235,12 @@ export default function EditProfile({
                   styles.input,
                   styles.disabledInput,
                 ]}
-                value={email}
-                editable={false}
+                value={
+                  email
+                }
+                editable={
+                  false
+                }
                 selectTextOnFocus={
                   false
                 }
@@ -1054,7 +1256,6 @@ export default function EditProfile({
             </View>
           </View>
 
-          {/* PRIVACY */}
           <View
             style={
               styles.privacyCard
@@ -1114,16 +1315,27 @@ export default function EditProfile({
               </View>
 
               <Switch
-                value={isPublic}
-                onValueChange={
-                  setIsPublic
+                value={
+                  isPublic
                 }
-                disabled={saving}
+                onValueChange={(value) => {
+                  setIsPublic(
+                    value
+                  );
+
+                  setSuccessMessage("");
+                  setErrorMessage("");
+                }}
+                disabled={
+                  pageBusy
+                }
                 trackColor={{
                   false:
                     "rgba(255,255,255,0.18)",
+
                   true:
-                    colours.lightblue,
+                    colours.lightblue ||
+                    "#54b7ee",
                 }}
                 thumbColor="#ffffff"
                 ios_backgroundColor="rgba(255,255,255,0.18)"
@@ -1131,29 +1343,38 @@ export default function EditProfile({
             </View>
           </View>
 
-          {/* SAVE BUTTON */}
           <TouchableOpacity
             style={[
               styles.saveButton,
-              (
-                saving ||
-                uploadingAvatar
-              ) &&
+
+              pageBusy &&
                 styles.disabledButton,
             ]}
             onPress={
               handleSave
             }
             disabled={
-              saving ||
-              uploadingAvatar
+              pageBusy
+            }
+            activeOpacity={
+              0.8
             }
           >
             {saving ? (
-              <ActivityIndicator
-                size="small"
-                color="#ffffff"
-              />
+              <>
+                <ActivityIndicator
+                  size="small"
+                  color="#ffffff"
+                />
+
+                <Text
+                  style={
+                    styles.savingButtonText
+                  }
+                >
+                  Saving...
+                </Text>
+              </>
             ) : (
               <Text
                 style={
@@ -1165,24 +1386,23 @@ export default function EditProfile({
             )}
           </TouchableOpacity>
 
-          {hasChanges ? (
+          {hasChanges &&
+          !successMessage ? (
             <Text
               style={
                 styles.unsavedText
               }
             >
-              You have unsaved username changes.
+              You have unsaved profile changes.
             </Text>
           ) : null}
         </ScrollView>
       </View>
 
-      {/* =====================================================
-          BOTTOM NAVIGATION
-      ===================================================== */}
       <View
         style={[
           styles.bottomNavBar,
+
           isDesktopWeb &&
             styles.desktopBottomNavBar,
         ]}
@@ -1193,579 +1413,676 @@ export default function EditProfile({
   );
 }
 
-const styles = StyleSheet.create({
-  /* =====================================================
-     PAGE
-  ===================================================== */
-
-  container: {
-    flex: 1,
-    minHeight: 0,
-
-    backgroundColor:
-      colours.background,
-  },
-
-  webContainer: {
-    width: "100%",
-    height: "100vh",
-
-    minHeight: 0,
-
-    overflow: "hidden",
-  },
-
-  loader: {
-    flex: 1,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    backgroundColor:
-      colours.background,
-  },
-
-  loadingText: {
-    color:
-      "rgba(255,255,255,0.65)",
-
-    fontSize: 14,
-
-    marginTop: 12,
-  },
-
-  /* =====================================================
-     SIDEBAR
-  ===================================================== */
-
-  sideMenu: {
-    position: "absolute",
-
-    top: 40,
-    left: 0,
-    bottom: 0,
-
-    zIndex: 100,
-    elevation: 20,
-  },
-
-  desktopSideMenu: {
-    position: "fixed",
-
-    top: 0,
-    left: 0,
-    right: undefined,
-    bottom: 0,
-
-    width:
-      DESKTOP_SIDEBAR_WIDTH,
-
-    height: "100vh",
-
-    overflow: "hidden",
-
-    zIndex: 100,
-    elevation: 20,
-  },
-
-  mobileSideMenu: {
-    position: "absolute",
-
-    top: 40,
-    left: 0,
-    right: undefined,
-    bottom: 0,
-
-    zIndex: 100,
-  },
-
-  /* =====================================================
-     CONTENT
-  ===================================================== */
-
-  pageContent: {
-    flex: 1,
-    minHeight: 0,
-
-    overflow: "hidden",
-  },
-
-  desktopPageContent: {
-    position: "absolute",
-
-    top: 0,
-    left:
-      DESKTOP_SIDEBAR_WIDTH,
-    right: 0,
-    bottom:
-      BOTTOM_NAV_HEIGHT,
-
-    minHeight: 0,
-
-    paddingTop: 24,
-    paddingHorizontal: 28,
-
-    overflow: "hidden",
-  },
-
-  mobilePageContent: {
-    position: "absolute",
-
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom:
-      BOTTOM_NAV_HEIGHT,
-
-    minHeight: 0,
-
-    paddingTop: 72,
-    paddingHorizontal: 12,
-
-    overflow: "hidden",
-  },
-
-  profileScroll: {
-    flex: 1,
-    minHeight: 0,
-
-    width: "100%",
-  },
-
-  webProfileScroll: {
-    height: "100%",
-
-    overflowY: "auto",
-    overflowX: "hidden",
-
-    WebkitOverflowScrolling:
-      "touch",
-
-    overscrollBehaviorY:
-      "contain",
-
-    scrollbarWidth: "none",
-    msOverflowStyle: "none",
-  },
-
-  scrollContent: {
-    width: "100%",
-
-    paddingBottom: 45,
-  },
-
-  desktopScrollContent: {
-    width: "100%",
-    maxWidth:
-      MAX_CONTENT_WIDTH,
-
-    alignSelf: "center",
-  },
-
-  /* =====================================================
-     PAGE HEADER
-  ===================================================== */
-
-  pageHeader: {
-    width: "100%",
-
-    marginBottom: 20,
-  },
-
-  pageTitle: {
-    color:
-      colours.lightblue,
-
-    fontSize: 32,
-    lineHeight: 39,
-    fontWeight: "800",
-  },
-
-  pageDescription: {
-    color:
-      "rgba(255,255,255,0.58)",
-
-    fontSize: 14,
-    lineHeight: 20,
-
-    marginTop: 3,
-  },
-
-  /* =====================================================
-     AVATAR
-  ===================================================== */
-
-  profileHeader: {
-    width: "100%",
-
-    flexDirection: "row",
-    alignItems: "center",
-
-    padding: 20,
-    marginBottom: 16,
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.08)",
-
-    borderRadius: 18,
-
-    backgroundColor:
-      colours.darkblue,
-
-    shadowColor: "#000000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      minHeight: 0,
+
+      backgroundColor:
+        colours.background ||
+        colours.bluegrey ||
+        "#111b29",
     },
-    shadowOpacity: 0.14,
-    shadowRadius: 9,
 
-    elevation: 3,
-  },
+    webContainer: {
+      width: "100%",
+      height: "100vh",
 
-  compactProfileHeader: {
-    flexDirection: "column",
-    alignItems: "flex-start",
-  },
+      minHeight: 0,
 
-  avatarButton: {
-    position: "relative",
+      overflow: "hidden",
+    },
 
-    width: 112,
-    height: 112,
+    loader: {
+      flex: 1,
 
-    marginRight: 20,
+      alignItems: "center",
+      justifyContent: "center",
 
-    borderRadius: 56,
+      backgroundColor:
+        colours.background ||
+        colours.bluegrey ||
+        "#111b29",
+    },
 
-    overflow: "hidden",
+    loadingText: {
+      color:
+        "rgba(255,255,255,0.7)",
 
-    backgroundColor:
-      "rgba(255,255,255,0.08)",
-  },
+      fontSize: 14,
 
-  avatar: {
-    width: "100%",
-    height: "100%",
+      marginTop: 12,
+    },
 
-    borderRadius: 56,
+    sideMenu: {
+      position: "absolute",
 
-    resizeMode: "cover",
-  },
+      top: 40,
+      left: 0,
+      bottom: 0,
 
-  avatarOverlay: {
-    position: "absolute",
+      zIndex: 100,
+      elevation: 20,
+    },
 
-    left: 0,
-    right: 0,
-    bottom: 0,
+    desktopSideMenu: {
+      position: "fixed",
 
-    height: 33,
+      top: 0,
+      left: 0,
+      right: undefined,
+      bottom: 0,
 
-    alignItems: "center",
-    justifyContent: "center",
+      width:
+        DESKTOP_SIDEBAR_WIDTH,
 
-    backgroundColor:
-      "rgba(0,0,0,0.65)",
-  },
+      height: "100vh",
 
-  avatarOverlayText: {
-    color: "#ffffff",
+      overflow: "hidden",
 
-    fontSize: 12,
-    fontWeight: "800",
-  },
+      zIndex: 100,
+      elevation: 20,
+    },
 
-  headerInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
+    mobileSideMenu: {
+      position: "absolute",
 
-  profileHeading: {
-    color: "#ffffff",
+      top: 40,
+      left: 0,
+      right: undefined,
+      bottom: 0,
 
-    fontSize: 19,
-    lineHeight: 25,
-    fontWeight: "800",
-  },
+      zIndex: 100,
+    },
 
-  editInfoText: {
-    color:
-      "rgba(255,255,255,0.52)",
+    pageContent: {
+      flex: 1,
+      minHeight: 0,
 
-    fontSize: 13,
-    lineHeight: 19,
+      overflow: "hidden",
+    },
 
-    marginTop: 4,
-  },
+    desktopPageContent: {
+      position: "absolute",
 
-  changePhotoButton: {
-    alignSelf: "flex-start",
+      top: 0,
 
-    minHeight: 40,
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
 
-    alignItems: "center",
-    justifyContent: "center",
+      right: 0,
 
-    paddingHorizontal: 17,
+      bottom:
+        BOTTOM_NAV_HEIGHT,
 
-    marginTop: 13,
+      minHeight: 0,
 
-    borderRadius: 20,
+      paddingTop: 24,
+      paddingHorizontal: 28,
 
-    backgroundColor:
-      "rgba(255,255,255,0.09)",
-  },
+      overflow: "hidden",
+    },
 
-  changePhotoButtonText: {
-    color: "#ffffff",
+    mobilePageContent: {
+      position: "absolute",
 
-    fontSize: 13,
-    fontWeight: "800",
-  },
+      top: 0,
+      left: 0,
+      right: 0,
 
-  /* =====================================================
-     FORM
-  ===================================================== */
+      bottom:
+        BOTTOM_NAV_HEIGHT,
 
-  formCard: {
-    width: "100%",
+      minHeight: 0,
 
-    padding: 20,
-    marginBottom: 16,
+      paddingTop: 72,
+      paddingHorizontal: 12,
 
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.08)",
+      overflow: "hidden",
+    },
 
-    borderRadius: 18,
+    profileScroll: {
+      flex: 1,
+      minHeight: 0,
 
-    backgroundColor:
-      colours.darkblue,
-  },
+      width: "100%",
+    },
 
-  cardTitle: {
-    color: "#ffffff",
+    webProfileScroll: {
+      height: "100%",
 
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: "800",
-  },
+      overflowY: "auto",
+      overflowX: "hidden",
 
-  cardDescription: {
-    color:
-      "rgba(255,255,255,0.5)",
+      WebkitOverflowScrolling:
+        "touch",
 
-    fontSize: 13,
-    lineHeight: 19,
+      overscrollBehaviorY:
+        "contain",
 
-    marginTop: 3,
-    marginBottom: 18,
-  },
+      scrollbarWidth: "none",
+      msOverflowStyle: "none",
+    },
 
-  inputSection: {
-    width: "100%",
+    scrollContent: {
+      width: "100%",
 
-    marginBottom: 18,
-  },
+      paddingBottom: 45,
+    },
 
-  label: {
-    color:
-      colours.lightblue,
+    desktopScrollContent: {
+      width: "100%",
 
-    fontSize: 14,
-    fontWeight: "800",
+      maxWidth:
+        MAX_CONTENT_WIDTH,
 
-    marginBottom: 7,
-  },
+      alignSelf: "center",
+    },
 
-  input: {
-    width: "100%",
-    minHeight: 48,
+    pageHeader: {
+      width: "100%",
 
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+      marginBottom: 20,
+    },
 
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.1)",
+    pageTitle: {
+      color:
+        colours.lightblue ||
+        "#54b7ee",
 
-    borderRadius: 11,
+      fontSize: 32,
+      lineHeight: 39,
+      fontWeight: "800",
+    },
 
-    color: "#ffffff",
+    pageDescription: {
+      color:
+        "rgba(255,255,255,0.6)",
 
-    fontSize: 15,
+      fontSize: 14,
+      lineHeight: 20,
 
-    backgroundColor:
-      "rgba(255,255,255,0.045)",
-  },
+      marginTop: 3,
+    },
 
-  disabledInput: {
-    color:
-      "rgba(255,255,255,0.45)",
+    successBanner: {
+      width: "100%",
 
-    backgroundColor:
-      "rgba(255,255,255,0.025)",
-  },
+      flexDirection: "row",
+      alignItems: "center",
 
-  inputHelper: {
-    color:
-      "rgba(255,255,255,0.42)",
+      padding: 16,
+      marginBottom: 18,
 
-    fontSize: 12,
-    lineHeight: 17,
+      borderWidth: 1,
+      borderColor:
+        "rgba(65,210,125,0.55)",
 
-    marginTop: 6,
-  },
+      borderRadius: 14,
 
-  /* =====================================================
-     PRIVACY
-  ===================================================== */
+      backgroundColor:
+        "rgba(40,190,105,0.14)",
+    },
 
-  privacyCard: {
-    width: "100%",
+    successIcon: {
+      width: 34,
+      height: 34,
 
-    padding: 20,
-    marginBottom: 16,
+      color: "#ffffff",
 
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.08)",
+      fontSize: 20,
+      lineHeight: 32,
+      fontWeight: "900",
 
-    borderRadius: 18,
+      textAlign: "center",
 
-    backgroundColor:
-      colours.darkblue,
-  },
+      marginRight: 12,
 
-  privacyTextContainer: {
-    width: "100%",
+      borderRadius: 17,
 
-    marginBottom: 17,
-  },
+      backgroundColor:
+        "#27ae60",
+    },
 
-  privacyTitle: {
-    color: "#ffffff",
+    successTitle: {
+      color: "#7ff0aa",
 
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: "800",
-  },
+      fontSize: 15,
+      fontWeight: "800",
+    },
 
-  privacySubtitle: {
-    color:
-      "rgba(255,255,255,0.5)",
+    successText: {
+      color:
+        "rgba(255,255,255,0.78)",
 
-    fontSize: 13,
-    lineHeight: 19,
+      fontSize: 13,
+      lineHeight: 19,
 
-    marginTop: 3,
-  },
+      marginTop: 2,
+    },
 
-  privacyRow: {
-    width: "100%",
+    errorBanner: {
+      width: "100%",
 
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent:
-      "space-between",
+      flexDirection: "row",
+      alignItems: "center",
 
-    padding: 14,
+      padding: 16,
+      marginBottom: 18,
 
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.07)",
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,85,95,0.55)",
 
-    borderRadius: 12,
+      borderRadius: 14,
 
-    backgroundColor:
-      "rgba(255,255,255,0.035)",
-  },
+      backgroundColor:
+        "rgba(255,65,75,0.12)",
+    },
 
-  privacyStatusContainer: {
-    flex: 1,
-    minWidth: 0,
+    errorIcon: {
+      width: 34,
+      height: 34,
 
-    paddingRight: 18,
-  },
+      color: "#ffffff",
 
-  privacyLabel: {
-    color: "#ffffff",
+      fontSize: 21,
+      lineHeight: 32,
+      fontWeight: "900",
 
-    fontSize: 15,
-    fontWeight: "800",
-  },
+      textAlign: "center",
 
-  privacyStatusDescription: {
-    color:
-      "rgba(255,255,255,0.46)",
+      marginRight: 12,
 
-    fontSize: 12,
-    lineHeight: 17,
+      borderRadius: 17,
 
-    marginTop: 2,
-  },
+      backgroundColor:
+        "#e74c3c",
+    },
 
-  /* =====================================================
-     SAVE
-  ===================================================== */
+    errorTitle: {
+      color: "#ff8e96",
 
-  saveButton: {
-    width: "100%",
-    minHeight: 50,
+      fontSize: 15,
+      fontWeight: "800",
+    },
 
-    alignItems: "center",
-    justifyContent: "center",
+    errorText: {
+      color:
+        "rgba(255,255,255,0.78)",
 
-    paddingHorizontal: 20,
+      fontSize: 13,
+      lineHeight: 19,
 
-    borderRadius: 25,
+      marginTop: 2,
+    },
 
-    backgroundColor:
-      colours.lightblue,
-  },
+    messageTextContainer: {
+      flex: 1,
+      minWidth: 0,
+    },
 
-  saveButtonText: {
-    color: "#ffffff",
+    profileHeader: {
+      width: "100%",
 
-    fontSize: 15,
-    fontWeight: "800",
-  },
+      flexDirection: "row",
+      alignItems: "center",
 
-  disabledButton: {
-    opacity: 0.5,
-  },
+      padding: 20,
+      marginBottom: 18,
 
-  unsavedText: {
-    color:
-      "rgba(255,255,255,0.5)",
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.1)",
 
-    fontSize: 12,
+      borderRadius: 18,
 
-    textAlign: "center",
+      backgroundColor:
+        "rgba(255,255,255,0.045)",
+    },
 
-    marginTop: 9,
-  },
+    compactProfileHeader: {
+      flexDirection: "column",
 
-  /* =====================================================
-     BOTTOM NAVIGATION
-  ===================================================== */
+      alignItems: "center",
+    },
 
-  bottomNavBar: {
-    position: "absolute",
+    avatarButton: {
+      position: "relative",
 
-    left: 0,
-    right: 0,
-    bottom: 0,
+      width: 130,
+      height: 130,
 
-    zIndex: 90,
-  },
+      flexShrink: 0,
 
-  desktopBottomNavBar: {
-    left:
-      DESKTOP_SIDEBAR_WIDTH,
+      borderRadius: 65,
 
-    right: 0,
-  },
-});
+      overflow: "hidden",
+
+      backgroundColor:
+        "rgba(255,255,255,0.08)",
+    },
+
+    avatar: {
+      width: 130,
+      height: 130,
+
+      borderRadius: 65,
+
+      resizeMode: "cover",
+    },
+
+    avatarOverlay: {
+      position: "absolute",
+
+      left: 0,
+      right: 0,
+      bottom: 0,
+
+      height: 38,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      backgroundColor:
+        "rgba(0,0,0,0.62)",
+    },
+
+    avatarOverlayText: {
+      color: "#ffffff",
+
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    headerInfo: {
+      flex: 1,
+
+      minWidth: 0,
+
+      marginLeft: 22,
+    },
+
+    profileHeading: {
+      color: "#ffffff",
+
+      fontSize: 21,
+      lineHeight: 27,
+      fontWeight: "800",
+    },
+
+    editInfoText: {
+      color:
+        "rgba(255,255,255,0.57)",
+
+      fontSize: 13,
+      lineHeight: 19,
+
+      marginTop: 5,
+      marginBottom: 14,
+    },
+
+    changePhotoButton: {
+      alignSelf: "flex-start",
+
+      minWidth: 145,
+      height: 42,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 18,
+
+      borderWidth: 1,
+      borderColor:
+        colours.lightblue ||
+        "#54b7ee",
+
+      borderRadius: 21,
+
+      backgroundColor:
+        "rgba(60,170,230,0.13)",
+    },
+
+    changePhotoButtonText: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      fontWeight: "800",
+    },
+
+    formCard: {
+      width: "100%",
+
+      padding: 20,
+      marginBottom: 18,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.1)",
+
+      borderRadius: 18,
+
+      backgroundColor:
+        "rgba(255,255,255,0.045)",
+    },
+
+    cardTitle: {
+      color: "#ffffff",
+
+      fontSize: 20,
+      lineHeight: 26,
+      fontWeight: "800",
+    },
+
+    cardDescription: {
+      color:
+        "rgba(255,255,255,0.56)",
+
+      fontSize: 13,
+      lineHeight: 19,
+
+      marginTop: 4,
+      marginBottom: 22,
+    },
+
+    inputSection: {
+      width: "100%",
+
+      marginBottom: 20,
+    },
+
+    label: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      fontWeight: "800",
+
+      marginBottom: 8,
+    },
+
+    input: {
+      width: "100%",
+      height: 52,
+
+      color: "#ffffff",
+
+      fontSize: 16,
+
+      paddingHorizontal: 15,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.18)",
+
+      borderRadius: 12,
+
+      backgroundColor:
+        "rgba(255,255,255,0.055)",
+
+      outlineStyle: "none",
+    },
+
+    disabledInput: {
+      color:
+        "rgba(255,255,255,0.48)",
+
+      backgroundColor:
+        "rgba(255,255,255,0.025)",
+    },
+
+    inputHelper: {
+      color:
+        "rgba(255,255,255,0.42)",
+
+      fontSize: 12,
+      lineHeight: 17,
+
+      marginTop: 7,
+    },
+
+    privacyCard: {
+      width: "100%",
+
+      padding: 20,
+      marginBottom: 18,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.1)",
+
+      borderRadius: 18,
+
+      backgroundColor:
+        "rgba(255,255,255,0.045)",
+    },
+
+    privacyTextContainer: {
+      width: "100%",
+
+      marginBottom: 18,
+    },
+
+    privacyTitle: {
+      color: "#ffffff",
+
+      fontSize: 20,
+      lineHeight: 26,
+      fontWeight: "800",
+    },
+
+    privacySubtitle: {
+      color:
+        "rgba(255,255,255,0.56)",
+
+      fontSize: 13,
+      lineHeight: 19,
+
+      marginTop: 4,
+    },
+
+    privacyRow: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+
+      paddingTop: 16,
+
+      borderTopWidth: 1,
+      borderTopColor:
+        "rgba(255,255,255,0.08)",
+    },
+
+    privacyStatusContainer: {
+      flex: 1,
+
+      minWidth: 0,
+
+      paddingRight: 16,
+    },
+
+    privacyLabel: {
+      color: "#ffffff",
+
+      fontSize: 15,
+      fontWeight: "800",
+    },
+
+    privacyStatusDescription: {
+      color:
+        "rgba(255,255,255,0.48)",
+
+      fontSize: 12,
+      lineHeight: 17,
+
+      marginTop: 3,
+    },
+
+    saveButton: {
+      width: "100%",
+      height: 54,
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderRadius: 27,
+
+      backgroundColor:
+        colours.primaryblue ||
+        colours.lightblue ||
+        "#289bd6",
+    },
+
+    saveButtonText: {
+      color: "#ffffff",
+
+      fontSize: 16,
+      fontWeight: "900",
+    },
+
+    savingButtonText: {
+      color: "#ffffff",
+
+      fontSize: 16,
+      fontWeight: "900",
+
+      marginLeft: 10,
+    },
+
+    disabledButton: {
+      opacity: 0.55,
+    },
+
+    unsavedText: {
+      color:
+        "rgba(255,215,100,0.82)",
+
+      fontSize: 12,
+      lineHeight: 18,
+
+      textAlign: "center",
+
+      marginTop: 10,
+    },
+
+    bottomNavBar: {
+      position: "absolute",
+
+      left: 0,
+      right: 0,
+      bottom: 0,
+
+      zIndex: 90,
+    },
+
+    desktopBottomNavBar: {
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
+
+      right: 0,
+    },
+  });
