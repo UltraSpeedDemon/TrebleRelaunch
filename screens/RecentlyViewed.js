@@ -39,6 +39,7 @@ const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const MAX_CONTENT_WIDTH = 920;
 
+
 export default function RecentlyViewed({
   navigation,
 }) {

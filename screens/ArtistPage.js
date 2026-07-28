@@ -46,6 +46,9 @@ import { Icon } from "@rneui/base";
 export default function ArtistPage({ route, navigation }) {
     const { width } = useWindowDimensions();
 
+    const DESKTOP_BREAKPOINT = 768;
+    const DESKTOP_SIDEBAR_WIDTH = 280;
+    
     const isWeb = Platform.OS === "web";
     const isDesktopWeb = isWeb && width >= 768;
     const isMobileWeb = isWeb && width < 768;

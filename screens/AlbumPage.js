@@ -59,6 +59,9 @@ export default function AlbumPage({ route, navigation }) {
   const isMobileWeb = isWeb && width < 768;
   const isCompact = width < 600;
 
+  const DESKTOP_BREAKPOINT = 768;
+  const DESKTOP_SIDEBAR_WIDTH = 280;
+
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
