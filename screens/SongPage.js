@@ -14,7 +14,8 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Animated,
-  Keyboard
+  Keyboard,
+  useWindowDimensions,
 } from "react-native";
 import Toast from 'react-native-toast-message';
 import { auth } from "../utils/firebase";
@@ -47,6 +48,22 @@ import { AnimatedCircularProgress } from "react-native-circular-progress";
 import Icon from "react-native-vector-icons/MaterialIcons";
 
 export default function SongPage({ route, navigation }) {
+    const { width } = useWindowDimensions();
+
+    const isWeb = Platform.OS === "web";
+    const isDesktopWeb = isWeb && width >= 768;
+    const isMobileWeb = isWeb && width < 768;
+    const isCompact = width < 768;
+
+    const [menuOpen, setMenuOpen] = useState(false);
+
+    useEffect(() => {
+      if (isDesktopWeb) {
+        setMenuOpen(true);
+      } else {
+        setMenuOpen(false);
+      }
+    }, [isDesktopWeb]);
   const [username, setUsername] = useState("");
   const [loadingUser, setLoadingUser] = useState(true);
 
@@ -760,165 +777,338 @@ export default function SongPage({ route, navigation }) {
     ? { uri: track.image }
     : require("../images/albumImage.jpg");
 
-  return (
+    return (
     <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={10} // adjust this value as needed
+      style={[
+        styles.container,
+        isWeb && styles.webContainer,
+      ]}
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : undefined
+      }
+      keyboardVerticalOffset={10}
     >
-      {/* SHARE MODAL */}
-            <Modal
-              animationType="slide"
-              transparent={true}
-              visible={modalVisible}
-              onRequestClose={closeModal}
-            >
-              <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
-                style={{ flex: 1 }}
-                keyboardVerticalOffset={0}
-              >
-                <TouchableWithoutFeedback onPress={closeModal}>
-                  <View style={styles.modalOverlay}>
-                    <TouchableWithoutFeedback onPress={() => {}}>
-                      <Animated.View
-                        style={[
-                          styles.modalContent,
-                          { transform: [{ translateY: slideAnim }] },
-                        ]}
+      {/* =========================================================
+          SHARE MODAL
+      ========================================================= */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={modalVisible}
+        onRequestClose={closeModal}
+      >
+        <KeyboardAvoidingView
+          behavior={
+            Platform.OS === "ios"
+              ? "padding"
+              : undefined
+          }
+          style={styles.modalKeyboardView}
+        >
+          <TouchableWithoutFeedback onPress={closeModal}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <Animated.View
+                  style={[
+                    styles.modalContent,
+                    isDesktopWeb && styles.desktopModalContent,
+                    {
+                      transform: [
+                        {
+                          translateY: slideAnim,
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <View style={styles.modalHeader}>
+                    <View style={styles.modalTitleContainer}>
+                      <Text style={styles.modalText}>
+                        Share
+                      </Text>
+
+                      <Text
+                        style={styles.modalSongName}
+                        numberOfLines={1}
                       >
-                        <Text style={styles.modalText}>
-                          Share "{currentShareItem?.name || "Item"}"
-                        </Text>
-                        <FlatList
-                          data={friendsList}
-                          renderItem={renderFriendItem}
-                          keyExtractor={(item) => item.userId}
-                          numColumns={3}
-                          contentContainerStyle={styles.gridContainer}
-                        />
-                        {selectedUser && (
-                          <View style={styles.commentSection}>
-                            <Text style={styles.commentPrompt}>
-                              Leave a message for {selectedUser.username}:
-                            </Text>
-                            <TextInput
-                              style={styles.commentInput}
-                              value={comment}
-                              onChangeText={setComment}
-                              placeholder="Write your comment here..."
-                              maxLength={40}
-                              multiline={false}
-                            />
-                          </View>
-                        )}
-                        <View style={styles.modalButtonContainer}>
-                          <TouchableOpacity
-                            style={[
-                              styles.button,
-                              styles.shareButton,
-                              !selectedUser && styles.disabledButton,
-                            ]}
-                            onPress={handleShareComment}
-                            disabled={!selectedUser}
-                          >
-                            <Text
-                              style={[
-                                styles.buttonText,
-                                !selectedUser && styles.disabledButtonText,
-                              ]}
-                            >
-                              Share
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </Animated.View>
-                    </TouchableWithoutFeedback>
+                        {currentShareItem?.name ||
+                          currentShareItem?.title ||
+                          trackName ||
+                          "Song"}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      onPress={closeModal}
+                      style={styles.modalCloseButton}
+                    >
+                      <Icon
+                        name="close"
+                        size={25}
+                        color="#ffffff"
+                      />
+                    </TouchableOpacity>
                   </View>
-                </TouchableWithoutFeedback>
-              </KeyboardAvoidingView>
-            </Modal>
-      {/* Sidebar */}
-      <View style={styles.sideMenu}>
-        <Sidebar menuOpen={false} setMenuOpen={() => {}} />
+
+                  <Text style={styles.modalSectionTitle}>
+                    Select a friend
+                  </Text>
+
+                  <FlatList
+                    data={friendsList}
+                    renderItem={renderFriendItem}
+                    keyExtractor={(item, index) =>
+                      String(item?.userId || index)
+                    }
+                    numColumns={isCompact ? 3 : 4}
+                    key={
+                      isCompact
+                        ? "compact-share-grid"
+                        : "desktop-share-grid"
+                    }
+                    contentContainerStyle={styles.gridContainer}
+                    ListEmptyComponent={
+                      <Text style={styles.emptyFriendsText}>
+                        No friends were found.
+                      </Text>
+                    }
+                  />
+
+                  {selectedUser ? (
+                    <View style={styles.commentSection}>
+                      <Text style={styles.commentPrompt}>
+                        Message for {selectedUser.username}
+                      </Text>
+
+                      <TextInput
+                        style={styles.commentInput}
+                        value={comment}
+                        onChangeText={setComment}
+                        placeholder="Add an optional message..."
+                        placeholderTextColor="rgba(255,255,255,0.45)"
+                        maxLength={100}
+                        multiline
+                      />
+
+                      <Text style={styles.commentLength}>
+                        {comment.length}/100
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={[
+                      styles.shareButton,
+                      !selectedUser &&
+                        styles.disabledButton,
+                    ]}
+                    onPress={handleShareComment}
+                    disabled={!selectedUser}
+                  >
+                    <Icon
+                      name="send"
+                      size={20}
+                      color="#ffffff"
+                    />
+
+                    <Text style={styles.buttonText}>
+                      Share
+                    </Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* =========================================================
+          SIDEBAR
+      ========================================================= */}
+      <View
+        style={[
+          styles.sideMenu,
+          isDesktopWeb && styles.desktopSideMenu,
+          isMobileWeb && styles.mobileSideMenu,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={isDesktopWeb ? true : menuOpen}
+          setMenuOpen={
+            isDesktopWeb
+              ? () => {}
+              : setMenuOpen
+          }
+          isDesktop={isDesktopWeb}
+        />
       </View>
 
-      <FlatList
-        data={getSortedReviews()}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={
-          <TouchableWithoutFeedback onPress={handleTap}>
-            <View style={styles.card}>
-              <View style={styles.cardInformation}>
-                <View style={styles.titleContainer}>
+      {/* =========================================================
+          PAGE CONTENT
+      ========================================================= */}
+      <View
+        style={[
+          styles.pageContent,
+          isDesktopWeb && styles.desktopPageContent,
+          isMobileWeb && styles.mobilePageContent,
+        ]}
+      >
+        <FlatList
+          data={getSortedReviews()}
+          keyExtractor={(item, index) =>
+            String(item?.id || index)
+          }
+          style={[
+            styles.reviewsList,
+            isWeb && styles.webReviewsList,
+          ]}
+          contentContainerStyle={[
+            styles.reviewsContainer,
+            isDesktopWeb && styles.desktopReviewsContainer,
+          ]}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          removeClippedSubviews={false}
+          ListHeaderComponent={
+            <TouchableWithoutFeedback onPress={handleTap}>
+              <View
+                style={[
+                  styles.card,
+                  isDesktopWeb && styles.desktopCard,
+                  isCompact && styles.compactCard,
+                ]}
+              >
+                {/* CARD HEADER */}
+                <View style={styles.cardInformation}>
+                  <View style={styles.titleContainer}>
                     <Text style={styles.boldTitle}>
                       Song
                     </Text>
-                </View>
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity onPress={handleLikeSong} style={styles.actionButton}>
-                    <Image
-                      source={
-                        liked
-                          ? require("../images/whiteFullHeart.png")
-                          : require("../images/whiteOpenHeart.png")
-                      }
-                      style={styles.actionIcon}
-                    />
-                    <Text style={styles.actionText}>
-                      {liked ? "Liked" : "Like"}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleModal(track)} style={styles.actionButton}>
-                    <Image
-                      source={require("../images/shareIcon.png")}
-                      style={styles.actionIcon}
-                    />
-                    <Text style={styles.actionText}>Share</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              
-              {/* Song Image with Play Button */}
-              <View style={styles.imageContainer}>
-                <Image source={trackImage} style={styles.image} />
-                <TouchableOpacity
-                  onPress={handlePlayPreview}
-                  style={styles.playButton}
-                  disabled={!track.preview} // Disable button if preview is not loaded
-                >
-                  <AnimatedCircularProgress
-                    size={50}
-                    width={5}
-                    fill={progress}
-                    tintColor={colours.secondaryblue}
-                    backgroundColor={colours.bluegrey}
-                    rotation={0}
-                  >
-                    {() => (
-                      <Icon
-                        name={isPlaying ? "stop" : "play-arrow"}
-                        size={30}
-                        color="#fff"
+                  </View>
+
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                      onPress={(event) => {
+                        event?.stopPropagation?.();
+                        handleLikeSong();
+                      }}
+                      style={styles.actionButton}
+                    >
+                      <Image
+                        source={
+                          liked
+                            ? require("../images/whiteFullHeart.png")
+                            : require("../images/whiteOpenHeart.png")
+                        }
+                        style={styles.actionIcon}
                       />
-                    )}
-                  </AnimatedCircularProgress>
-                </TouchableOpacity>
-              </View>
 
-              {/* Song Details */}
-              <Text style={styles.title}>{trackName || "Unknown Track"}</Text>
-              <Text style={styles.artist}>
-                Artist: {artistName || "Unknown"}
-              </Text>
-              {albumName && (
-                <Text style={styles.album}>Album: {albumName}</Text>
-              )}
+                      <Text style={styles.actionText}>
+                        {liked ? "Liked" : "Like"}
+                      </Text>
+                    </TouchableOpacity>
 
-              {/* Add Review Section */}
-                <View style={styles.topRow}>
+                    <TouchableOpacity
+                      onPress={(event) => {
+                        event?.stopPropagation?.();
+                        handleModal(track);
+                      }}
+                      style={styles.actionButton}
+                    >
+                      <Image
+                        source={require("../images/shareIcon.png")}
+                        style={styles.actionIcon}
+                      />
+
+                      <Text style={styles.actionText}>
+                        Share
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* SONG IMAGE */}
+                <View style={styles.imageContainer}>
+                  <Image
+                    source={trackImage}
+                    style={[
+                      styles.image,
+                      isCompact && styles.compactImage,
+                    ]}
+                  />
+
+                  <TouchableOpacity
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+                      handlePlayPreview();
+                    }}
+                    style={styles.playButton}
+                    disabled={!track.preview}
+                  >
+                    <AnimatedCircularProgress
+                      size={58}
+                      width={4}
+                      fill={progress}
+                      tintColor={colours.secondaryblue}
+                      backgroundColor="rgba(255,255,255,0.25)"
+                      rotation={0}
+                    >
+                      {() => (
+                        <Icon
+                          name={
+                            isPlaying
+                              ? "stop"
+                              : "play-arrow"
+                          }
+                          size={34}
+                          color="#ffffff"
+                        />
+                      )}
+                    </AnimatedCircularProgress>
+                  </TouchableOpacity>
+                </View>
+
+                {/* SONG DETAILS */}
+                <View style={styles.songDetails}>
+                  <Text
+                    style={styles.title}
+                    numberOfLines={2}
+                  >
+                    {trackName || "Unknown Track"}
+                  </Text>
+
+                  <Text
+                    style={styles.artist}
+                    numberOfLines={1}
+                  >
+                    {artistName || "Unknown Artist"}
+                  </Text>
+
+                  {albumName ? (
+                    <Text
+                      style={styles.album}
+                      numberOfLines={1}
+                    >
+                      {albumName}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* REVIEW OPTIONS */}
+                <View style={styles.reviewControls}>
                   <View style={styles.favouriteContainer}>
-                    <TouchableOpacity onPress={handleToggleFavourite}>
+                    <TouchableOpacity
+                      onPress={(event) => {
+                        event?.stopPropagation?.();
+                        handleToggleFavourite();
+                      }}
+                    >
                       <Image
                         source={
                           favourite
@@ -928,13 +1118,20 @@ export default function SongPage({ route, navigation }) {
                         style={styles.smallFavIcon}
                       />
                     </TouchableOpacity>
-                    <Text style={styles.favLabel}>Favourite</Text>
+
+                    <Text style={styles.favLabel}>
+                      Favourite
+                    </Text>
                   </View>
+
                   <View style={styles.starRatingContainer}>
-                    {[...Array(5)].map((_, index) => (
+                    {[0, 1, 2, 3, 4].map((index) => (
                       <TouchableOpacity
                         key={index}
-                        onPress={() => setReviewRating(index + 1)}
+                        onPress={(event) => {
+                          event?.stopPropagation?.();
+                          setReviewRating(index + 1);
+                        }}
                       >
                         <Image
                           source={
@@ -947,9 +1144,15 @@ export default function SongPage({ route, navigation }) {
                       </TouchableOpacity>
                     ))}
                   </View>
+
                   <TouchableOpacity
                     style={styles.selectEmojiTab}
-                    onPress={() => setShowEmojiDropdown(!showEmojiDropdown)}
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+                      setShowEmojiDropdown(
+                        !showEmojiDropdown
+                      );
+                    }}
                   >
                     <Image
                       source={require("../images/selectEmojiIcon.png")}
@@ -958,100 +1161,131 @@ export default function SongPage({ route, navigation }) {
                   </TouchableOpacity>
                 </View>
 
-                {showEmojiDropdown && (
+                {/* EMOJI CHOICES */}
+                {showEmojiDropdown ? (
                   <View style={styles.emojiDropdownRow}>
-                    <TouchableOpacity
-                      onPress={() => handleSelectEmoji("❤️")}
-                      style={
-                        selectedEmojis.includes("❤️")
-                          ? styles.selectedEmojiChoice
-                          : styles.emojiChoice
-                      }
-                    >
-                      <Text style={styles.reviewEmoji}>❤️</Text>
-                    </TouchableOpacity>
+                    {["❤️", "🔥", "👏"].map((emoji) => {
+                      const selected =
+                        selectedEmojis.includes(emoji);
 
-                    <TouchableOpacity
-                      onPress={() => handleSelectEmoji("🔥")}
-                      style={
-                        selectedEmojis.includes("🔥")
-                          ? styles.selectedEmojiChoice
-                          : styles.emojiChoice
-                      }
-                    >
-                      <Text style={styles.reviewEmoji}>🔥</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => handleSelectEmoji("👏")}
-                      style={
-                        selectedEmojis.includes("👏")
-                          ? styles.selectedEmojiChoice
-                          : styles.emojiChoice
-                      }
-                    >
-                      <Text style={styles.reviewEmoji}>👏</Text>
-                    </TouchableOpacity>
+                      return (
+                        <TouchableOpacity
+                          key={emoji}
+                          onPress={(event) => {
+                            event?.stopPropagation?.();
+                            handleSelectEmoji(emoji);
+                          }}
+                          style={[
+                            styles.emojiChoice,
+                            selected &&
+                              styles.selectedEmojiChoice,
+                          ]}
+                        >
+                          <Text style={styles.reviewEmoji}>
+                            {emoji}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                )}
+                ) : null}
 
-                <View style={{ flexDirection: "row", marginTop: 15 }}>
+                {/* REVIEW INPUT */}
+                <View style={styles.reviewInputRow}>
                   <TextInput
                     style={styles.reviewInput}
                     placeholder="Add a review..."
-                    placeholderTextColor="#aaa"
+                    placeholderTextColor="#888888"
                     value={review}
                     onChangeText={setReview}
+                    multiline
+                    maxLength={500}
                   />
+
                   <TouchableOpacity
-                  style={[
-                    styles.reviewButton,
-                    !review.trim() && { opacity: 0.5 },
-                  ]}
-                  onPress={handleAddReview}
-                  disabled={!review.trim()}
-                >
-                  <Text style={styles.reviewButtonText}>Post</Text>
-                </TouchableOpacity>
+                    style={[
+                      styles.reviewButton,
+                      !review.trim() &&
+                        styles.disabledReviewButton,
+                    ]}
+                    onPress={handleAddReview}
+                    disabled={!review.trim()}
+                  >
+                    <Text style={styles.reviewButtonText}>
+                      {existingReviewId
+                        ? "Update"
+                        : "Post"}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
-                {selectedEmojis.length > 0 && (
+                {/* SELECTED EMOJIS */}
+                {selectedEmojis.length > 0 ? (
                   <View style={styles.selectedEmojisSection}>
-                    <Text style={styles.selectedEmojisTitle}>Selected Emojis</Text>
+                    <Text style={styles.selectedEmojisTitle}>
+                      Selected:
+                    </Text>
+
                     <View style={styles.selectedEmojisContainer}>
-                      {selectedEmojis.map((em, idx) => (
-                        <Text key={idx} style={styles.selectedEmoji}>
-                          {em}
+                      {selectedEmojis.map((emoji) => (
+                        <Text
+                          key={emoji}
+                          style={styles.selectedEmoji}
+                        >
+                          {emoji}
                         </Text>
                       ))}
                     </View>
                   </View>
-                )}
+                ) : null}
               </View>
-          </TouchableWithoutFeedback>
-        }
-        renderItem={({ item }) => {
-          const user = users.find((u) => u.userId === item.userId);
-          const avatar = user ? user.avatarLong : null;
-          return (
-            <ReviewCard
-              item={item}
-              avatar={avatar}
-              handleUpvote={handleUpvote}
-              handleDelete={handleDelete}
-              navigation={navigation}
-              showComments={false}
-              showReplyInput={false}
-            />
-          );
-        }}
-        contentContainerStyle={styles.reviewsContainer}
-        showsVerticalScrollIndicator={false}
-      />
+            </TouchableWithoutFeedback>
+          }
+          ListHeaderComponentStyle={styles.listHeader}
+          ListEmptyComponent={
+            <View style={styles.noReviewsContainer}>
+              <Text style={styles.noReviewsTitle}>
+                No reviews yet
+              </Text>
 
-      <View style={styles.bottomNavBar}>
-        <BottomNavbar />
+              <Text style={styles.noReviewsText}>
+                Be the first person to review this song.
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => {
+            const user = users.find(
+              (userItem) =>
+                userItem.userId === item.userId
+            );
+
+            const reviewAvatar = user
+              ? user.avatarLong
+              : null;
+
+            return (
+              <View style={styles.reviewCardWrapper}>
+                <ReviewCard
+                  item={item}
+                  avatar={reviewAvatar}
+                  handleUpvote={handleUpvote}
+                  handleDelete={handleDelete}
+                  navigation={navigation}
+                  showComments={false}
+                  showReplyInput={false}
+                />
+              </View>
+            );
+          }}
+        />
       </View>
+
+      {/* MOBILE NAVIGATION ONLY */}
+      {!isDesktopWeb ? (
+        <View style={styles.bottomNavBar}>
+          <BottomNavbar />
+        </View>
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -1059,553 +1293,816 @@ export default function SongPage({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colours.bluegrey,
+    minHeight: 0,
+    backgroundColor: colours.background,
   },
+
+  webContainer: {
+    width: "100%",
+    height: "100vh",
+    minHeight: 0,
+    overflow: "hidden",
+  },
+
   loader: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: colours.background,
   },
+
   errorText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 16,
     marginTop: 10,
   },
+
+  /* =========================================================
+     SIDEBAR
+  ========================================================= */
+
   sideMenu: {
     position: "absolute",
     top: 40,
-    right: 525,
+    left: 0,
     bottom: 0,
-    zIndex: 10,
+    zIndex: 100,
+    elevation: 20,
   },
-  card: {
-    backgroundColor: colours.darkblue,
-    paddingHorizontal: 15,
-    paddingVertical: 15,
-    borderRadius: 20,
-    marginTop: 110,
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  imageContainer: {
-    position: "relative",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  image: {
-    width: "70%",
-    height: 200,
-    alignSelf: "center",
-    borderRadius: 10,
-    marginBottom: 20,
-  },
-  playButton: {
-    position: "absolute",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.7)", // Darker semi-transparent background
-    borderRadius: 25,
-    width: 50,
-    height: 50,
-    shadowColor: "#000", // Add shadow for better visibility
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 3,
-    elevation: 5, // For Android shadow
-  },
-  artist: {
-    fontSize: 18,
-    color: "#bbb",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  album: {
-    fontSize: 16,
-    color: "#bbb",
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 10,
-  },
-  actionButton: {
-    alignItems: "center",
-  },
-  actionIcon: {
-    width: 30,
-    height: 30,
-  },
-  actionText: {
-    fontSize: 14,
-    color: "#fff",
-    marginTop: 5,
-  },
-  reviewInputContainer: {
-    marginTop: 20,
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  favouriteContainer: {
-    top: 3,
-    padding: 3,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  smallFavIcon: {
-    width: 21,
-    height: 21,
-  },
-  favLabel: {
-    color: "#fff",
-    fontSize: 11,
-    marginTop: 2,
-    textAlign: "center",
-  },
-  starRatingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  starIcon: {
-    width: 25,
-    height: 25,
-    marginHorizontal: 2,
-  },
-  selectEmojiTab: {
-    padding: 14,
-  },
-  selectEmojiIcon: {
-    width: 28,
-    height: 28,
-  },
-  emojiDropdownRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 8,
-  },
-  reviewEmoji: {
-    fontSize: 20,
-    marginHorizontal: 6,
-  },
-  reviewInput: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 10,
-    fontSize: 16,
-    marginRight: 10,
-  },
-  reviewButton: {
-    backgroundColor: colours.lightblue,
-    borderRadius: 10,
-    padding: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  reviewButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  selectedEmojisSection: {
-    marginTop: 10,
-    alignItems: "center",
-  },
-  selectedEmojisTitle: {
-    fontSize: 14,
-    color: "#fff",
-    marginBottom: 5,
-  },
-  selectedEmojisContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-  selectedEmoji: {
-    fontSize: 20,
-    marginHorizontal: 4,
-  },
-  reviewCard: {
-    flexDirection: "row",
-    backgroundColor: colours.darkblue,
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
-    alignItems: "center",
-    position: "relative",
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  reviewContent: {
-    flex: 1,
-  },
-  reviewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  username: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: colours.lightblue,
-    marginRight: 10,
-  },
-  reviewText: {
-    fontSize: 14,
-    color: "#fff",
-    marginVertical: 5,
-  },
-  reviewRating: {
-    flexDirection: "row",
-    marginTop: 5,
-  },
-  reviewStar: {
-    width: 16,
-    height: 16,
-    marginRight: 2,
-  },
-  reviewEmojisContainer: {
-    flexDirection: "row",
-    position: "absolute",
-    bottom: 10,
-    right: 10,
-  },
-  upvoteButton: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  upvoteIcon: {
-    width: 20,
-    height: 20,
-    marginRight: 5,
-  },
-  upvoteCount: {
-    fontSize: 14,
-    color: "#fff",
-  },
-  reviewsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  bottomNavBar: {
-    position: "absolute",
+
+  desktopSideMenu: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: undefined,
     bottom: 0,
-    width: "100%",
-  },
-  previewButton: {
-    backgroundColor: colours.lightblue,
-    borderRadius: 10,
-    padding: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 10,
-  },
-  previewButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  modalOverlay: {
 
-    flex: 1,
+    width: 280,
+    height: "100vh",
 
-    justifyContent: "flex-end",
+    zIndex: 100,
+    elevation: 20,
 
-    alignItems: "center",
-
-  },
-  modalContent: {
-
-    height: "50%",
-
-    margin: 0,
-
-    backgroundColor: colours.background,
-
-    borderRadius: 20,
-
-    padding: 0,
-
-    alignItems: "center",
-
-    shadowColor: "#000",
-
-    shadowOffset: { width: 0, height: 2 },
-
-    shadowOpacity: 0.25,
-
-    shadowRadius: 4,
-
-    elevation: 5,
-
+    overflow: "hidden",
   },
 
-  modalText: {
-
-    marginVertical: 15,
-
-    textAlign: "center",
-
-    fontSize: 20,
-
-    fontWeight: "bold",
-
-    color: colours.white,
-
-  },
-
-  gridContainer: {
-
-    flex: 1,
-
-    flexDirection: "row",
-
-    flexWrap: "wrap",
-
-    justifyContent: "space-evenly",
-
-  },
-
-  friendItem: {
-
-    paddingTop: 8,
-
-    alignItems: "center",
-
-    marginBottom: 20,
-
-    marginHorizontal: 10,
-
-    width: 100,
-
-  },
-
-  selectedFriendItem: {
-
-    backgroundColor: "rgba(33, 150, 243, 0.2)",
-
-    borderRadius: 20,
-
-  },
-
-  checkmarkIcon: {
-
+  mobileSideMenu: {
     position: "absolute",
-
     top: 40,
+    left: 0,
+    right: undefined,
+    bottom: 0,
 
-    right: 15,
-
-    width: 20,
-
-    height: 20,
-
+    zIndex: 100,
   },
 
-  avatar: {
+  /* =========================================================
+     CONTENT AND SCROLLING
+  ========================================================= */
 
-    width: 50,
-
-    height: 50,
-
-    borderRadius: 25,
-
-    marginBottom: 5,
-
+  pageContent: {
+    flex: 1,
+    minHeight: 0,
+    paddingBottom: 75,
   },
 
-  commentSection: {
+  desktopPageContent: {
+    position: "absolute",
+    top: 0,
+    left: 280,
+    right: 0,
+    bottom: 0,
 
+    minHeight: 0,
+
+    paddingTop: 24,
+    paddingLeft: 28,
+    paddingRight: 28,
+    paddingBottom: 0,
+
+    overflow: "hidden",
+  },
+
+  mobilePageContent: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 70,
+
+    minHeight: 0,
+
+    paddingTop: 70,
+    paddingHorizontal: 12,
+
+    overflow: "hidden",
+  },
+
+  reviewsList: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+  },
+
+  webReviewsList: {
+    height: "100%",
+
+    overflowY: "auto",
+    overflowX: "hidden",
+
+    WebkitOverflowScrolling: "touch",
+    overscrollBehaviorY: "contain",
+
+    scrollbarWidth: "none",
+    msOverflowStyle: "none",
+  },
+
+  reviewsContainer: {
+    width: "100%",
+    paddingBottom: 120,
+  },
+
+  desktopReviewsContainer: {
+    paddingBottom: 70,
+  },
+
+  listHeader: {
+    width: "100%",
+  },
+
+  /* =========================================================
+     SONG CARD
+  ========================================================= */
+
+  card: {
     width: "100%",
 
-    paddingHorizontal: 20,
+    alignSelf: "center",
 
-    marginTop: 15,
+    backgroundColor: colours.darkblue,
 
+    padding: 18,
+    marginBottom: 22,
+
+    borderRadius: 18,
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+
+    elevation: 6,
   },
 
-  commentPrompt: {
-
-    fontSize: 16,
-
-    marginBottom: 10,
-
-    textAlign: "center",
-
-    color: colours.white,
-
-  },
-
-  commentInput: {
-
-    width: 220,
-
-    padding: 10,
-
-    borderWidth: 1,
-
-    borderColor: colours.white,
-
-    borderRadius: 5,
-
-    marginBottom: 0,
-
-    textAlign: "center",
-
-    color: colours.white,
-
-  },
-
-  modalButtonContainer: {
-
-    flexDirection: "row",
-
-    justifyContent: "space-between",
-
+  desktopCard: {
     width: "100%",
+    maxWidth: 900,
 
-    paddingHorizontal: 20,
-
-    marginBottom: 20,
-
-  },
-
-  button: {
+    padding: 24,
 
     borderRadius: 20,
-
-    padding: 10,
-
-    elevation: 2,
-
-    marginTop: 20,
-
   },
 
-  shareButton: {
-
-    backgroundColor: "#2196F3",
-
-    flex: 1,
-
-    marginRight: 0,
-
-    width: "100%",
-
-  },
-
-  disabledButton: {
-
-    backgroundColor: "#cccccc",
-
-    opacity: 0.5,
-
-  },
-
-  buttonText: {
-
-    color: "white",
-
-    fontWeight: "bold",
-
-    textAlign: "center",
-
-  },
-
-  disabledButtonText: {
-
-    color: "#666666",
-
+  compactCard: {
+    padding: 14,
+    borderRadius: 14,
   },
 
   cardInformation: {
-
-    display: "flex",
-
-    flex: 1,
-
-    flexDirection: "row",
-
-    marginBottom: 10
-
-  },
-  titleContainer: {
-
-    flex: 1,
-
-  },
-
-
-  boldTitle: {
-
-    fontSize: 20,
-
-    color: "#fff",
-
     width: "100%",
 
-    marginBottom: 0,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
 
-    alignSelf: "left",
+    marginBottom: 20,
+  },
 
+  titleContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  boldTitle: {
+    color: "#ffffff",
+
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: "800",
 
     textTransform: "capitalize",
-
   },
 
   actionButtons: {
-
     flexDirection: "row",
-
-    justifyContent: "flex-start",
+    alignItems: "flex-start",
 
     gap: 20,
-
-    marginTop: 0,
-
   },
 
   actionButton: {
+    minWidth: 42,
 
     alignItems: "center",
-
+    justifyContent: "flex-start",
   },
 
   actionIcon: {
+    width: 28,
+    height: 28,
 
-    width: 30,
-
-    height: 30,
-
+    resizeMode: "contain",
   },
 
   actionText: {
+    color: "#ffffff",
+
+    fontSize: 12,
+    lineHeight: 16,
+
+    marginTop: 4,
+  },
+
+  /* =========================================================
+     IMAGE AND DETAILS
+  ========================================================= */
+
+  imageContainer: {
+    position: "relative",
+
+    width: "100%",
+
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  image: {
+    width: 360,
+    height: 360,
+    maxWidth: "100%",
+
+    borderRadius: 15,
+
+    resizeMode: "cover",
+
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+
+  compactImage: {
+    width: 260,
+    height: 260,
+  },
+
+  playButton: {
+    position: "absolute",
+
+    width: 62,
+    height: 62,
+
+    borderRadius: 31,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    backgroundColor: "rgba(0,0,0,0.72)",
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
+
+    elevation: 8,
+  },
+
+  songDetails: {
+    width: "100%",
+
+    alignItems: "center",
+
+    paddingTop: 17,
+    paddingHorizontal: 10,
+    paddingBottom: 18,
+  },
+
+  title: {
+    color: "#ffffff",
+
+    fontSize: 25,
+    lineHeight: 32,
+    fontWeight: "800",
+
+    textAlign: "center",
+  },
+
+  artist: {
+    color: "rgba(255,255,255,0.75)",
+
+    fontSize: 17,
+    lineHeight: 23,
+
+    textAlign: "center",
+
+    marginTop: 5,
+  },
+
+  album: {
+    color: "rgba(255,255,255,0.55)",
+
+    fontSize: 15,
+    lineHeight: 21,
+
+    textAlign: "center",
+
+    marginTop: 3,
+  },
+
+  /* =========================================================
+     REVIEW CONTROLS
+  ========================================================= */
+
+  reviewControls: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+
+    paddingTop: 15,
+
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.1)",
+  },
+
+  favouriteContainer: {
+    minWidth: 65,
+
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  smallFavIcon: {
+    width: 25,
+    height: 25,
+
+    resizeMode: "contain",
+  },
+
+  favLabel: {
+    color: "#ffffff",
+
+    fontSize: 11,
+    lineHeight: 15,
+
+    marginTop: 3,
+
+    textAlign: "center",
+  },
+
+  starRatingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+
+    flexWrap: "wrap",
+  },
+
+  starIcon: {
+    width: 27,
+    height: 27,
+
+    marginHorizontal: 3,
+
+    resizeMode: "contain",
+  },
+
+  selectEmojiTab: {
+    minWidth: 60,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    padding: 10,
+  },
+
+  selectEmojiIcon: {
+    width: 30,
+    height: 30,
+
+    resizeMode: "contain",
+  },
+
+  emojiDropdownRow: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+
+    gap: 8,
+
+    paddingTop: 10,
+  },
+
+  emojiChoice: {
+    width: 42,
+    height: 42,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 21,
+
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+
+  selectedEmojiChoice: {
+    borderColor: colours.lightblue,
+    backgroundColor: "rgba(33,150,243,0.22)",
+  },
+
+  reviewEmoji: {
+    fontSize: 21,
+  },
+
+  reviewInputRow: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "stretch",
+
+    gap: 10,
+
+    marginTop: 15,
+  },
+
+  reviewInput: {
+    flex: 1,
+
+    minHeight: 48,
+    maxHeight: 110,
+
+    color: "#111111",
+
+    fontSize: 15,
+
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+
+    borderRadius: 11,
+
+    backgroundColor: "#ffffff",
+
+    textAlignVertical: "top",
+
+    outlineStyle: "none",
+  },
+
+  reviewButton: {
+    minWidth: 78,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    paddingHorizontal: 16,
+
+    borderRadius: 11,
+
+    backgroundColor: colours.lightblue,
+  },
+
+  disabledReviewButton: {
+    opacity: 0.45,
+  },
+
+  reviewButtonText: {
+    color: "#ffffff",
+
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  selectedEmojisSection: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+
+    marginTop: 12,
+  },
+
+  selectedEmojisTitle: {
+    color: "rgba(255,255,255,0.6)",
+
+    fontSize: 13,
+
+    marginRight: 7,
+  },
+
+  selectedEmojisContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  selectedEmoji: {
+    fontSize: 20,
+    marginHorizontal: 3,
+  },
+
+  /* =========================================================
+     REVIEWS
+  ========================================================= */
+
+  reviewCardWrapper: {
+    width: "100%",
+    maxWidth: 900,
+
+    alignSelf: "center",
+
+    marginBottom: 14,
+  },
+
+  noReviewsContainer: {
+    width: "100%",
+    maxWidth: 900,
+
+    alignSelf: "center",
+    alignItems: "center",
+
+    paddingVertical: 35,
+    paddingHorizontal: 20,
+  },
+
+  noReviewsTitle: {
+    color: "#ffffff",
+
+    fontSize: 18,
+    fontWeight: "800",
+  },
+
+  noReviewsText: {
+    color: "rgba(255,255,255,0.55)",
+
+    fontSize: 14,
+    lineHeight: 20,
+
+    textAlign: "center",
+
+    marginTop: 5,
+  },
+
+  bottomNavBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+
+    zIndex: 90,
+  },
+
+  /* =========================================================
+     SHARE MODAL
+  ========================================================= */
+
+  modalKeyboardView: {
+    flex: 1,
+  },
+
+  modalOverlay: {
+    flex: 1,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    padding: 18,
+
+    backgroundColor: "rgba(0,0,0,0.76)",
+  },
+
+  modalContent: {
+    width: "100%",
+    maxHeight: "82%",
+
+    padding: 18,
+
+    borderRadius: 20,
+
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+
+    backgroundColor: colours.background,
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+
+    elevation: 12,
+  },
+
+  desktopModalContent: {
+    width: 520,
+    maxHeight: 650,
+
+    padding: 22,
+  },
+
+  modalHeader: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+
+    marginBottom: 16,
+  },
+
+  modalTitleContainer: {
+    flex: 1,
+    minWidth: 0,
+
+    paddingRight: 15,
+  },
+
+  modalText: {
+    color: "#ffffff",
+
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "800",
+  },
+
+  modalSongName: {
+    color: "rgba(255,255,255,0.58)",
 
     fontSize: 14,
 
-    color: "#fff",
-
-    marginTop: 5,
-
+    marginTop: 3,
   },
 
+  modalCloseButton: {
+    width: 38,
+    height: 38,
 
+    alignItems: "center",
+    justifyContent: "center",
 
+    borderRadius: 19,
 
+    backgroundColor: "rgba(255,255,255,0.07)",
+  },
+
+  modalSectionTitle: {
+    color: "#ffffff",
+
+    fontSize: 15,
+    fontWeight: "700",
+
+    marginBottom: 10,
+  },
+
+  gridContainer: {
+    paddingBottom: 10,
+  },
+
+  friendItem: {
+    flex: 1,
+
+    minWidth: 75,
+    maxWidth: 110,
+
+    alignItems: "center",
+
+    padding: 8,
+    margin: 3,
+
+    borderRadius: 13,
+  },
+
+  selectedFriendItem: {
+    backgroundColor: "rgba(33,150,243,0.2)",
+  },
+
+  avatar: {
+    width: 54,
+    height: 54,
+
+    borderRadius: 27,
+
+    marginBottom: 6,
+
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+
+  username: {
+    color: "#ffffff",
+
+    fontSize: 12,
+
+    textAlign: "center",
+  },
+
+  checkmarkIcon: {
+    position: "absolute",
+    top: 43,
+    right: 13,
+
+    width: 21,
+    height: 21,
+  },
+
+  emptyFriendsText: {
+    color: "rgba(255,255,255,0.55)",
+
+    fontSize: 14,
+
+    textAlign: "center",
+
+    paddingVertical: 25,
+  },
+
+  commentSection: {
+    width: "100%",
+
+    marginTop: 10,
+  },
+
+  commentPrompt: {
+    color: "#ffffff",
+
+    fontSize: 14,
+    fontWeight: "700",
+
+    marginBottom: 8,
+  },
+
+  commentInput: {
+    width: "100%",
+
+    minHeight: 75,
+    maxHeight: 115,
+
+    color: "#ffffff",
+
+    padding: 12,
+
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    borderRadius: 12,
+
+    backgroundColor: colours.darkblue,
+
+    textAlignVertical: "top",
+
+    outlineStyle: "none",
+  },
+
+  commentLength: {
+    color: "rgba(255,255,255,0.4)",
+
+    fontSize: 11,
+
+    textAlign: "right",
+
+    marginTop: 4,
+  },
+
+  shareButton: {
+    minHeight: 48,
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+
+    gap: 8,
+
+    marginTop: 16,
+
+    borderRadius: 24,
+
+    backgroundColor: "#2196f3",
+  },
+
+  disabledButton: {
+    opacity: 0.4,
+  },
+
+  buttonText: {
+    color: "#ffffff",
+
+    fontSize: 15,
+    fontWeight: "800",
+  },
 });
