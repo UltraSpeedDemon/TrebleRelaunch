@@ -30,8 +30,13 @@ import {
 } from "../providers/rest";
 
 import {
+  signOut,
   updateProfile,
 } from "firebase/auth";
+
+import {
+  deleteSession,
+} from "../utils/session";
 
 const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
@@ -191,7 +196,7 @@ export default function Settings({
 
         const payload = {
           username:
-            cleanedUsername.toLowerCase(),
+            cleanedUsername,
 
           darkMode:
             Boolean(darkMode),
@@ -288,52 +293,115 @@ export default function Settings({
   /*
    * Sign the user out.
    */
-  const handleLogout =
-    useCallback(() => {
-      Alert.alert(
-        "Log Out?",
-        "Are you sure you want to log out?",
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-          },
-          {
-            text: "Log Out",
-            style: "destructive",
+const performLogout =
+  useCallback(async () => {
+    if (loggingOut) {
+      return;
+    }
 
-            onPress: async () => {
-              try {
-                setLoggingOut(true);
+    try {
+      setLoggingOut(true);
 
-                await auth.signOut();
-
-                navigation.reset({
-                  index: 0,
-                  routes: [
-                    {
-                      name: "Home",
-                    },
-                  ],
-                });
-              } catch (error) {
-                console.error(
-                  "[Settings] Logout error:",
-                  error
-                );
-
-                Alert.alert(
-                  "Unable to log out",
-                  "Please try again."
-                );
-              } finally {
-                setLoggingOut(false);
-              }
-            },
-          },
-        ]
+      console.log(
+        "[Settings] Logging out..."
       );
-    }, [navigation]);
+
+      /*
+       * Sign out of Firebase Authentication.
+       */
+      await signOut(auth);
+
+      /*
+       * Remove the locally saved login session.
+       */
+      await deleteSession(
+        "userUid"
+      );
+
+      /*
+       * Reset navigation so the user cannot
+       * press Back and return to Settings/Feed.
+       */
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: "Home",
+          },
+        ],
+      });
+
+      console.log(
+        "[Settings] Logout complete."
+      );
+    } catch (error) {
+      console.error(
+        "[Settings] Logout error:",
+        error
+      );
+
+      const message =
+        "Unable to log out. Please try again.";
+
+      if (Platform.OS === "web") {
+        window.alert(message);
+      } else {
+        Alert.alert(
+          "Unable to log out",
+          message
+        );
+      }
+    } finally {
+      setLoggingOut(false);
+    }
+  }, [
+    loggingOut,
+    navigation,
+  ]);
+
+const handleLogout =
+  useCallback(() => {
+    if (loggingOut) {
+      return;
+    }
+
+    /*
+     * Use the browser's confirmation dialog on web.
+     * React Native Alert confirmation buttons are
+     * not dependable in React Native Web.
+     */
+    if (Platform.OS === "web") {
+      const confirmed =
+        window.confirm(
+          "Are you sure you want to log out?"
+        );
+
+      if (confirmed) {
+        performLogout();
+      }
+
+      return;
+    }
+
+    Alert.alert(
+      "Log Out?",
+      "Are you sure you want to log out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: performLogout,
+        },
+      ]
+    );
+  }, [
+    loggingOut,
+    performLogout,
+  ]);
 
   if (loading) {
     return (

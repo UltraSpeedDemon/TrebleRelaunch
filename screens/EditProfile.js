@@ -207,11 +207,16 @@ export default function EditProfile({
           currentUser.email ||
           "";
 
-        const finalAvatar =
+        const backendAvatar =
           userData?.avatar &&
           userData.avatar !== "None"
             ? userData.avatar
             : null;
+
+        const finalAvatar =
+          backendAvatar ||
+          currentUser.photoURL ||
+          null;
 
         const publicValue =
           userData?.isPublic;
@@ -362,98 +367,136 @@ export default function EditProfile({
    * Upload an avatar to Firebase Storage and update OrientDB.
    */
   const uploadAvatarToFirebase =
-    useCallback(
-      async (asset) => {
-        const currentUser =
-          auth.currentUser;
+  useCallback(
+    async (asset) => {
+      const currentUser =
+        auth.currentUser;
 
-        if (!currentUser?.uid) {
-          throw new Error(
-            "No user is logged in."
+      if (!currentUser?.uid) {
+        throw new Error(
+          "No user is logged in."
+        );
+      }
+
+      try {
+        setUploadingAvatar(true);
+
+        const preparedImage =
+          await prepareAvatar(asset);
+
+        const blob =
+          await createImageBlob(
+            preparedImage.uri
           );
-        }
 
-        try {
-          setUploadingAvatar(
-            true
+        const storageReference =
+          ref(
+            storage,
+            `avatars/${currentUser.uid}.jpg`
           );
 
-          const preparedImage =
-            await prepareAvatar(
-              asset
-            );
+        await uploadBytes(
+          storageReference,
+          blob,
+          {
+            contentType:
+              "image/jpeg",
+            cacheControl:
+              "public,max-age=3600",
+          }
+        );
 
-          const blob =
-            await createImageBlob(
-              preparedImage.uri
-            );
+        const downloadURL =
+          await getDownloadURL(
+            storageReference
+          );
 
-          const storageReference =
-            ref(
-              storage,
-              `avatars/${currentUser.uid}.jpg`
-            );
+        /*
+         * Add a version parameter so browsers do not
+         * continue showing the old cached avatar.
+         */
+        const avatarURL =
+          `${downloadURL}${
+            downloadURL.includes("?")
+              ? "&"
+              : "?"
+          }updated=${Date.now()}`;
 
-          await uploadBytes(
-            storageReference,
-            blob,
+        /*
+         * Save the avatar in the Treble backend.
+         */
+        const updateResponse =
+          await updateUser(
+            currentUser.uid,
             {
-              contentType:
-                "image/jpeg",
+              avatar: avatarURL,
             }
           );
 
-          const downloadURL =
-            await getDownloadURL(
-              storageReference
-            );
+        await parseResponse(
+          updateResponse,
+          "Unable to save the avatar."
+        );
 
-          const updateResponse =
-            await updateUser(
-              currentUser.uid,
-              {
-                avatar:
-                  downloadURL,
-              }
-            );
+        /*
+         * Also save it to Firebase Authentication.
+         */
+        await updateProfile(
+          currentUser,
+          {
+            photoURL: avatarURL,
+          }
+        );
 
-          await parseResponse(
-            updateResponse,
-            "Unable to save the avatar."
+        /*
+         * Update the picture immediately on this page.
+         */
+        setAvatar(avatarURL);
+
+        if (
+          Platform.OS === "web"
+        ) {
+          window.alert(
+            "Your profile picture was updated successfully."
           );
-
-          setAvatar(
-            downloadURL
-          );
-
+        } else {
           Alert.alert(
             "Avatar updated",
             "Your profile picture was updated successfully."
           );
-        } catch (error) {
-          console.error(
-            "[EditProfile] Avatar upload error:",
-            error
-          );
+        }
+      } catch (error) {
+        console.error(
+          "[EditProfile] Avatar upload error:",
+          error
+        );
 
+        const message =
+          error?.message ||
+          "Please try another image.";
+
+        if (
+          Platform.OS === "web"
+        ) {
+          window.alert(
+            `Unable to update avatar: ${message}`
+          );
+        } else {
           Alert.alert(
             "Unable to update avatar",
-            error?.message ||
-              "Please try another image."
-          );
-        } finally {
-          setUploadingAvatar(
-            false
+            message
           );
         }
-      },
-      [
-        createImageBlob,
-        parseResponse,
-        prepareAvatar,
-      ]
-    );
-
+      } finally {
+        setUploadingAvatar(false);
+      }
+    },
+    [
+      createImageBlob,
+      parseResponse,
+      prepareAvatar,
+    ]
+  );
   /*
    * Open the image picker.
    */
@@ -547,9 +590,7 @@ export default function EditProfile({
       }
 
       const newUsername =
-        username
-          .trim()
-          .toLowerCase();
+        username.trim();
 
       if (!newUsername) {
         Alert.alert(
@@ -583,7 +624,7 @@ export default function EditProfile({
       }
 
       if (
-        !/^[a-z0-9._-]+$/.test(
+        !/^[a-z0-9._-]+$/i.test(
           newUsername
         )
       ) {
@@ -696,13 +737,9 @@ export default function EditProfile({
         }
       : FALLBACK_AVATAR;
 
-  const hasChanges =
-    username
-      .trim()
-      .toLowerCase() !==
-      originalUsername
-        .trim()
-        .toLowerCase();
+    const hasChanges =
+    username.trim() !==
+    originalUsername.trim();
 
   if (loading) {
     return (
@@ -835,12 +872,19 @@ export default function EditProfile({
               activeOpacity={0.8}
             >
               <Image
-                source={
-                  avatarSource
+                key={
+                  typeof avatar === "string"
+                    ? avatar
+                    : "fallback-avatar"
                 }
-                style={
-                  styles.avatar
-                }
+                source={avatarSource}
+                style={styles.avatar}
+                onError={(event) => {
+                  console.error(
+                    "[EditProfile] Avatar display error:",
+                    event?.nativeEvent?.error
+                  );
+                }}
               />
 
               <View
@@ -948,17 +992,14 @@ export default function EditProfile({
               </Text>
 
               <TextInput
-                style={
-                  styles.input
-                }
+                style={styles.input}
                 value={username}
-                onChangeText={
-                  setUsername
-                }
+                onChangeText={setUsername}
                 placeholder="Enter your username"
                 placeholderTextColor="rgba(255,255,255,0.35)"
-                autoCapitalize="none"
+                autoCapitalize="words"
                 autoCorrect={false}
+                spellCheck={false}
                 maxLength={30}
                 editable={!saving}
                 returnKeyType="done"

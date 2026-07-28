@@ -21,7 +21,10 @@ import {
   View,
 } from "react-native";
 
-import { useNavigation } from "@react-navigation/native";
+import {
+  useFocusEffect,
+  useNavigation,
+} from "@react-navigation/native";
 
 import {
   getFollowRequests,
@@ -104,26 +107,122 @@ export default function Sidebar({
     ]
   );
 
-  useEffect(() => {
-    if (isDesktop) {
-      translateX.setValue(0);
+const loadProfile = useCallback(async () => {
+  const currentUser = auth.currentUser;
 
-      if (!menuOpen) {
-        setMenuOpen(true);
-      }
+  if (!currentUser?.uid) {
+    setAvatar(null);
+    setUsername("User");
+    setEmail("");
+    setLoadingProfile(false);
+    return;
+  }
 
-      return;
+  try {
+    setLoadingProfile(true);
+
+    /*
+     * Reload the Firebase user so the latest
+     * displayName and photoURL are available.
+     */
+    await currentUser.reload();
+
+    const refreshedUser =
+      auth.currentUser || currentUser;
+
+    const response = await getUser(
+      refreshedUser.uid
+    );
+
+    if (!response?.ok) {
+      throw new Error(
+        `User request failed with status ${response?.status}`
+      );
     }
 
-    animateMenu(menuOpen);
-  }, [
-    animateMenu,
-    isDesktop,
-    menuOpen,
-    setMenuOpen,
-    translateX,
-  ]);
+    const userData =
+      await response.json();
 
+    /*
+     * Keep the username exactly as saved,
+     * including all capitalization.
+     */
+    const finalUsername =
+      typeof userData?.username === "string" &&
+      userData.username.trim()
+        ? userData.username.trim()
+        : refreshedUser.displayName ||
+          "User";
+
+    const finalEmail =
+      typeof userData?.email === "string" &&
+      userData.email.trim()
+        ? userData.email.trim()
+        : refreshedUser.email || "";
+
+    /*
+     * Prefer the avatar stored by the Treble backend.
+     * Fall back to Firebase Authentication photoURL.
+     */
+    const backendAvatar =
+      typeof userData?.avatar === "string" &&
+      userData.avatar.trim() &&
+      userData.avatar !== "None"
+        ? userData.avatar.trim()
+        : "";
+
+    const firebaseAvatar =
+      typeof refreshedUser.photoURL === "string"
+        ? refreshedUser.photoURL.trim()
+        : "";
+
+    setUsername(finalUsername);
+    setEmail(finalEmail);
+
+    setAvatar(
+      backendAvatar ||
+      firebaseAvatar ||
+      null
+    );
+  } catch (error) {
+    console.error(
+      "[Sidebar] User-data error:",
+      error
+    );
+
+    const fallbackUser =
+      auth.currentUser;
+
+    setUsername(
+      fallbackUser?.displayName ||
+      "User"
+    );
+
+    setEmail(
+      fallbackUser?.email || ""
+    );
+
+    setAvatar(
+      fallbackUser?.photoURL ||
+      null
+    );
+  } finally {
+    setLoadingProfile(false);
+  }
+}, []);
+
+/*
+ * Reload the Sidebar profile every time the
+ * current screen becomes active again.
+ *
+ * This makes changes from Edit Profile appear
+ * when returning to Feed, Profile, or Settings.
+ */
+useFocusEffect(
+  useCallback(() => {
+    loadProfile();
+  }, [loadProfile])
+);
   const openMenu = useCallback(() => {
     if (isDesktop) {
       return;
@@ -173,99 +272,6 @@ export default function Sidebar({
       setMenuOpen,
     ]
   );
-
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchUserData = async () => {
-      setLoadingProfile(true);
-
-      try {
-        const currentUser = auth.currentUser;
-
-        if (!currentUser) {
-          if (mounted) {
-            setAvatar(noAvatar);
-            setUsername("User");
-            setEmail("");
-          }
-
-          return;
-        }
-
-        if (mounted) {
-          setEmail(currentUser.email || "");
-        }
-
-        const response = await getUser(
-          currentUser.uid
-        );
-
-        if (!response?.ok) {
-          throw new Error(
-            `User request failed with status ${response?.status}`
-          );
-        }
-
-        const userData = await response.json();
-
-        if (!mounted) {
-          return;
-        }
-
-        setUsername(
-          userData?.username ||
-            currentUser.displayName ||
-            "User"
-        );
-
-        const avatarValue = userData?.avatar;
-
-        if (
-          avatarValue &&
-          avatarValue !== "None" &&
-          (
-            avatarValue.startsWith("data:") ||
-            avatarValue.startsWith("http")
-          )
-        ) {
-          setAvatar({
-            uri: avatarValue,
-          });
-        } else {
-          setAvatar(noAvatar);
-        }
-      } catch (error) {
-        console.error(
-          "[Sidebar] User-data error:",
-          error
-        );
-
-        if (mounted) {
-          setAvatar(noAvatar);
-
-          setUsername(
-            auth.currentUser?.displayName ||
-              "User"
-          );
-
-          setEmail(
-            auth.currentUser?.email || ""
-          );
-        }
-      } finally {
-        if (mounted) {
-          setLoadingProfile(false);
-        }
-      }
-    };
-
-    fetchUserData();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -382,20 +388,6 @@ export default function Sidebar({
     })
   ).current;
 
-  const formatUsername = useCallback(
-    (name) => {
-      if (!name) {
-        return "User";
-      }
-
-      return (
-        name.charAt(0).toUpperCase() +
-        name.slice(1)
-      );
-    },
-    []
-  );
-
   const performLogout = useCallback(async () => {
   try {
     console.log("[Sidebar] Logging out...");
@@ -419,13 +411,13 @@ export default function Sidebar({
      * by pressing the browser Back button.
      */
     navigation.reset({
-      index: 0,
-      routes: [
-        {
-          name: "Login",
-        },
-      ],
-    });
+        index: 0,
+        routes: [
+          {
+            name: "Home",
+          },
+        ],
+      });
 
     console.log("[Sidebar] Logout complete.");
   } catch (error) {
@@ -574,35 +566,51 @@ const handleLogout = useCallback(() => {
               activeOpacity={0.8}
             >
               {loadingProfile &&
-              !avatar ? (
-                <View
-                  style={[
-                    styles.avatar,
-                    styles.avatarLoading,
-                  ]}
-                >
-                  <ActivityIndicator
-                    size="small"
-                    color={
-                      colours.lightblue
+                !avatar ? (
+                  <View
+                    style={[
+                      styles.avatar,
+                      styles.avatarLoading,
+                    ]}
+                  >
+                    <ActivityIndicator
+                      size="small"
+                      color={
+                        colours.lightblue
+                      }
+                    />
+                  </View>
+                ) : (
+                  <Image
+                    key={
+                      avatar ||
+                      "sidebar-default-avatar"
                     }
+                    source={
+                      avatar
+                        ? {
+                            uri: avatar,
+                          }
+                        : noAvatar
+                    }
+                    style={styles.avatar}
+                    onError={(event) => {
+                      console.error(
+                        "[Sidebar] Avatar display error:",
+                        event?.nativeEvent?.error
+                      );
+
+                      setAvatar(null);
+                    }}
                   />
-                </View>
-              ) : (
-                <Image
-                  source={
-                    avatar || noAvatar
-                  }
-                  style={styles.avatar}
-                />
-              )}
+                )}
             </TouchableOpacity>
 
             <Text
               style={styles.profileName}
               numberOfLines={1}
             >
-              {formatUsername(username)}
+              {username || "User"}
             </Text>
 
             <Text
