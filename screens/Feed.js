@@ -2169,7 +2169,7 @@ const styles = StyleSheet.create({
     left: 280,
     right: 0,
 
-    height: 76,
+    height: 58,
 
     paddingTop: 8,
     paddingBottom: 8,
@@ -2178,9 +2178,9 @@ const styles = StyleSheet.create({
 
     alignItems: "center",
 
-    backgroundColor: colours.background,
+    backgroundColor:
+      colours.background,
   },
-
   mobileWebPageHeader: {
     left: 0,
     right: 0,
@@ -2288,9 +2288,9 @@ const styles = StyleSheet.create({
     position: "absolute",
 
     /*
-    * Starts directly below the 76px search header.
+    * Starts directly below the 58px search header.
     */
-    top: 76,
+    top: 58,
     left: 280,
     right: 0,
     bottom: 0,
