@@ -51,6 +51,9 @@ import { Audio } from "expo-av";
 import { AnimatedCircularProgress } from "react-native-circular-progress";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 
+  const DESKTOP_BREAKPOINT = 768;
+  const DESKTOP_SIDEBAR_WIDTH = 280;
+
 export default function AlbumPage({ route, navigation }) {
     const { width } = useWindowDimensions();
 
@@ -58,9 +61,6 @@ export default function AlbumPage({ route, navigation }) {
   const isDesktopWeb = isWeb && width >= 768;
   const isMobileWeb = isWeb && width < 768;
   const isCompact = width < 600;
-
-  const DESKTOP_BREAKPOINT = 768;
-  const DESKTOP_SIDEBAR_WIDTH = 280;
 
   const [menuOpen, setMenuOpen] = useState(false);
 

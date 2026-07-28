@@ -47,12 +47,11 @@ import { Audio } from "expo-av";
 import { AnimatedCircularProgress } from "react-native-circular-progress";
 import Icon from "react-native-vector-icons/MaterialIcons";
 
+ const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+
 export default function SongPage({ route, navigation }) {
     const { width } = useWindowDimensions();
-
-    const DESKTOP_BREAKPOINT = 768;
-    const DESKTOP_SIDEBAR_WIDTH = 280;
-
     const isWeb = Platform.OS === "web";
     const isDesktopWeb = isWeb && width >= 768;
     const isMobileWeb = isWeb && width < 768;
