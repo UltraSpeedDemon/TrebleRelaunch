@@ -22,12 +22,16 @@ import {
 } from "firebase/auth";
 
 import { auth } from "../utils/firebase";
+
 import {
   createUser,
   getUserByUsername,
 } from "../providers/rest";
 
-import { saveSession } from "../utils/session";
+import {
+  saveSession,
+} from "../utils/session";
+
 import colours from "../styles/colours";
 
 const EMAIL_PATTERN =
@@ -71,15 +75,11 @@ function responseContainsUser(data) {
     return data.length > 0;
   }
 
-  if (
-    Array.isArray(data?.users)
-  ) {
+  if (Array.isArray(data?.users)) {
     return data.users.length > 0;
   }
 
-  if (
-    Array.isArray(data?.results)
-  ) {
+  if (Array.isArray(data?.results)) {
     return data.results.length > 0;
   }
 
@@ -106,6 +106,9 @@ function getRegisterError(error) {
     case "auth/operation-not-allowed":
       return "Email and password registration is not enabled in Firebase.";
 
+    case "auth/too-many-requests":
+      return "Too many registration attempts were made. Please wait and try again.";
+
     default:
       return (
         error?.message ||
@@ -122,8 +125,10 @@ export default function Register({
     setUsername,
   ] = useState("");
 
-  const [email, setEmail] =
-    useState("");
+  const [
+    email,
+    setEmail,
+  ] = useState("");
 
   const [
     password,
@@ -131,9 +136,9 @@ export default function Register({
   ] = useState("");
 
   const [
-  confirmPassword,
-  setConfirmPassword,
-] = useState("");
+    confirmPassword,
+    setConfirmPassword,
+  ] = useState("");
 
   const [
     loading,
@@ -144,6 +149,12 @@ export default function Register({
     errorMessage,
     setErrorMessage,
   ] = useState("");
+
+  const clearError = () => {
+    if (errorMessage) {
+      setErrorMessage("");
+    }
+  };
 
   const handleRegister =
     async () => {
@@ -160,6 +171,8 @@ export default function Register({
         email
           .trim()
           .toLowerCase();
+
+      setErrorMessage("");
 
       if (
         !cleanUsername ||
@@ -216,7 +229,10 @@ export default function Register({
         return;
       }
 
-      if (password !== confirmPassword) {
+      if (
+        password !==
+        confirmPassword
+      ) {
         setErrorMessage(
           "Passwords do not match."
         );
@@ -225,24 +241,21 @@ export default function Register({
       }
 
       setLoading(true);
-      setErrorMessage("");
 
       let createdFirebaseUser =
         null;
 
       try {
         /*
-         * Check the backend before creating the
-         * Firebase account to avoid duplicate usernames.
+         * Check the backend for an existing
+         * username before creating Firebase auth.
          */
         const lookupResponse =
           await getUserByUsername(
             cleanUsername
           );
 
-        if (
-          lookupResponse?.ok
-        ) {
+        if (lookupResponse?.ok) {
           const lookupData =
             await readResponse(
               lookupResponse
@@ -259,23 +272,17 @@ export default function Register({
           }
         } else if (
           lookupResponse &&
-          lookupResponse.status !==
-            404
+          lookupResponse.status !== 404
         ) {
-          const lookupData =
-            await readResponse(
-              lookupResponse
-            );
-
-          console.log(
-            "[Register] Username lookup:",
-            lookupData
+          await readResponse(
+            lookupResponse
           );
         }
 
         /*
-         * Firebase automatically signs in a newly
-         * created email/password account.
+         * Create the Firebase Authentication user.
+         * Firebase automatically signs in the
+         * newly created account.
          */
         const userCredential =
           await createUserWithEmailAndPassword(
@@ -285,7 +292,7 @@ export default function Register({
           );
 
         createdFirebaseUser =
-          userCredential.user;
+          userCredential?.user;
 
         if (
           !createdFirebaseUser?.uid
@@ -295,6 +302,14 @@ export default function Register({
           );
         }
 
+        const firebaseUid =
+          createdFirebaseUser.uid;
+
+        console.log(
+          "[Register] Firebase account created:",
+          firebaseUid
+        );
+
         await updateProfile(
           createdFirebaseUser,
           {
@@ -303,9 +318,19 @@ export default function Register({
           }
         );
 
+        /*
+         * Send all common UID field names so this
+         * remains compatible with the current backend.
+         *
+         * The important required field is:
+         * firebaseUid
+         */
         const payload = {
-          userId:
-            createdFirebaseUser.uid,
+          firebaseUid,
+
+          userId: firebaseUid,
+
+          uid: firebaseUid,
 
           username:
             cleanUsername,
@@ -352,13 +377,9 @@ export default function Register({
 
         await saveSession(
           "userUid",
-          createdFirebaseUser.uid
+          firebaseUid
         );
 
-        /*
-         * Firebase has already logged in the account.
-         * Reset directly to Feed.
-         */
         navigation.reset({
           index: 0,
           routes: [
@@ -374,23 +395,21 @@ export default function Register({
         );
 
         /*
-         * Remove an incomplete Firebase account when
-         * the backend profile could not be created.
+         * Delete the Firebase account if Firebase
+         * succeeded but backend profile creation failed.
          */
-        if (
-          createdFirebaseUser &&
-          registerError?.code !==
-            "auth/email-already-in-use"
-        ) {
+        if (createdFirebaseUser) {
           try {
             await deleteUser(
               createdFirebaseUser
             );
-          } catch (
-            deleteError
-          ) {
+
+            console.log(
+              "[Register] Incomplete Firebase user removed."
+            );
+          } catch (deleteError) {
             console.warn(
-              "[Register] Could not roll back Firebase user:",
+              "[Register] Could not remove incomplete Firebase user:",
               deleteError
             );
           }
@@ -420,9 +439,7 @@ export default function Register({
 
   return (
     <KeyboardAvoidingView
-      style={
-        styles.container
-      }
+      style={styles.container}
       behavior={
         Platform.OS === "ios"
           ? "padding"
@@ -493,14 +510,16 @@ export default function Register({
               "#9b9b9b"
             }
             value={username}
-            onChangeText={
-              setUsername
-            }
+            onChangeText={(value) => {
+              setUsername(value);
+              clearError();
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="username-new"
             textContentType="username"
             editable={!loading}
+            returnKeyType="next"
           />
 
           <Text
@@ -521,23 +540,31 @@ export default function Register({
               "#9b9b9b"
             }
             value={email}
-            onChangeText={
-              setEmail
-            }
+            onChangeText={(value) => {
+              setEmail(value);
+              clearError();
+            }}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="email"
             textContentType="emailAddress"
             editable={!loading}
+            returnKeyType="next"
           />
 
-          <Text style={styles.label}>
+          <Text
+            style={
+              styles.label
+            }
+          >
             Password
           </Text>
 
           <TextInput
-            style={styles.input}
+            style={
+              styles.input
+            }
             placeholder="Enter your password"
             placeholderTextColor={
               colours.lightgrey ||
@@ -545,7 +572,10 @@ export default function Register({
             }
             secureTextEntry
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(value) => {
+              setPassword(value);
+              clearError();
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="new-password"
@@ -554,27 +584,43 @@ export default function Register({
             returnKeyType="next"
           />
 
-          <Text style={styles.label}>
+          <Text
+            style={
+              styles.label
+            }
+          >
             Confirm Password
           </Text>
 
           <TextInput
-            style={styles.input}
+            style={
+              styles.input
+            }
             placeholder="Re-enter your password"
             placeholderTextColor={
               colours.lightgrey ||
               "#9b9b9b"
             }
             secureTextEntry
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            value={
+              confirmPassword
+            }
+            onChangeText={(value) => {
+              setConfirmPassword(
+                value
+              );
+
+              clearError();
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="new-password"
             textContentType="newPassword"
             editable={!loading}
             returnKeyType="done"
-            onSubmitEditing={handleRegister}
+            onSubmitEditing={
+              handleRegister
+            }
           />
 
           <TouchableOpacity
@@ -611,11 +657,16 @@ export default function Register({
               styles.button,
               styles.backButton,
             ]}
-            onPress={() =>
-              navigation.navigate(
-                "Login"
-              )
-            }
+            onPress={() => {
+              navigation.reset({
+                index: 0,
+                routes: [
+                  {
+                    name: "Login",
+                  },
+                ],
+              });
+            }}
             disabled={loading}
             activeOpacity={0.8}
           >
