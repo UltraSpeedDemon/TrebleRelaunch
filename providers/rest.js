@@ -565,22 +565,39 @@ export async function getArtistAlbums(
 }
 
 export function getServerEndpointBase() {
-  const tunnelUrl = process.env.EXPO_PUBLIC_API_TUNNEL_URL;
-  const productionUrl = process.env.EXPO_PUBLIC_API_URL;
+  const productionUrl =
+    process.env.EXPO_PUBLIC_API_URL;
 
-  console.log("API endpoint:", tunnelUrl || productionUrl);
+  const tunnelUrl =
+    process.env.EXPO_PUBLIC_API_TUNNEL_URL;
 
-  if (__DEV__) {
-    if (!tunnelUrl) {
-      console.warn(
-        "EXPO_PUBLIC_API_TUNNEL_URL is missing from the .env file"
-      );
-    }
+  const fallbackLocalUrl =
+    "http://10.0.0.80:5000";
 
-    return tunnelUrl || "http://10.0.0.80:5000";
+  /*
+   * Always prefer the permanent DigitalOcean backend.
+   * The tunnel is only a fallback for local development.
+   */
+  const endpoint =
+    productionUrl ||
+    tunnelUrl ||
+    fallbackLocalUrl;
+
+  console.log(
+    "[REST] API endpoint:",
+    endpoint
+  );
+
+  if (!endpoint) {
+    throw new Error(
+      "No backend API URL is configured."
+    );
   }
 
-  return productionUrl;
+  return endpoint.replace(
+    /\/+$/,
+    ""
+  );
 }
 
 

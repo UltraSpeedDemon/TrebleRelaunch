@@ -1,223 +1,766 @@
-import React, { useState } from "react";
+import React, {
+  useState,
+} from "react";
+
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
-  Button,
-  StyleSheet,
   TouchableOpacity,
-  Alert,
-  Image,
+  View,
 } from "react-native";
+
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  updateProfile,
+} from "firebase/auth";
+
 import { auth } from "../utils/firebase";
-import { createUser } from "../providers/rest";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import {
+  createUser,
+  getUserByUsername,
+} from "../providers/rest";
+
 import { saveSession } from "../utils/session";
 import colours from "../styles/colours";
 
-export default function Register({ navigation }) {
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [avatar, setAvatar] = useState(null);
+const EMAIL_PATTERN =
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  const handlePickAvatar = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
+async function readResponse(response) {
+  if (!response) {
+    throw new Error(
+      "The server did not return a response."
+    );
+  }
 
-    if (!result.canceled) {
-      setAvatar(result.assets[0].uri);
-    }
-  };
+  const responseText =
+    await response.text();
 
-  const handleRegister = async () => {
+  let data = null;
+
+  if (responseText) {
     try {
-      // Validate input fields
-      if (!username || !email || !password) {
-        throw new Error("Please fill out all fields");
-      }
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        throw new Error("Please enter a valid email");
-      }
-      if (password.length < 6) {
-        throw new Error("Password must be at least 6 characters");
-      }
-      if (username.length < 3) {
-        throw new Error("Username must be at least 3 characters");
-      }
-
-      // Create user with Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // Save the username as displayName in Firebase Auth
-      await updateProfile(auth.currentUser, { displayName: username.trim().toLowerCase() });
-
-      const payload = {
-        userId: user.uid,
-        username: username.trim().toLowerCase(),
-        email: email,
-        avatar: avatar,
-        isPublic: true, // Update this with a checkbox in the UI later
-        spotifyAccessToken: "",
-        spotifyIsLinked: false,
-        spotifyRefreshToken: "",
-        createdAt: new Date().toISOString(),
-      };
-
-      // Call your Orient endpoint to create the user record
-      const response = await createUser(payload);
-      const data = await response.json();
-
-      // Log the response for debugging
-      console.log("Server response:", response);
-      console.log("Response data:", data);
-
-      if (!response.ok) {
-        // The server route returns 409 if username is taken
-        if (response.status === 409) {
-          throw new Error(data.error || "Username already exists");
-        }
-        // Otherwise, some other error
-        throw new Error(data.error || "Error creating user in backend");
-      }
-
-      // Save the user session and navigate to the main screen
-      await saveSession("userUid", user.uid);
-      navigation.replace("Feed");
-    } catch (error) {
-      Alert.alert("Error", error.message);
+      data = JSON.parse(responseText);
+    } catch {
+      throw new Error(
+        "The server returned an invalid response."
+      );
     }
-  };
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        `Server error ${response.status}.`
+    );
+  }
+
+  return data;
+}
+
+function responseContainsUser(data) {
+  if (Array.isArray(data)) {
+    return data.length > 0;
+  }
+
+  if (
+    Array.isArray(data?.users)
+  ) {
+    return data.users.length > 0;
+  }
+
+  if (
+    Array.isArray(data?.results)
+  ) {
+    return data.results.length > 0;
+  }
+
+  return Boolean(data?.user);
+}
+
+function getRegisterError(error) {
+  const code =
+    String(error?.code || "");
+
+  switch (code) {
+    case "auth/email-already-in-use":
+      return "An account already exists with this email.";
+
+    case "auth/invalid-email":
+      return "Please enter a valid email address.";
+
+    case "auth/weak-password":
+      return "Your password is too weak. Use at least 6 characters.";
+
+    case "auth/network-request-failed":
+      return "Unable to connect. Check your internet connection.";
+
+    case "auth/operation-not-allowed":
+      return "Email and password registration is not enabled in Firebase.";
+
+    default:
+      return (
+        error?.message ||
+        "Unable to create your account."
+      );
+  }
+}
+
+export default function Register({
+  navigation,
+}) {
+  const [
+    username,
+    setUsername,
+  ] = useState("");
+
+  const [email, setEmail] =
+    useState("");
+
+  const [
+    password,
+    setPassword,
+  ] = useState("");
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
+
+  const handleRegister =
+    async () => {
+      if (loading) {
+        return;
+      }
+
+      const cleanUsername =
+        username
+          .trim()
+          .toLowerCase();
+
+      const cleanEmail =
+        email
+          .trim()
+          .toLowerCase();
+
+      if (
+        !cleanUsername ||
+        !cleanEmail ||
+        !password
+      ) {
+        setErrorMessage(
+          "Please fill out every field."
+        );
+
+        return;
+      }
+
+      if (
+        cleanUsername.length < 3
+      ) {
+        setErrorMessage(
+          "Username must be at least 3 characters."
+        );
+
+        return;
+      }
+
+      if (
+        !/^[a-z0-9._-]+$/.test(
+          cleanUsername
+        )
+      ) {
+        setErrorMessage(
+          "Username can only contain letters, numbers, periods, underscores, and hyphens."
+        );
+
+        return;
+      }
+
+      if (
+        !EMAIL_PATTERN.test(
+          cleanEmail
+        )
+      ) {
+        setErrorMessage(
+          "Please enter a valid email address."
+        );
+
+        return;
+      }
+
+      if (password.length < 6) {
+        setErrorMessage(
+          "Password must be at least 6 characters."
+        );
+
+        return;
+      }
+
+      setLoading(true);
+      setErrorMessage("");
+
+      let createdFirebaseUser =
+        null;
+
+      try {
+        /*
+         * Check the backend before creating the
+         * Firebase account to avoid duplicate usernames.
+         */
+        const lookupResponse =
+          await getUserByUsername(
+            cleanUsername
+          );
+
+        if (
+          lookupResponse?.ok
+        ) {
+          const lookupData =
+            await readResponse(
+              lookupResponse
+            );
+
+          if (
+            responseContainsUser(
+              lookupData
+            )
+          ) {
+            throw new Error(
+              "That username is already taken."
+            );
+          }
+        } else if (
+          lookupResponse &&
+          lookupResponse.status !==
+            404
+        ) {
+          const lookupData =
+            await readResponse(
+              lookupResponse
+            );
+
+          console.log(
+            "[Register] Username lookup:",
+            lookupData
+          );
+        }
+
+        /*
+         * Firebase automatically signs in a newly
+         * created email/password account.
+         */
+        const userCredential =
+          await createUserWithEmailAndPassword(
+            auth,
+            cleanEmail,
+            password
+          );
+
+        createdFirebaseUser =
+          userCredential.user;
+
+        if (
+          !createdFirebaseUser?.uid
+        ) {
+          throw new Error(
+            "Firebase did not return a valid user account."
+          );
+        }
+
+        await updateProfile(
+          createdFirebaseUser,
+          {
+            displayName:
+              cleanUsername,
+          }
+        );
+
+        const payload = {
+          userId:
+            createdFirebaseUser.uid,
+
+          username:
+            cleanUsername,
+
+          email:
+            cleanEmail,
+
+          avatar: null,
+
+          isPublic: true,
+
+          spotifyAccessToken:
+            "",
+
+          spotifyIsLinked:
+            false,
+
+          spotifyRefreshToken:
+            "",
+
+          createdAt:
+            new Date().toISOString(),
+        };
+
+        console.log(
+          "[Register] Creating backend user:",
+          payload
+        );
+
+        const response =
+          await createUser(
+            payload
+          );
+
+        const data =
+          await readResponse(
+            response
+          );
+
+        console.log(
+          "[Register] Backend user created:",
+          data
+        );
+
+        await saveSession(
+          "userUid",
+          createdFirebaseUser.uid
+        );
+
+        /*
+         * Firebase has already logged in the account.
+         * Reset directly to Feed.
+         */
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: "Feed",
+            },
+          ],
+        });
+      } catch (registerError) {
+        console.error(
+          "[Register] Registration failed:",
+          registerError
+        );
+
+        /*
+         * Remove an incomplete Firebase account when
+         * the backend profile could not be created.
+         */
+        if (
+          createdFirebaseUser &&
+          registerError?.code !==
+            "auth/email-already-in-use"
+        ) {
+          try {
+            await deleteUser(
+              createdFirebaseUser
+            );
+          } catch (
+            deleteError
+          ) {
+            console.warn(
+              "[Register] Could not roll back Firebase user:",
+              deleteError
+            );
+          }
+        }
+
+        const finalMessage =
+          getRegisterError(
+            registerError
+          );
+
+        setErrorMessage(
+          finalMessage
+        );
+
+        if (
+          Platform.OS !== "web"
+        ) {
+          Alert.alert(
+            "Registration failed",
+            finalMessage
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.largeText}>Register</Text>
-
-      <Text style={styles.text}>Username</Text>
-      <TextInput
-        style={[
-          styles.input,
-          {
-            borderRadius: 10, // Adjust the radius to your preference
-            width: 300, // Static width
-            height: 50, // Static height
-          },
-        ]}
-        placeholder="Enter your username"
-        placeholderTextColor={colours.lightgrey}
-        value={username}
-        onChangeText={(text) => setUsername(text)}
-      />
-
-      <Text style={styles.text}>Email</Text>
-      <TextInput
-        style={[
-          styles.input,
-          {
-            borderRadius: 10, // Adjust the radius to your preference
-            width: 300, // Static width
-            height: 50, // Static height
-          },
-        ]}
-        placeholder="Enter your email"
-        placeholderTextColor={colours.lightgrey}
-        value={email}
-        onChangeText={(text) => setEmail(text)}
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-
-      <Text style={styles.text}>Password</Text>
-      <TextInput
-        style={[
-          styles.input,
-          {
-            borderRadius: 10, // Adjust the radius to your preference
-            width: 300, // Static width
-            height: 50, // Static height
-          },
-        ]}
-        placeholder="Enter your password"
-        placeholderTextColor={colours.lightgrey}
-        secureTextEntry
-        value={password}
-        onChangeText={(text) => setPassword(text)}
-      />
-      <Text style={styles.text}></Text>
-
-      <TouchableOpacity style={[styles.button, { backgroundColor: colours.primaryblue, opacity: 0.7 }]} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Register</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[
-          styles.button, // Correctly reference the style object
-          { backgroundColor: colours.secondaryblue, opacity: 0.7 }, // Change the background color
-        ]}
-        onPress={() => navigation.navigate("Login")}
+    <KeyboardAvoidingView
+      style={
+        styles.container
+      }
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : undefined
+      }
+    >
+      <ScrollView
+        contentContainerStyle={
+          styles.scrollContent
+        }
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={
+          false
+        }
       >
-        <Text style={styles.altButtonText}>Back to Login</Text>
-      </TouchableOpacity>
-    </View>
+        <View
+          style={
+            styles.registerCard
+          }
+        >
+          <Text
+            style={
+              styles.largeText
+            }
+          >
+            Register
+          </Text>
+
+          <Text
+            style={
+              styles.subtitle
+            }
+          >
+            Create your Treble account
+          </Text>
+
+          {errorMessage ? (
+            <View
+              style={
+                styles.errorContainer
+              }
+            >
+              <Text
+                style={
+                  styles.errorText
+                }
+              >
+                {errorMessage}
+              </Text>
+            </View>
+          ) : null}
+
+          <Text
+            style={
+              styles.label
+            }
+          >
+            Username
+          </Text>
+
+          <TextInput
+            style={
+              styles.input
+            }
+            placeholder="Enter your username"
+            placeholderTextColor={
+              colours.lightgrey ||
+              "#9b9b9b"
+            }
+            value={username}
+            onChangeText={
+              setUsername
+            }
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="username-new"
+            textContentType="username"
+            editable={!loading}
+          />
+
+          <Text
+            style={
+              styles.label
+            }
+          >
+            Email
+          </Text>
+
+          <TextInput
+            style={
+              styles.input
+            }
+            placeholder="Enter your email"
+            placeholderTextColor={
+              colours.lightgrey ||
+              "#9b9b9b"
+            }
+            value={email}
+            onChangeText={
+              setEmail
+            }
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
+            editable={!loading}
+          />
+
+          <Text
+            style={
+              styles.label
+            }
+          >
+            Password
+          </Text>
+
+          <TextInput
+            style={
+              styles.input
+            }
+            placeholder="Enter your password"
+            placeholderTextColor={
+              colours.lightgrey ||
+              "#9b9b9b"
+            }
+            secureTextEntry
+            value={password}
+            onChangeText={
+              setPassword
+            }
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            editable={!loading}
+            returnKeyType="done"
+            onSubmitEditing={
+              handleRegister
+            }
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.primaryButton,
+              loading &&
+                styles.disabledButton,
+            ]}
+            onPress={
+              handleRegister
+            }
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            {loading ? (
+              <ActivityIndicator
+                size="small"
+                color="#ffffff"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.buttonText
+                }
+              >
+                Create Account
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.backButton,
+            ]}
+            onPress={() =>
+              navigation.navigate(
+                "Login"
+              )
+            }
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={
+                styles.buttonText
+              }
+            >
+              Back to Login
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colours.bluegrey,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  text: {
-    fontFamily: "sans-serif",
-    fontSize: 20,
-    color: "#fff",
-    marginVertical: 5,
-  },
-  largeText: {
-    fontSize: 80,
-    fontFamily: 'Lobster',
-    color: "#fff",
-    marginBottom: 20,
-  },
-  input: {
-    height: 50,
-    width: 300,
-    borderColor: colours.secondaryblue,
-    borderWidth: 1,
-    borderRadius: 10,
-    fontFamily: "Domine",
-    marginBottom: 20,
-    paddingHorizontal: 10,
-    fontSize: 18,
-    color: "#FFFFFF",
-    backgroundColor: "transparent",
-  },
-  button: {
-    backgroundColor: colours.navbarBlue, // Primary blue color
-    borderRadius: 25, // Rounded corners
-    width: 200, // Static width
-    height: 50, // Static height
-    justifyContent: "center", // Center text vertically
-    alignItems: "center", // Center text horizontally
-    marginVertical: 10, // Add some margin
-  },
-  buttonText: {
-    color: "#FFFFFF", // White text
-    fontSize: 16, // Font size
-    fontWeight: "bold", // Optional bold text
-  },
-  altButtonText: {
-    color: "black",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-});
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+
+      backgroundColor:
+        colours.background ||
+        colours.bluegrey,
+    },
+
+    scrollContent: {
+      flexGrow: 1,
+
+      alignItems: "center",
+      justifyContent:
+        "center",
+
+      padding: 20,
+    },
+
+    registerCard: {
+      width: "100%",
+      maxWidth: 460,
+
+      paddingVertical: 34,
+      paddingHorizontal: 28,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.1)",
+
+      borderRadius: 22,
+
+      backgroundColor:
+        colours.darkblue ||
+        "rgba(0,0,0,0.2)",
+    },
+
+    largeText: {
+      color: "#ffffff",
+
+      fontSize: 60,
+      lineHeight: 70,
+
+      fontFamily: "Lobster",
+
+      textAlign: "center",
+    },
+
+    subtitle: {
+      color:
+        "rgba(255,255,255,0.65)",
+
+      fontSize: 15,
+
+      marginTop: 4,
+      marginBottom: 24,
+
+      textAlign: "center",
+    },
+
+    errorContainer: {
+      width: "100%",
+
+      padding: 12,
+      marginBottom: 16,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,75,75,0.45)",
+
+      borderRadius: 10,
+
+      backgroundColor:
+        "rgba(255,50,50,0.1)",
+    },
+
+    errorText: {
+      color: "#ff7777",
+
+      fontSize: 14,
+      lineHeight: 20,
+
+      textAlign: "center",
+    },
+
+    label: {
+      color: "#ffffff",
+
+      fontSize: 15,
+      fontWeight: "700",
+
+      marginBottom: 7,
+    },
+
+    input: {
+      width: "100%",
+      height: 52,
+
+      color: "#ffffff",
+
+      borderWidth: 1,
+      borderColor:
+        colours.secondaryblue,
+
+      borderRadius: 12,
+
+      marginBottom: 17,
+      paddingHorizontal: 15,
+
+      fontFamily: "Domine",
+      fontSize: 16,
+
+      backgroundColor:
+        "rgba(255,255,255,0.055)",
+
+      outlineStyle: "none",
+    },
+
+    button: {
+      width: "100%",
+      height: 50,
+
+      alignItems: "center",
+      justifyContent:
+        "center",
+
+      borderRadius: 25,
+
+      marginTop: 10,
+    },
+
+    primaryButton: {
+      backgroundColor:
+        colours.primaryblue,
+    },
+
+    backButton: {
+      borderWidth: 1,
+      borderColor:
+        colours.secondaryblue,
+
+      backgroundColor:
+        "rgba(55,160,225,0.15)",
+    },
+
+    disabledButton: {
+      opacity: 0.55,
+    },
+
+    buttonText: {
+      color: "#ffffff",
+
+      fontSize: 16,
+      fontWeight: "800",
+    },
+  });

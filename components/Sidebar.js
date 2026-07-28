@@ -28,7 +28,10 @@ import {
   getUser,
 } from "../providers/rest";
 
+import { signOut } from "firebase/auth";
+
 import { auth } from "../utils/firebase";
+import { deleteSession } from "../utils/session";
 import colours from "../styles/colours";
 
 const DESKTOP_SIDEBAR_WIDTH = 280;
@@ -393,47 +396,95 @@ export default function Sidebar({
     []
   );
 
-  const handleLogout = useCallback(() => {
-    Alert.alert(
-      "Log out",
-      "Are you sure you want to log out?",
-      [
+  const performLogout = useCallback(async () => {
+  try {
+    console.log("[Sidebar] Logging out...");
+
+    /*
+     * Sign out of Firebase.
+     */
+    await signOut(auth);
+
+    /*
+     * Remove the custom saved UID session.
+     */
+    await deleteSession("userUid");
+
+    if (!isDesktop) {
+      setMenuOpen(false);
+    }
+
+    /*
+     * Reset navigation so Feed cannot be reached
+     * by pressing the browser Back button.
+     */
+    navigation.reset({
+      index: 0,
+      routes: [
         {
-          text: "Cancel",
-          style: "cancel",
+          name: "Login",
         },
-        {
-          text: "Log Out",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await auth.signOut();
+      ],
+    });
 
-              if (!isDesktop) {
-                setMenuOpen(false);
-              }
-
-              navigation.navigate("Home");
-            } catch (error) {
-              console.error(
-                "[Sidebar] Logout error:",
-                error
-              );
-
-              Alert.alert(
-                "Unable to log out",
-                "Please try again."
-              );
-            }
-          },
-        },
-      ]
+    console.log("[Sidebar] Logout complete.");
+  } catch (error) {
+    console.error(
+      "[Sidebar] Logout error:",
+      error
     );
-  }, [
-    isDesktop,
-    navigation,
-    setMenuOpen,
-  ]);
+
+    if (Platform.OS === "web") {
+      window.alert(
+        "Unable to log out. Please try again."
+      );
+    } else {
+      Alert.alert(
+        "Unable to log out",
+        "Please try again."
+      );
+    }
+  }
+}, [
+  isDesktop,
+  navigation,
+  setMenuOpen,
+]);
+
+const handleLogout = useCallback(() => {
+  /*
+   * React Native Alert confirmation buttons
+   * are not dependable on React Native Web.
+   */
+  if (Platform.OS === "web") {
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to log out?"
+      );
+
+    if (confirmed) {
+      performLogout();
+    }
+
+    return;
+  }
+
+  Alert.alert(
+    "Log out",
+    "Are you sure you want to log out?",
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: performLogout,
+      },
+    ]
+  );
+}, [performLogout]);
 
   return (
     <View

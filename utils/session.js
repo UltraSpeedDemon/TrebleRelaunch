@@ -1,16 +1,34 @@
+import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 
-// Save data to secure storage
+// Save session data
 export async function saveSession(key, value) {
-  await SecureStore.setItemAsync(key, value);
+  const stringValue = String(value ?? "");
+
+  if (Platform.OS === "web") {
+    await AsyncStorage.setItem(key, stringValue);
+    return;
+  }
+
+  await SecureStore.setItemAsync(key, stringValue);
 }
 
-// Get data from secure storage
+// Get session data
 export async function getSession(key) {
+  if (Platform.OS === "web") {
+    return await AsyncStorage.getItem(key);
+  }
+
   return await SecureStore.getItemAsync(key);
 }
 
 // Delete session data
 export async function deleteSession(key) {
+  if (Platform.OS === "web") {
+    await AsyncStorage.removeItem(key);
+    return;
+  }
+
   await SecureStore.deleteItemAsync(key);
 }
