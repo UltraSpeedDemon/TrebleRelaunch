@@ -1,52 +1,110 @@
 import React, {
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  FlatList,
+  Image,
+  Platform,
+  RefreshControl,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  Image,
-  Animated,
-  StyleSheet,
-  FlatList,
-  ActivityIndicator,
-  RefreshControl,
-  Alert,
+  useWindowDimensions,
+  View,
 } from "react-native";
 
-import { useFocusEffect } from "@react-navigation/native";
+import {
+  useFocusEffect,
+} from "@react-navigation/native";
 
 import { auth } from "../utils/firebase";
+
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
+
 import colours from "../styles/colours";
 
 import {
   getUserLikes,
 } from "../providers/rest";
 
-export default function Favourites({ navigation }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchText, setSearchText] = useState("");
-  const [searchAnimation] = useState(
-    new Animated.Value(0)
-  );
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
 
-  const [likedItems, setLikedItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+export default function Favourites({
+  navigation,
+}) {
+  const { width } = useWindowDimensions();
 
-  const toggleSearch = () => {
+  const isWeb = Platform.OS === "web";
+  const isDesktopWeb =
+    isWeb && width >= DESKTOP_BREAKPOINT;
+  const isMobileWeb =
+    isWeb && width < DESKTOP_BREAKPOINT;
+  const isCompact = width < 600;
+
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  const [searchOpen, setSearchOpen] =
+    useState(false);
+
+  const [searchText, setSearchText] =
+    useState("");
+
+  const [likedItems, setLikedItems] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const searchAnimation = useRef(
+    new Animated.Value(
+      isDesktopWeb ? 1 : 0
+    )
+  ).current;
+
+  /*
+   * Keep the sidebar permanently open on desktop.
+   * Mobile continues to use the hamburger menu.
+   */
+  useEffect(() => {
+    if (isDesktopWeb) {
+      setMenuOpen(true);
+      setSearchOpen(true);
+      searchAnimation.setValue(1);
+    } else {
+      setMenuOpen(false);
+      setSearchOpen(false);
+      searchAnimation.setValue(0);
+    }
+  }, [
+    isDesktopWeb,
+    searchAnimation,
+  ]);
+
+  const toggleSearch = useCallback(() => {
+    if (isDesktopWeb) {
+      return;
+    }
+
     const nextOpenState = !searchOpen;
 
     Animated.timing(searchAnimation, {
       toValue: nextOpenState ? 1 : 0,
-      duration: 300,
+      duration: 220,
       useNativeDriver: false,
     }).start();
 
@@ -55,98 +113,93 @@ export default function Favourites({ navigation }) {
     if (!nextOpenState) {
       setSearchText("");
     }
-  };
-
-  const searchWidth = searchAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "67%"],
-  });
-
-  const searchOpacity = searchAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
+  }, [
+    isDesktopWeb,
+    searchAnimation,
+    searchOpen,
+  ]);
 
   const loadLikedItems = useCallback(
-  async (isRefresh = false) => {
-    const currentUser = auth.currentUser;
+    async (isRefresh = false) => {
+      const currentUser = auth.currentUser;
 
-    if (!currentUser) {
-      setLikedItems([]);
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
+      if (!currentUser?.uid) {
+        setLikedItems([]);
+        setLoading(false);
+        setRefreshing(false);
 
-    try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
+        return;
       }
-
-      console.log(
-        "[LikedSongs] Loading likes for:",
-        currentUser.uid
-      );
-
-      const response = await getUserLikes(
-        currentUser.uid
-      );
-
-      if (!response) {
-        throw new Error(
-          "The backend returned no response."
-        );
-      }
-
-      const responseText =
-        await response.text();
-
-      let data = {};
 
       try {
-        data = responseText
-          ? JSON.parse(responseText)
-          : {};
-      } catch {
-        throw new Error(
-          responseText ||
-          "The backend returned invalid JSON."
-        );
-      }
+        if (isRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
+        }
 
-      if (!response.ok) {
-        throw new Error(
-          data?.error ||
-          `Unable to load liked items. HTTP ${response.status}`
+        const response = await getUserLikes(
+          currentUser.uid
         );
-      }
 
-      setLikedItems(
-        Array.isArray(data.likes)
+        if (!response) {
+          throw new Error(
+            "The backend returned no response."
+          );
+        }
+
+        const responseText =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch {
+          throw new Error(
+            responseText ||
+              "The backend returned invalid JSON."
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+              `Unable to load liked items. HTTP ${response.status}`
+          );
+        }
+
+        const rawLikes = Array.isArray(
+          data?.likes
+        )
           ? data.likes
-          : []
-      );
-    } catch (error) {
-      console.error(
-        "[LikedSongs] Load error:",
-        error
-      );
+          : Array.isArray(data)
+            ? data
+            : [];
 
-      setLikedItems([]);
+        setLikedItems(rawLikes);
+      } catch (error) {
+        console.error(
+          "[Favourites] Load error:",
+          error
+        );
 
-      Alert.alert(
-        "Unable to load liked music",
-        error.message
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  },
-  []
-);
+        setLikedItems([]);
+
+        Alert.alert(
+          "Unable to load liked music",
+          error?.message ||
+            "Please try again."
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    []
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -154,618 +207,1201 @@ export default function Favourites({ navigation }) {
     }, [loadLikedItems])
   );
 
-  const filteredLikedItems = useMemo(() => {
-  const query = searchText
-    .trim()
-    .toLowerCase();
+  /*
+   * Normalize the different possible shapes returned
+   * by the backend into one consistent music object.
+   */
+  const normalizeLikedItem = useCallback(
+    (item) => {
+      const itemInfo =
+        item?.song ||
+        item?.item_info ||
+        item ||
+        {};
 
-  if (!query) {
-    return likedItems;
-  }
-
-  return likedItems.filter((item) => {
-    const title = String(
-      item.title ||
-      item.name ||
-      ""
-    ).toLowerCase();
-
-    const artist = String(
-      typeof item.artist === "string"
-        ? item.artist
-        : item.artist?.name ||
-          item.artistName ||
-          ""
-    ).toLowerCase();
-
-    const type = String(
-      item.type || ""
-    ).toLowerCase();
-
-    return (
-      title.includes(query) ||
-      artist.includes(query) ||
-      type.includes(query)
-    );
-  });
-}, [likedItems, searchText]);
-
-  const getSongFromFavourite = (item) => {
-    const song =
-      item.song ||
-      item.item_info ||
-      {};
-
-    const itemId =
-      song.id ||
-      song.listenableId ||
-      song.listenable_id ||
-      item.listenableId ||
-      item.listenable_id ||
-      item.itemId ||
-      item.id ||
-      "";
-
-    const title =
-      song.title ||
-      song.name ||
-      item.title ||
-      item.name ||
-      "Unknown Track";
-
-    const artist =
-      song.artist ||
-      item.artist ||
-      (
-        song.artistName ||
-        item.artistName
-          ? {
-              name:
-                song.artistName ||
-                item.artistName,
-            }
-          : null
-      );
-
-    const album =
-      song.album ||
-      item.album ||
-      null;
-
-    const image =
-      song.image ||
-      song.coverArt ||
-      item.image ||
-      item.coverArt ||
-      album?.cover_xl ||
-      album?.cover_big ||
-      "";
-
-    return {
-      ...song,
-
-      id: String(itemId),
-      listenableId: String(itemId),
-      type: song.type || item.type || "track",
-
-      title,
-      name: song.name || title,
-
-      artist,
-      artistName:
-        song.artistName ||
-        item.artistName ||
-        artist?.name ||
-        (
-          typeof artist === "string"
-            ? artist
-            : ""
-        ),
-
-      album,
-
-      image,
-      coverArt:
-        song.coverArt ||
-        item.coverArt ||
-        image,
-
-      preview:
-        song.preview ||
-        song.previewUrl ||
-        item.preview ||
-        item.previewUrl ||
-        "",
-    };
-  };
-
-  const openLikedItem = (item) => {
-  if (!item?.id) {
-    Alert.alert(
-      "Unable to open item",
-      "This liked item does not have an ID."
-    );
-
-    return;
-  }
-
-  if (item.type === "artist") {
-    navigation.navigate("ArtistPage", {
-      artist: item,
-    });
-
-    return;
-  }
-
-  if (item.type === "album") {
-    navigation.navigate("AlbumPage", {
-      album: item,
-    });
-
-    return;
-  }
-
-  navigation.navigate("SongPage", {
-    track: item,
-  });
-};
-
-  const getArtistName = (item) => {
-    const song = getSongFromFavourite(item);
-
-    if (typeof song.artist === "string") {
-      return song.artist;
-    }
-
-    return (
-      song.artist?.name ||
-      song.artistName ||
-      "Unknown Artist"
-    );
-  };
-
-  const getImage = (item) => {
-    const song = getSongFromFavourite(item);
-
-    return (
-      song.image ||
-      song.coverArt ||
-      song.album?.cover_xl ||
-      song.album?.cover_big ||
-      ""
-    );
-  };
-
-  const renderLikedItem = ({ item }) => {
-  const imageUri =
-    item.image ||
-    item.coverArt ||
-    item.album?.cover_xl ||
-    item.album?.cover_big ||
-    "";
-
-  const title =
-    item.title ||
-    item.name ||
-    "Unknown Item";
-
-  const artistName =
-    typeof item.artist === "string"
-      ? item.artist
-      : item.artist?.name ||
-        item.artistName ||
+      const itemId =
+        itemInfo?.id ||
+        itemInfo?.listenableId ||
+        itemInfo?.listenable_id ||
+        item?.listenableId ||
+        item?.listenable_id ||
+        item?.itemId ||
+        item?.id ||
         "";
 
-  const typeLabel =
-    item.type === "artist"
-      ? "Artist"
-      : item.type === "album"
-        ? "Album"
-        : "Song";
+      const title =
+        itemInfo?.title ||
+        itemInfo?.name ||
+        item?.title ||
+        item?.name ||
+        "Unknown Item";
+
+      const rawArtist =
+        itemInfo?.artist ||
+        item?.artist ||
+        null;
+
+      const artistName =
+        typeof rawArtist === "string"
+          ? rawArtist
+          : rawArtist?.name ||
+            itemInfo?.artistName ||
+            item?.artistName ||
+            "";
+
+      const artist =
+        typeof rawArtist === "string"
+          ? {
+              name: rawArtist,
+            }
+          : rawArtist ||
+            (
+              artistName
+                ? {
+                    name: artistName,
+                  }
+                : null
+            );
+
+      const album =
+        itemInfo?.album ||
+        item?.album ||
+        null;
+
+      const image =
+        itemInfo?.image ||
+        itemInfo?.coverArt ||
+        item?.image ||
+        item?.coverArt ||
+        album?.cover_xl ||
+        album?.cover_big ||
+        album?.cover_medium ||
+        "";
+
+      const type =
+        itemInfo?.type ||
+        item?.type ||
+        "track";
+
+      return {
+        ...item,
+        ...itemInfo,
+
+        likeId:
+          item?.likeId ||
+          item?.record_id ||
+          item?.rid ||
+          null,
+
+        id: String(itemId),
+
+        listenableId: String(itemId),
+
+        type,
+
+        title,
+
+        name:
+          itemInfo?.name ||
+          title,
+
+        artist,
+
+        artistName,
+
+        album,
+
+        image,
+
+        coverArt:
+          itemInfo?.coverArt ||
+          item?.coverArt ||
+          image,
+
+        preview:
+          itemInfo?.preview ||
+          itemInfo?.previewUrl ||
+          item?.preview ||
+          item?.previewUrl ||
+          "",
+      };
+    },
+    []
+  );
+
+  const normalizedLikedItems = useMemo(
+    () =>
+      likedItems.map(
+        normalizeLikedItem
+      ),
+    [
+      likedItems,
+      normalizeLikedItem,
+    ]
+  );
+
+  const filteredLikedItems = useMemo(() => {
+    const query = searchText
+      .trim()
+      .toLowerCase();
+
+    if (!query) {
+      return normalizedLikedItems;
+    }
+
+    return normalizedLikedItems.filter(
+      (item) => {
+        const title = String(
+          item?.title ||
+          item?.name ||
+          ""
+        ).toLowerCase();
+
+        const artist = String(
+          typeof item?.artist === "string"
+            ? item.artist
+            : item?.artist?.name ||
+              item?.artistName ||
+              ""
+        ).toLowerCase();
+
+        const album = String(
+          typeof item?.album === "string"
+            ? item.album
+            : item?.album?.title ||
+              ""
+        ).toLowerCase();
+
+        const type = String(
+          item?.type || ""
+        ).toLowerCase();
+
+        return (
+          title.includes(query) ||
+          artist.includes(query) ||
+          album.includes(query) ||
+          type.includes(query)
+        );
+      }
+    );
+  }, [
+    normalizedLikedItems,
+    searchText,
+  ]);
+
+  const openLikedItem = useCallback(
+    (item) => {
+      if (!item?.id) {
+        Alert.alert(
+          "Unable to open item",
+          "This liked item does not have an ID."
+        );
+
+        return;
+      }
+
+      if (item.type === "artist") {
+        navigation.navigate(
+          "ArtistPage",
+          {
+            artist: item,
+          }
+        );
+
+        return;
+      }
+
+      if (item.type === "album") {
+        navigation.navigate(
+          "AlbumPage",
+          {
+            album: item,
+          }
+        );
+
+        return;
+      }
+
+      navigation.navigate(
+        "SongPage",
+        {
+          track: {
+            ...item,
+            type:
+              item?.type ||
+              "track",
+          },
+        }
+      );
+    },
+    [navigation]
+  );
+
+  const renderLikedItem = useCallback(
+    ({ item }) => {
+      const imageUri =
+        item?.image ||
+        item?.coverArt ||
+        item?.album?.cover_xl ||
+        item?.album?.cover_big ||
+        item?.album?.cover_medium ||
+        "";
+
+      const title =
+        item?.title ||
+        item?.name ||
+        "Unknown Item";
+
+      const artistName =
+        typeof item?.artist === "string"
+          ? item.artist
+          : item?.artist?.name ||
+            item?.artistName ||
+            "";
+
+      const albumName =
+        typeof item?.album === "string"
+          ? item.album
+          : item?.album?.title ||
+            "";
+
+      const typeLabel =
+        item?.type === "artist"
+          ? "Artist"
+          : item?.type === "album"
+            ? "Album"
+            : "Song";
+
+      return (
+        <TouchableOpacity
+          style={[
+            styles.favouriteCard,
+            isDesktopWeb &&
+              styles.desktopFavouriteCard,
+            isCompact &&
+              styles.compactFavouriteCard,
+          ]}
+          activeOpacity={0.8}
+          onPress={() =>
+            openLikedItem(item)
+          }
+        >
+          {imageUri ? (
+            <Image
+              source={{
+                uri: imageUri,
+              }}
+              style={[
+                styles.albumImage,
+                isCompact &&
+                  styles.compactAlbumImage,
+              ]}
+            />
+          ) : (
+            <View
+              style={[
+                styles.imagePlaceholder,
+                isCompact &&
+                  styles.compactAlbumImage,
+              ]}
+            >
+              <Text
+                style={
+                  styles.placeholderIcon
+                }
+              >
+                ♪
+              </Text>
+            </View>
+          )}
+
+          <View
+            style={
+              styles.favouriteDetails
+            }
+          >
+            <View style={styles.titleRow}>
+              <Text
+                style={styles.songTitle}
+                numberOfLines={1}
+              >
+                {title}
+              </Text>
+
+              <Image
+                source={require("../images/whiteFullHeart.png")}
+                style={styles.heartIcon}
+              />
+            </View>
+
+            {artistName ? (
+              <Text
+                style={styles.artistName}
+                numberOfLines={1}
+              >
+                {artistName}
+              </Text>
+            ) : null}
+
+            {albumName &&
+            item?.type !== "album" ? (
+              <Text
+                style={styles.albumName}
+                numberOfLines={1}
+              >
+                {albumName}
+              </Text>
+            ) : null}
+
+            <Text
+              style={styles.typeLabel}
+            >
+              {typeLabel}
+            </Text>
+          </View>
+
+          <Text style={styles.arrow}>
+            ›
+          </Text>
+        </TouchableOpacity>
+      );
+    },
+    [
+      isCompact,
+      isDesktopWeb,
+      openLikedItem,
+    ]
+  );
+
+  const searchWidth =
+    searchAnimation.interpolate({
+      inputRange: [0, 1],
+      outputRange: [
+        "0%",
+        isDesktopWeb ? "100%" : "76%",
+      ],
+    });
+
+  const searchOpacity =
+    searchAnimation.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 1],
+    });
+
+  const renderEmptyList = useCallback(
+    () => {
+      const hasSearch =
+        searchText.trim().length > 0;
+
+      return (
+        <View
+          style={styles.emptyContainer}
+        >
+          <Image
+            source={require("../images/whiteOpenHeart.png")}
+            style={styles.emptyHeart}
+          />
+
+          <Text
+            style={styles.emptyTitle}
+          >
+            {hasSearch
+              ? "No matching liked music"
+              : "No liked music yet"}
+          </Text>
+
+          <Text style={styles.emptyText}>
+            {hasSearch
+              ? "Try searching for a different song, artist, or album."
+              : "Like songs, albums, and artists to see them here."}
+          </Text>
+        </View>
+      );
+    },
+    [searchText]
+  );
 
   return (
-    <TouchableOpacity
-      style={styles.favouriteCard}
-      activeOpacity={0.8}
-      onPress={() =>
-        openLikedItem(item)
-      }
+    <View
+      style={[
+        styles.container,
+        isWeb && styles.webContainer,
+      ]}
     >
-      {imageUri ? (
-        <Image
-          source={{ uri: imageUri }}
-          style={styles.albumImage}
+      {/* =====================================================
+          SIDEBAR
+      ===================================================== */}
+      <View
+        style={[
+          styles.sideMenu,
+          isDesktopWeb &&
+            styles.desktopSideMenu,
+          isMobileWeb &&
+            styles.mobileSideMenu,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={
+            isDesktopWeb
+              ? true
+              : menuOpen
+          }
+          setMenuOpen={
+            isDesktopWeb
+              ? () => {}
+              : setMenuOpen
+          }
+          isDesktop={isDesktopWeb}
         />
-      ) : (
-        <View style={styles.imagePlaceholder}>
-          <Text style={styles.placeholderIcon}>
-            ♪
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.favouriteDetails}>
-        <View style={styles.titleRow}>
-          <Text
-            style={styles.songTitle}
-            numberOfLines={1}
-          >
-            {title}
-          </Text>
-
-          <Image
-            source={require("../images/whiteFullHeart.png")}
-            style={styles.heartIcon}
-          />
-        </View>
-
-        {!!artistName && (
-          <Text
-            style={styles.artistName}
-            numberOfLines={1}
-          >
-            {artistName}
-          </Text>
-        )}
-
-        <Text style={styles.typeLabel}>
-          {typeLabel}
-        </Text>
       </View>
 
-      <Text style={styles.arrow}>›</Text>
-    </TouchableOpacity>
-  );
-};
-
-  return (
-    <View style={styles.container}>
-      <Animated.View
+      {/* =====================================================
+          PAGE CONTENT
+      ===================================================== */}
+      <View
         style={[
-          styles.searchBar,
-          {
-            transform: [
-              {
-                translateX:
-                  searchAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [300, 0],
-                  }),
-              },
-            ],
-            width: searchWidth,
-            opacity: searchOpacity,
-          },
+          styles.pageContent,
+          isDesktopWeb &&
+            styles.desktopPageContent,
+          isMobileWeb &&
+            styles.mobilePageContent,
         ]}
       >
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search liked music..."
-          placeholderTextColor="#aaa"
-          value={searchText}
-          onChangeText={setSearchText}
-        />
-      </Animated.View>
+        {/* TOP HEADER */}
+        <View
+          style={[
+            styles.topHeader,
+            isCompact &&
+              styles.compactTopHeader,
+          ]}
+        >
+          <View style={styles.headingGroup}>
+            <Text style={styles.header}>
+              Liked
+            </Text>
 
-      <TouchableOpacity
-        style={styles.searchIcon}
-        onPress={toggleSearch}
-      >
-        <Image
-          source={require("../images/blackSearchIcon.png")}
-          style={styles.icon}
-        />
-      </TouchableOpacity>
+            <Text style={styles.subText}>
+              Songs, albums, and artists you have liked.
+            </Text>
+          </View>
 
-      <View style={styles.sideMenu}>
-        <Sidebar
-          menuOpen={menuOpen}
-          setMenuOpen={setMenuOpen}
-        />
-      </View>
+          {!isDesktopWeb ? (
+            <TouchableOpacity
+              style={
+                styles.searchIconButton
+              }
+              onPress={toggleSearch}
+            >
+              <Image
+                source={require("../images/blackSearchIcon.png")}
+                style={styles.searchIconImage}
+              />
+            </TouchableOpacity>
+          ) : null}
+        </View>
 
-      <View style={styles.content}>
-        <Text style={styles.header}>
-          Liked
-        </Text>
+        {/* SEARCH */}
+        <Animated.View
+          style={[
+            styles.searchBar,
+            isDesktopWeb &&
+              styles.desktopSearchBar,
+            !isDesktopWeb && {
+              width: searchWidth,
+              opacity: searchOpacity,
+              maxHeight:
+                searchAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 48],
+                }),
+              marginBottom:
+                searchAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 16],
+                }),
+            },
+          ]}
+          pointerEvents={
+            isDesktopWeb || searchOpen
+              ? "auto"
+              : "none"
+          }
+        >
+          <Image
+            source={require("../images/blackSearchIcon.png")}
+            style={styles.inputSearchIcon}
+          />
 
-        <Text style={styles.subText}>
-          Songs, albums, and artists you have liked.
-        </Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search liked music..."
+            placeholderTextColor="rgba(255,255,255,0.45)"
+            selectionColor="#ffffff"
+            value={searchText}
+            onChangeText={setSearchText}
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
 
+          {searchText ? (
+            <TouchableOpacity
+              onPress={() =>
+                setSearchText("")
+              }
+              style={
+                styles.clearSearchButton
+              }
+            >
+              <Text
+                style={
+                  styles.clearSearchText
+                }
+              >
+                ×
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </Animated.View>
+
+        {/* LIST */}
         {loading ? (
-          <View style={styles.centerContent}>
+          <View
+            style={
+              styles.centerContent
+            }
+          >
             <ActivityIndicator
               size="large"
-              color={colours.lightblue}
+              color={
+                colours.lightblue
+              }
             />
 
-            <Text style={styles.loadingText}>
-              Loading liked...
+            <Text
+              style={styles.loadingText}
+            >
+              Loading liked music...
             </Text>
           </View>
         ) : (
           <FlatList
             data={filteredLikedItems}
             renderItem={renderLikedItem}
-            keyExtractor={(item, index) =>
-              item.likeId ||
-              `${item.type}-${item.id}-${index}`
+            keyExtractor={(
+              item,
+              index
+            ) =>
+              String(
+                item?.likeId ||
+                `${item?.type}-${item?.id}-${index}`
+              )
             }
-            showsVerticalScrollIndicator={false}
+            style={[
+              styles.list,
+              isWeb && styles.webList,
+            ]}
             contentContainerStyle={[
               styles.listContent,
-              filteredLikedItems.length === 0 &&
+              isDesktopWeb &&
+                styles.desktopListContent,
+              filteredLikedItems.length ===
+                0 &&
                 styles.emptyListContent,
             ]}
+            showsVerticalScrollIndicator={
+              false
+            }
+            scrollEnabled
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            removeClippedSubviews={false}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={() =>
                   loadLikedItems(true)
                 }
-                tintColor="#FFFFFF"
+                tintColor="#ffffff"
+                colors={["#ffffff"]}
+                progressBackgroundColor={
+                  colours.darkblue
+                }
               />
             }
             ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Image
-                  source={require("../images/whiteOpenHeart.png")}
-                  style={styles.emptyHeart}
-                />
-
-                <Text style={styles.emptyTitle}>
-                  No liked songs yet
-                </Text>
-
-                <Text style={styles.emptyText}>
-                  Like songs to see them here.
-                </Text>
-              </View>
+              renderEmptyList
             }
           />
         )}
       </View>
 
-      <View style={styles.bottomNavBar}>
-        <BottomNavbar />
-      </View>
+      {/* MOBILE NAVIGATION ONLY */}
+      {!isDesktopWeb ? (
+        <View
+          style={
+            styles.bottomNavBar
+          }
+        >
+          <BottomNavbar />
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-
-  typeLabel: {
-    color: colours.lightblue,
-    fontSize: 12,
-    fontWeight: "bold",
-    marginTop: 6,
-    textTransform: "uppercase",
-  },
+  /* =====================================================
+     PAGE
+  ===================================================== */
 
   container: {
     flex: 1,
-    backgroundColor: colours.bluegrey,
+    minHeight: 0,
+
+    backgroundColor:
+      colours.background,
   },
 
-  searchIcon: {
-    width: 40,
-    height: 40,
-    position: "absolute",
-    top: 70,
-    right: 20,
-    zIndex: 20,
-  },
-
-  icon: {
+  webContainer: {
     width: "100%",
-    height: "100%",
-    resizeMode: "contain",
+    height: "100vh",
+
+    minHeight: 0,
+
+    overflow: "hidden",
   },
 
-  searchBar: {
-    position: "absolute",
-    height: 40,
-    top: 70,
-    left: 20,
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colours.lightblue,
-    backgroundColor: colours.darkblue,
-    zIndex: 19,
-  },
-
-  searchInput: {
-    fontSize: 16,
-    color: "#FFFFFF",
-  },
+  /* =====================================================
+     SIDEBAR
+  ===================================================== */
 
   sideMenu: {
     position: "absolute",
+
     top: 40,
-    right: 525,
+    left: 0,
     bottom: 0,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 2,
-      height: 0,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 10,
+
+    zIndex: 100,
+    elevation: 20,
   },
 
-  content: {
+  desktopSideMenu: {
+    position: "fixed",
+
+    top: 0,
+    left: 0,
+    right: undefined,
+    bottom: 0,
+
+    width:
+      DESKTOP_SIDEBAR_WIDTH,
+
+    height: "100vh",
+
+    overflow: "hidden",
+
+    zIndex: 100,
+    elevation: 20,
+  },
+
+  mobileSideMenu: {
+    position: "absolute",
+
+    top: 40,
+    left: 0,
+    right: undefined,
+    bottom: 0,
+
+    zIndex: 100,
+  },
+
+  /* =====================================================
+     CONTENT
+  ===================================================== */
+
+  pageContent: {
     flex: 1,
-    paddingTop: 130,
-    paddingHorizontal: 20,
-    paddingBottom: 90,
+    minHeight: 0,
+
+    paddingTop: 72,
+    paddingHorizontal: 15,
+    paddingBottom: 78,
+
+    overflow: "hidden",
+  },
+
+  desktopPageContent: {
+    position: "absolute",
+
+    top: 0,
+    left:
+      DESKTOP_SIDEBAR_WIDTH,
+    right: 0,
+    bottom: 0,
+
+    minHeight: 0,
+
+    paddingTop: 28,
+    paddingLeft: 36,
+    paddingRight: 36,
+    paddingBottom: 0,
+
+    overflow: "hidden",
+  },
+
+  mobilePageContent: {
+    position: "absolute",
+
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 72,
+
+    minHeight: 0,
+
+    paddingTop: 72,
+    paddingHorizontal: 14,
+    paddingBottom: 0,
+
+    overflow: "hidden",
+  },
+
+  /* =====================================================
+     HEADER
+  ===================================================== */
+
+  topHeader: {
+    width: "100%",
+    maxWidth: 920,
+
+    alignSelf: "center",
+
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent:
+      "space-between",
+
+    marginBottom: 18,
+  },
+
+  compactTopHeader: {
+    alignItems: "center",
+  },
+
+  headingGroup: {
+    flex: 1,
+    minWidth: 0,
+
+    paddingRight: 12,
   },
 
   header: {
+    color:
+      colours.lightblue,
+
     fontSize: 32,
-    fontWeight: "bold",
-    color: colours.lightblue,
+    lineHeight: 39,
+    fontWeight: "800",
   },
 
   subText: {
+    color:
+      "rgba(255,255,255,0.7)",
+
     fontSize: 15,
-    color: "#FFFFFF",
-    opacity: 0.75,
-    marginTop: 5,
-    marginBottom: 20,
+    lineHeight: 21,
+
+    marginTop: 3,
   },
 
-  centerContent: {
-    flex: 1,
+  searchIconButton: {
+    width: 45,
+    height: 45,
+
     alignItems: "center",
     justifyContent: "center",
+
+    borderRadius: 23,
+
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
   },
 
-  loadingText: {
-    color: "#FFFFFF",
-    marginTop: 12,
+  searchIconImage: {
+    width: 27,
+    height: 27,
+
+    resizeMode: "contain",
+  },
+
+  /* =====================================================
+     SEARCH
+  ===================================================== */
+
+  searchBar: {
+    width: "100%",
+    maxWidth: 920,
+    height: 46,
+
+    alignSelf: "center",
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    paddingHorizontal: 13,
+
+    borderWidth: 1,
+    borderColor:
+      colours.lightblue,
+    borderRadius: 10,
+
+    backgroundColor:
+      colours.darkblue,
+
+    overflow: "hidden",
+  },
+
+  desktopSearchBar: {
+    width: "100%",
+    opacity: 1,
+
+    marginBottom: 18,
+  },
+
+  inputSearchIcon: {
+    width: 21,
+    height: 21,
+
+    marginRight: 10,
+
+    resizeMode: "contain",
+
+    opacity: 0.72,
+  },
+
+  searchInput: {
+    flex: 1,
+    height: "100%",
+
+    color: "#ffffff",
+
+    fontSize: 15,
+
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+
+    outlineStyle: "none",
+  },
+
+  clearSearchButton: {
+    width: 31,
+    height: 31,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    marginLeft: 7,
+
+    borderRadius: 16,
+
+    backgroundColor:
+      "rgba(255,255,255,0.07)",
+  },
+
+  clearSearchText: {
+    color: "#ffffff",
+
+    fontSize: 22,
+    lineHeight: 24,
+  },
+
+  /* =====================================================
+     LIST AND SCROLLING
+  ===================================================== */
+
+  list: {
+    flex: 1,
+    minHeight: 0,
+
+    width: "100%",
+  },
+
+  webList: {
+    height: "100%",
+
+    overflowY: "auto",
+    overflowX: "hidden",
+
+    WebkitOverflowScrolling:
+      "touch",
+
+    overscrollBehaviorY:
+      "contain",
+
+    scrollbarWidth: "none",
+    msOverflowStyle: "none",
   },
 
   listContent: {
-    paddingBottom: 30,
+    width: "100%",
+
+    paddingBottom: 110,
+  },
+
+  desktopListContent: {
+    paddingBottom: 65,
   },
 
   emptyListContent: {
     flexGrow: 1,
   },
 
+  centerContent: {
+    flex: 1,
+    minHeight: 250,
+
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    color:
+      "rgba(255,255,255,0.7)",
+
+    fontSize: 14,
+
+    marginTop: 12,
+  },
+
+  /* =====================================================
+     FAVOURITE CARDS
+  ===================================================== */
+
   favouriteCard: {
+    width: "100%",
+    maxWidth: 920,
+
+    alignSelf: "center",
+
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colours.darkblue,
+
+    padding: 13,
+    marginBottom: 13,
+
+    borderRadius: 14,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.08)",
+
+    backgroundColor:
+      colours.darkblue,
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 9,
+
+    elevation: 4,
+  },
+
+  desktopFavouriteCard: {
+    minHeight: 112,
+
+    padding: 15,
+  },
+
+  compactFavouriteCard: {
+    padding: 10,
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
   },
 
   albumImage: {
-    width: 78,
-    height: 78,
+    width: 86,
+    height: 86,
+
+    borderRadius: 11,
+
+    resizeMode: "cover",
+
+    backgroundColor:
+      "rgba(255,255,255,0.08)",
+  },
+
+  compactAlbumImage: {
+    width: 68,
+    height: 68,
+
     borderRadius: 9,
   },
 
   imagePlaceholder: {
-    width: 78,
-    height: 78,
-    borderRadius: 9,
+    width: 86,
+    height: 86,
+
     alignItems: "center",
     justifyContent: "center",
+
+    borderRadius: 11,
+
     backgroundColor:
-      "rgba(255,255,255,0.1)",
+      "rgba(255,255,255,0.08)",
   },
 
   placeholderIcon: {
-    color: "#FFFFFF",
+    color: "#ffffff",
+
     fontSize: 34,
+
+    opacity: 0.75,
   },
 
   favouriteDetails: {
     flex: 1,
-    marginLeft: 14,
+    minWidth: 0,
+
+    marginLeft: 15,
   },
 
   titleRow: {
+    width: "100%",
+
     flexDirection: "row",
     alignItems: "center",
   },
 
   songTitle: {
     flex: 1,
-    color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "bold",
+    minWidth: 0,
+
+    color: "#ffffff",
+
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "800",
   },
 
   heartIcon: {
-    width: 18,
-    height: 18,
-    marginLeft: 8,
+    width: 19,
+    height: 19,
+
+    marginLeft: 9,
+
+    resizeMode: "contain",
   },
 
   artistName: {
-    color: "#FFFFFF",
-    opacity: 0.7,
+    color:
+      "rgba(255,255,255,0.72)",
+
     fontSize: 14,
+    lineHeight: 20,
+
     marginTop: 4,
   },
 
-  ratingRow: {
-    flexDirection: "row",
-    marginTop: 7,
-  },
+  albumName: {
+    color:
+      "rgba(255,255,255,0.48)",
 
-  starIcon: {
-    width: 15,
-    height: 15,
-    marginRight: 2,
-  },
-
-  emojiRow: {
-    flexDirection: "row",
-    marginTop: 5,
-  },
-
-  emoji: {
-    fontSize: 16,
-    marginRight: 5,
-  },
-
-  reviewText: {
-    color: "#FFFFFF",
-    opacity: 0.8,
     fontSize: 13,
+    lineHeight: 18,
+
+    marginTop: 1,
+  },
+
+  typeLabel: {
+    color:
+      colours.lightblue,
+
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "800",
+
     marginTop: 6,
+
+    textTransform: "uppercase",
   },
 
   arrow: {
-    color: "#FFFFFF",
+    color:
+      "rgba(255,255,255,0.7)",
+
     fontSize: 34,
-    marginLeft: 8,
+    lineHeight: 38,
+
+    marginLeft: 10,
   },
+
+  /* =====================================================
+     EMPTY STATE
+  ===================================================== */
 
   emptyContainer: {
     flex: 1,
+    minHeight: 320,
+
+    width: "100%",
+    maxWidth: 520,
+
+    alignSelf: "center",
     alignItems: "center",
     justifyContent: "center",
+
     paddingHorizontal: 30,
   },
 
   emptyHeart: {
     width: 58,
     height: 58,
-    opacity: 0.8,
+
+    resizeMode: "contain",
+
+    opacity: 0.72,
   },
 
   emptyTitle: {
-    color: "#FFFFFF",
+    color: "#ffffff",
+
     fontSize: 22,
-    fontWeight: "bold",
+    lineHeight: 28,
+    fontWeight: "800",
+
+    textAlign: "center",
+
     marginTop: 14,
   },
 
   emptyText: {
-    color: "#FFFFFF",
-    opacity: 0.7,
+    color:
+      "rgba(255,255,255,0.65)",
+
     fontSize: 15,
     lineHeight: 21,
+
     textAlign: "center",
+
     marginTop: 8,
   },
 
+  /* =====================================================
+     MOBILE NAVIGATION
+  ===================================================== */
+
   bottomNavBar: {
     position: "absolute",
+
+    left: 0,
+    right: 0,
     bottom: 0,
-    width: "100%",
-    flexDirection: "row",
+
+    zIndex: 90,
   },
 });
