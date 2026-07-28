@@ -1968,7 +1968,7 @@ export default function Feed({ navigation }) {
             onEndReached={loadMoreFeed}
             onEndReachedThreshold={0.35}
 
-            showsVerticalScrollIndicator={true}
+            showsVerticalScrollIndicator={false}
 
             onViewableItemsChanged={handleViewableItemsChanged}
 
@@ -2169,11 +2169,14 @@ const styles = StyleSheet.create({
     left: 280,
     right: 0,
 
-    height: 105,
+    height: 76,
 
-    paddingTop: 24,
+    paddingTop: 8,
+    paddingBottom: 8,
     paddingLeft: 32,
     paddingRight: 32,
+
+    alignItems: "center",
 
     backgroundColor: colours.background,
   },
@@ -2284,7 +2287,10 @@ const styles = StyleSheet.create({
   desktopContent: {
     position: "absolute",
 
-    top: 105,
+    /*
+    * Starts directly below the 76px search header.
+    */
+    top: 76,
     left: 280,
     right: 0,
     bottom: 0,
@@ -2371,14 +2377,20 @@ const styles = StyleSheet.create({
     minHeight: 0,
     height: "100%",
 
+    /*
+    * Scrolling remains enabled.
+    */
     overflowY: "auto",
     overflowX: "hidden",
 
-    /*
-    * Improves touchpad and touch scrolling on browsers.
-    */
     WebkitOverflowScrolling: "touch",
     overscrollBehaviorY: "contain",
+
+    /*
+    * Hide the scrollbar in Firefox and older Microsoft browsers.
+    */
+    scrollbarWidth: "none",
+    msOverflowStyle: "none",
   },
 
   feedContent: {
