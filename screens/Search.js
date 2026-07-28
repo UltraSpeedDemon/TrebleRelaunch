@@ -1717,7 +1717,8 @@ const styles = StyleSheet.create({
     minHeight: 0,
 
     backgroundColor:
-      colours.background,
+  colours.background ||
+  colours.bluegrey,
   },
 
   webContainer: {
@@ -1748,7 +1749,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
 
     backgroundColor:
-      colours.background,
+      colours.background ||
+      colours.bluegrey,
   },
 
   desktopPageHeader: {
@@ -1816,7 +1818,8 @@ const styles = StyleSheet.create({
 
     borderWidth: 2,
     borderColor:
-      colours.background,
+      colours.background ||
+      colours.bluegrey,
 
     borderRadius: 11,
 
