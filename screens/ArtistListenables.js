@@ -331,7 +331,7 @@ export default function ArtistListenables({ navigation, route }) {
                 </View>
             </View>
 
-            {/* Bottom Navigation Bar */}
+            {/* Bottom Navigation Bar fix*/}
             <View style={styles.bottomNavBar}>
                 <BottomNavbar />
             </View>
