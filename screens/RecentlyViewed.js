@@ -867,15 +867,14 @@ export default function RecentlyViewed({
       </View>
 
       {/* MOBILE NAVIGATION ONLY */}
-      {!isDesktopWeb ? (
-        <View
-          style={
-            styles.bottomNavBar
-          }
-        >
-          <BottomNavbar />
-        </View>
-      ) : null}
+      <View
+        style={[
+          styles.bottomNavBar,
+          isDesktopWeb && styles.desktopBottomNavBar,
+        ]}
+      >
+        <BottomNavbar />
+      </View>
     </View>
   );
 }
@@ -884,7 +883,10 @@ const styles = StyleSheet.create({
   /* =====================================================
      PAGE
   ===================================================== */
-
+  desktopBottomNavBar: {
+    left: DESKTOP_SIDEBAR_WIDTH,
+    width: `calc(100% - ${DESKTOP_SIDEBAR_WIDTH}px)`,
+  },
   container: {
     flex: 1,
     minHeight: 0,
