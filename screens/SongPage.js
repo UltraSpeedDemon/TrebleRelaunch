@@ -1294,10 +1294,10 @@ export default function SongPage({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  desktopBottomNavBar: {
-    left: DESKTOP_SIDEBAR_WIDTH,
-    width: `calc(100% - ${DESKTOP_SIDEBAR_WIDTH}px)`,
-  },
+desktopBottomNavBar: {
+  left: DESKTOP_SIDEBAR_WIDTH,
+  right: 0,
+},
   container: {
     flex: 1,
     minHeight: 0,

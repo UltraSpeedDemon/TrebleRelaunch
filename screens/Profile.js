@@ -1383,7 +1383,7 @@ const styles = StyleSheet.create({
   ===================================================== */
 desktopBottomNavBar: {
   left: DESKTOP_SIDEBAR_WIDTH,
-  width: `calc(100% - ${DESKTOP_SIDEBAR_WIDTH}px)`,
+  right: 0,
 },
   container: {
     flex: 1,
