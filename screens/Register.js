@@ -163,9 +163,7 @@ export default function Register({
       }
 
       const cleanUsername =
-        username
-          .trim()
-          .toLowerCase();
+        username.trim();
 
       const cleanEmail =
         email
@@ -198,7 +196,7 @@ export default function Register({
       }
 
       if (
-        !/^[a-z0-9._-]+$/.test(
+        !/^[a-z0-9._-]+$/i.test(
           cleanUsername
         )
       ) {
@@ -514,7 +512,8 @@ export default function Register({
               setUsername(value);
               clearError();
             }}
-            autoCapitalize="none"
+            autoCapitalize="words"
+            spellCheck={false}
             autoCorrect={false}
             autoComplete="username-new"
             textContentType="username"

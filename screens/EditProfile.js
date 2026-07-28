@@ -643,12 +643,17 @@ export default function EditProfile({
           username:
             newUsername,
 
-          avatar:
-            avatar || null,
-
           isPublic:
             Boolean(isPublic),
         };
+
+        if (
+          typeof avatar === "string" &&
+          avatar.trim()
+        ) {
+          payload.avatar =
+            avatar.trim();
+        }
 
         const response =
           await updateUser(

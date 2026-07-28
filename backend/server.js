@@ -3050,6 +3050,163 @@ app.get("/album/summary", async (req, res) => {
   }
 });
 
+app.put("/users/:uid", async (req, res) => {
+  try {
+    const uid = String(
+      req.params.uid || ""
+    ).trim();
+
+    if (!uid) {
+      return res.status(400).json({
+        ok: false,
+        error: "User ID is required.",
+      });
+    }
+
+    const {
+      username,
+      avatar,
+      isPublic,
+      darkMode,
+    } = req.body || {};
+
+    const userRef = db
+      .collection("users")
+      .doc(uid);
+
+    const userSnapshot =
+      await userRef.get();
+
+    if (!userSnapshot.exists) {
+      return res.status(404).json({
+        ok: false,
+        error: "User was not found.",
+      });
+    }
+
+    const updates = {
+      uid,
+      updatedAt:
+        FieldValue.serverTimestamp(),
+    };
+
+    /*
+     * Preserve the exact capitalization entered
+     * by the user.
+     */
+    if (typeof username === "string") {
+      const cleanedUsername =
+        username.trim();
+
+      if (!cleanedUsername) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Username cannot be empty.",
+        });
+      }
+
+      if (cleanedUsername.length < 3) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Username must contain at least three characters.",
+        });
+      }
+
+      if (cleanedUsername.length > 30) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Username must contain 30 characters or fewer.",
+        });
+      }
+
+      if (
+        !/^[a-z0-9._-]+$/i.test(
+          cleanedUsername
+        )
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Username contains invalid characters.",
+        });
+      }
+
+      updates.username =
+        cleanedUsername;
+
+      updates.displayName =
+        cleanedUsername;
+    }
+
+    /*
+     * Save the Firebase Storage avatar URL.
+     *
+     * Only change the avatar when the frontend
+     * explicitly sends the avatar property.
+     */
+    if (
+      Object.prototype.hasOwnProperty.call(
+        req.body || {},
+        "avatar"
+      )
+    ) {
+      updates.avatar =
+        typeof avatar === "string" &&
+        avatar.trim()
+          ? avatar.trim()
+          : null;
+    }
+
+    if (
+      typeof isPublic === "boolean"
+    ) {
+      updates.isPublic =
+        isPublic;
+    }
+
+    if (
+      typeof darkMode === "boolean"
+    ) {
+      updates.darkMode =
+        darkMode;
+    }
+
+    await userRef.set(
+      updates,
+      {
+        merge: true,
+      }
+    );
+
+    const updatedSnapshot =
+      await userRef.get();
+
+    return res.status(200).json({
+      ok: true,
+      uid,
+      user: {
+        id: updatedSnapshot.id,
+        ...updatedSnapshot.data(),
+      },
+    });
+  } catch (error) {
+    console.error(
+      "PUT /users/:uid error:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error:
+        error?.message ||
+        "Unable to update user.",
+    });
+  }
+});
+
 app.get("/users/:uid", async (req, res) => {
   try {
     const { uid } = req.params;
