@@ -131,6 +131,11 @@ export default function Register({
   ] = useState("");
 
   const [
+  confirmPassword,
+  setConfirmPassword,
+] = useState("");
+
+  const [
     loading,
     setLoading,
   ] = useState(false);
@@ -159,7 +164,8 @@ export default function Register({
       if (
         !cleanUsername ||
         !cleanEmail ||
-        !password
+        !password ||
+        !confirmPassword
       ) {
         setErrorMessage(
           "Please fill out every field."
@@ -205,6 +211,14 @@ export default function Register({
       if (password.length < 6) {
         setErrorMessage(
           "Password must be at least 6 characters."
+        );
+
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setErrorMessage(
+          "Passwords do not match."
         );
 
         return;
@@ -518,18 +532,12 @@ export default function Register({
             editable={!loading}
           />
 
-          <Text
-            style={
-              styles.label
-            }
-          >
+          <Text style={styles.label}>
             Password
           </Text>
 
           <TextInput
-            style={
-              styles.input
-            }
+            style={styles.input}
             placeholder="Enter your password"
             placeholderTextColor={
               colours.lightgrey ||
@@ -537,18 +545,36 @@ export default function Register({
             }
             secureTextEntry
             value={password}
-            onChangeText={
-              setPassword
+            onChangeText={setPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            editable={!loading}
+            returnKeyType="next"
+          />
+
+          <Text style={styles.label}>
+            Confirm Password
+          </Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Re-enter your password"
+            placeholderTextColor={
+              colours.lightgrey ||
+              "#9b9b9b"
             }
+            secureTextEntry
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="new-password"
             textContentType="newPassword"
             editable={!loading}
             returnKeyType="done"
-            onSubmitEditing={
-              handleRegister
-            }
+            onSubmitEditing={handleRegister}
           />
 
           <TouchableOpacity
