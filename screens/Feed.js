@@ -54,6 +54,9 @@ import {
 const PAGE_SIZE = 5;
 const DOUBLE_TAP_DELAY = 300;
 
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+
 const PLACEHOLDER_IMAGE = "https://via.placeholder.com/500";
 const PLACEHOLDER_AVATAR = "https://via.placeholder.com/100";
 
