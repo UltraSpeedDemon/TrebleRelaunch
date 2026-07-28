@@ -1816,13 +1816,16 @@ export default function Feed({ navigation }) {
       );
     }, [handleRefresh]);
 
-  return (
+    return (
     <View
       style={[
         styles.container,
         isWeb && styles.webContainer,
       ]}
     >
+      {/* =========================================================
+          TOP SEARCH BAR
+      ========================================================= */}
       <View
         style={[
           styles.pageHeader,
@@ -1835,11 +1838,7 @@ export default function Feed({ navigation }) {
 
         <TouchableOpacity
           style={styles.notificationsButton}
-          onPress={() =>
-            navigation.navigate(
-              "Notifications"
-            )
-          }
+          onPress={() => navigation.navigate("Notifications")}
         >
           <Image
             source={require("../images/notificationsIcon2.png")}
@@ -1848,9 +1847,7 @@ export default function Feed({ navigation }) {
 
           {notificationsCount > 0 ? (
             <View style={styles.notificationBadge}>
-              <Text
-                style={styles.notificationBadgeText}
-              >
+              <Text style={styles.notificationBadgeText}>
                 {notificationsCount > 99
                   ? "99+"
                   : notificationsCount}
@@ -1860,6 +1857,9 @@ export default function Feed({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* =========================================================
+          LEFT SIDEBAR
+      ========================================================= */}
       <View
         style={[
           styles.sideMenu,
@@ -1873,22 +1873,28 @@ export default function Feed({ navigation }) {
         />
       </View>
 
+      {/* =========================================================
+          MAIN FEED
+      ========================================================= */}
       <View
         style={[
           styles.content,
           isWeb && styles.webContent,
         ]}
       >
-        <View style={styles.titleRow}>
-          <View>
-            <Text style={styles.header}>
-              Recent Feed
-            </Text>
+        <View
+          style={[
+            styles.titleRow,
+            isWeb && styles.webTitleRow,
+          ]}
+        >
+          <Text style={styles.header}>
+            Recent Feed
+          </Text>
 
-            <Text style={styles.headerDescription}>
-              Music selected for you and activity from your friends.
-            </Text>
-          </View>
+          <Text style={styles.headerDescription}>
+            Music selected for you and activity from your friends.
+          </Text>
         </View>
 
         {isLoading ? (
@@ -1907,11 +1913,13 @@ export default function Feed({ navigation }) {
             data={combinedFeed}
             renderItem={renderFeedItem}
             keyExtractor={keyExtractor}
-            style={styles.feedList}
+            style={[
+              styles.feedList,
+              isWeb && styles.webFeedList,
+            ]}
             contentContainerStyle={[
               styles.feedContent,
-              isWeb &&
-                styles.webFeedContent,
+              isWeb && styles.webFeedContent,
               combinedFeed.length === 0 &&
                 styles.emptyFeedContent,
             ]}
@@ -1923,36 +1931,34 @@ export default function Feed({ navigation }) {
                 onRefresh={handleRefresh}
                 tintColor="#ffffff"
                 colors={["#ffffff"]}
-                progressBackgroundColor={
-                  colours.foreground
-                }
+                progressBackgroundColor={colours.foreground}
               />
             }
             onEndReached={loadMoreFeed}
             onEndReachedThreshold={0.4}
-            showsVerticalScrollIndicator={
-              isWeb
-            }
-            onViewableItemsChanged={
-              handleViewableItemsChanged
-            }
+            showsVerticalScrollIndicator={true}
+            onViewableItemsChanged={handleViewableItemsChanged}
             viewabilityConfig={{
               itemVisiblePercentThreshold: 60,
             }}
             keyboardShouldPersistTaps="handled"
-            removeClippedSubviews={
-              Platform.OS !== "web"
-            }
+            removeClippedSubviews={Platform.OS !== "web"}
           />
         )}
       </View>
 
+      {/* =========================================================
+          MOBILE BOTTOM NAVIGATION
+      ========================================================= */}
       {!isDesktopWeb ? (
         <View style={styles.bottomNavBar}>
           <BottomNavbar />
         </View>
       ) : null}
 
+      {/* =========================================================
+          SHARE MODAL
+      ========================================================= */}
       <Modal
         animationType="fade"
         transparent
@@ -1977,13 +1983,11 @@ export default function Feed({ navigation }) {
                 <Animated.View
                   style={[
                     styles.modalContent,
-                    isWeb &&
-                      styles.webModalContent,
+                    isWeb && styles.webModalContent,
                     {
                       transform: [
                         {
-                          translateY:
-                            slideAnim,
+                          translateY: slideAnim,
                         },
                       ],
                     },
@@ -1999,9 +2003,7 @@ export default function Feed({ navigation }) {
                         style={styles.modalSubtitle}
                         numberOfLines={1}
                       >
-                        {getDisplayName(
-                          currentShareItem
-                        )}
+                        {getDisplayName(currentShareItem)}
                       </Text>
                     </View>
 
@@ -2025,28 +2027,17 @@ export default function Feed({ navigation }) {
                     data={friendsList}
                     renderItem={renderFriendItem}
                     keyExtractor={(item, index) =>
-                      String(
-                        item?.userId ||
-                          index
-                      )
+                      String(item?.userId || index)
                     }
-                    numColumns={
-                      isCompact ? 3 : 4
-                    }
+                    numColumns={isCompact ? 3 : 4}
                     key={
                       isCompact
                         ? "compact-friends"
                         : "large-friends"
                     }
-                    contentContainerStyle={
-                      styles.friendList
-                    }
+                    contentContainerStyle={styles.friendList}
                     ListEmptyComponent={
-                      <Text
-                        style={
-                          styles.noFriendsText
-                        }
-                      >
+                      <Text style={styles.noFriendsText}>
                         No friends were found.
                       </Text>
                     }
@@ -2055,8 +2046,7 @@ export default function Feed({ navigation }) {
                   {selectedUser ? (
                     <View style={styles.commentSection}>
                       <Text style={styles.commentPrompt}>
-                        Message for{" "}
-                        {selectedUser.username}
+                        Message for {selectedUser.username}
                       </Text>
 
                       <TextInput
@@ -2111,11 +2101,19 @@ const styles = StyleSheet.create({
     backgroundColor: colours.background,
   },
 
+  /*
+   * Keep the app exactly one browser-window high.
+   * The FlatList below becomes the scrolling area.
+   */
   webContainer: {
     height: "100vh",
     minHeight: 0,
     overflow: "hidden",
   },
+
+  /* =========================================================
+     TOP HEADER
+  ========================================================= */
 
   pageHeader: {
     position: "absolute",
@@ -2131,7 +2129,8 @@ const styles = StyleSheet.create({
 
   webPageHeader: {
     paddingTop: 24,
-    paddingHorizontal: 32,
+    paddingLeft: 190,
+    paddingRight: 32,
   },
 
   searchContainer: {
@@ -2178,10 +2177,14 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  /* =========================================================
+     LEFT SIDEBAR
+  ========================================================= */
+
   sideMenu: {
     position: "absolute",
     top: 40,
-    right: 0,
+    left: 0,
     bottom: 0,
     zIndex: 100,
     elevation: 20,
@@ -2189,11 +2192,16 @@ const styles = StyleSheet.create({
 
   sideMenuWeb: {
     top: 0,
-    right: 0,
+    left: 0,
+    right: undefined,
     bottom: undefined,
     height: "100vh",
     zIndex: 100,
   },
+
+  /* =========================================================
+     MAIN CONTENT
+  ========================================================= */
 
   content: {
     flex: 1,
@@ -2204,13 +2212,20 @@ const styles = StyleSheet.create({
   },
 
   webContent: {
+    flex: 1,
     width: "100%",
     maxWidth: 1040,
     alignSelf: "center",
     minHeight: 0,
-    paddingTop: 105,
+
+    /*
+     * Leaves enough room for the search bar.
+     * The title now appears clearly below it.
+     */
+    paddingTop: 125,
     paddingBottom: 0,
-    paddingHorizontal: 28,
+    paddingLeft: 100,
+    paddingRight: 28,
   },
 
   titleRow: {
@@ -2218,6 +2233,10 @@ const styles = StyleSheet.create({
     maxWidth: 760,
     alignSelf: "center",
     marginBottom: 16,
+  },
+
+  webTitleRow: {
+    marginBottom: 18,
   },
 
   header: {
@@ -2247,9 +2266,19 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
+  /*
+   * This is the scrollable element.
+   */
   feedList: {
     flex: 1,
     minHeight: 0,
+  },
+
+  webFeedList: {
+    height: "100%",
+    minHeight: 0,
+    overflowY: "auto",
+    overflowX: "hidden",
   },
 
   feedContent: {
@@ -2257,12 +2286,16 @@ const styles = StyleSheet.create({
   },
 
   webFeedContent: {
-    paddingBottom: 50,
+    paddingBottom: 60,
   },
 
   emptyFeedContent: {
     flexGrow: 1,
   },
+
+  /* =========================================================
+     FEED CARDS
+  ========================================================= */
 
   card: {
     width: "100%",
@@ -2436,6 +2469,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  /* =========================================================
+     REVIEWS
+  ========================================================= */
+
   reviewContainer: {
     width: "100%",
     flexDirection: "row",
@@ -2511,6 +2548,10 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
+  /* =========================================================
+     LIST STATES
+  ========================================================= */
+
   listFooter: {
     alignItems: "center",
     justifyContent: "center",
@@ -2574,6 +2615,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 90,
   },
+
+  /* =========================================================
+     SHARE MODAL
+  ========================================================= */
 
   modalKeyboardView: {
     flex: 1,
