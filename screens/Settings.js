@@ -934,24 +934,26 @@ export default function Settings({
             </View>
 
             <View style={styles.volumeLabels}>
-            <Text style={styles.volumeLabelText}>
-              Quiet
-            </Text>
-
-            <TouchableOpacity
-              style={styles.resetVolumeButton}
-              onPress={handleResetVolume}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.resetVolumeText}>
-                Reset to 25%
+              <Text style={styles.volumeLabelText}>
+                Quiet
               </Text>
-            </TouchableOpacity>
 
-            <Text style={styles.volumeLabelText}>
-              Loud
-            </Text>
-          </View>
+              <View style={styles.resetVolumeArea}>
+                <TouchableOpacity
+                  style={styles.resetVolumeButton}
+                  onPress={handleResetVolume}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.resetVolumeText}>
+                    Reset to 25%
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.volumeLabelText}>
+                Loud
+              </Text>
+            </View>
 
             <View
               style={
@@ -1617,26 +1619,36 @@ const styles =
     },
 
     volumeLabels: {
-        position: "relative",
-
         width: "100%",
-        height: 24,
+
+        flexDirection: "row",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
 
         paddingLeft: 48,
         paddingRight: 4,
 
-        marginTop: 2,
+        marginTop: 4,
+      },
+
+      resetVolumeArea: {
+        position: "absolute",
+
+        left: 48,
+        right: 4,
+        top: 0,
+
+        height: 22,
       },
 
       resetVolumeButton: {
         position: "absolute",
 
         left: "25%",
-        top: 0,
 
         transform: [
           {
-            translateX: -38,
+            translateX: -42,
           },
         ],
       },
@@ -1650,12 +1662,14 @@ const styles =
     },
 
     resetVolumeText: {
-      color:
-        colours.lightblue,
+        color: colours.lightblue,
 
-      fontSize: 12,
-      fontWeight: "800",
-    },
+        fontSize: 12,
+        fontWeight: "800",
+
+        textAlign: "center",
+        whiteSpace: "nowrap",
+      },
 
     volumeNotice: {
       width: "100%",
