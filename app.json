@@ -6,7 +6,7 @@
     "owner": "aleks4920",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/treblelogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "platforms": [
