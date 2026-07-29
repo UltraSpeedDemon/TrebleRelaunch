@@ -43,6 +43,7 @@ const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const BOTTOM_NAV_HEIGHT = 72;
 const MAX_CONTENT_WIDTH = 1120;
+const HEADER_CONTENT_WIDTH = 1240;
 
 /*
  * Horizontal song row that supports:
@@ -203,32 +204,6 @@ function DraggableSongRow({
       }, 150);
     };
 
-  const handleWheel =
-    (event) => {
-      const node =
-        webScrollRef.current;
-
-      if (!node) {
-        return;
-      }
-
-      /*
-       * A trackpad usually supplies deltaX.
-       * A normal mouse wheel supplies deltaY.
-       * Both are converted into horizontal movement.
-       */
-      const horizontalMovement =
-        Math.abs(event.deltaX) >
-        Math.abs(event.deltaY)
-          ? event.deltaX
-          : event.deltaY;
-
-      node.scrollLeft +=
-        horizontalMovement;
-
-      event.preventDefault();
-    };
-
   return React.createElement(
     "div",
     {
@@ -252,11 +227,8 @@ function DraggableSongRow({
       onPointerCancel:
         stopPointerDrag,
 
-      onPointerLeave:
+      onLostPointerCapture:
         stopPointerDrag,
-
-      onWheel:
-        handleWheel,
 
       style: {
         width:
@@ -1619,13 +1591,13 @@ const styles =
      * The section list below uses the same width.
      */
     alignedContent: {
-      width: "100%",
+        width: "100%",
 
-      maxWidth:
-        MAX_CONTENT_WIDTH,
+        maxWidth:
+          HEADER_CONTENT_WIDTH,
 
-      alignSelf: "center",
-    },
+        alignSelf: "center",
+      },
 
     pageHeader: {
       width: "100%",
@@ -1734,9 +1706,9 @@ const styles =
     searchBarContainer: {
       width: "100%",
 
-      minHeight: 47,
+      minHeight: 52,
 
-      marginBottom: 17,
+      marginBottom: 20,
 
       position: "relative",
       zIndex: 20,

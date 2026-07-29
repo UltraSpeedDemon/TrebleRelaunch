@@ -253,7 +253,7 @@ export default function Home({
               styles.subtitle
             }
           >
-            Your music. Your community.
+            Join the Rotation
           </Text>
 
           <Text
@@ -262,8 +262,8 @@ export default function Home({
             }
           >
             Discover new songs, share honest
-            reviews, connect with other music
-            lovers, and build a soundtrack that
+            reviews, share with other music
+            lovers, and create a soundtrack profile that
             feels like you.
           </Text>
 

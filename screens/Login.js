@@ -317,28 +317,6 @@ export default function Login({
             }
           />
 
-          <View
-            style={
-              styles.logoCircle
-            }
-          >
-            <Text
-              style={
-                styles.musicNote
-              }
-            >
-              ♪
-            </Text>
-          </View>
-
-          <Text
-            style={
-              styles.brandText
-            }
-          >
-            Treble
-          </Text>
-
           <Text
             style={
               styles.title
