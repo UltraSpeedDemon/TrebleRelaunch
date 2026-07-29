@@ -6,7 +6,7 @@
     "owner": "aleks4920",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/treblelogo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "platforms": [
@@ -35,7 +35,7 @@
       "package": "com.aleks4920.musicadvancedproject"
     },
     "web": {
-      "favicon": "./assets/treblelogo.png"
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-asset",
