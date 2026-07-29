@@ -933,42 +933,25 @@ export default function Settings({
               />
             </View>
 
-            <View
-              style={
-                styles.volumeLabels
-              }
+            <View style={styles.volumeLabels}>
+            <Text style={styles.volumeLabelText}>
+              Quiet
+            </Text>
+
+            <TouchableOpacity
+              style={styles.resetVolumeButton}
+              onPress={handleResetVolume}
+              activeOpacity={0.7}
             >
-              <Text
-                style={
-                  styles.volumeLabelText
-                }
-              >
-                Quiet
+              <Text style={styles.resetVolumeText}>
+                Reset to 30%
               </Text>
+            </TouchableOpacity>
 
-              <TouchableOpacity
-                onPress={
-                  handleResetVolume
-                }
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={
-                    styles.resetVolumeText
-                  }
-                >
-                  Reset to 30%
-                </Text>
-              </TouchableOpacity>
-
-              <Text
-                style={
-                  styles.volumeLabelText
-                }
-              >
-                Loud
-              </Text>
-            </View>
+            <Text style={styles.volumeLabelText}>
+              Loud
+            </Text>
+          </View>
 
             <View
               style={
@@ -1634,21 +1617,29 @@ const styles =
     },
 
     volumeLabels: {
-      width: "100%",
+        position: "relative",
 
-      flexDirection:
-        "row",
+        width: "100%",
+        height: 24,
 
-      alignItems:
-        "center",
+        paddingLeft: 48,
+        paddingRight: 4,
 
-      justifyContent:
-        "space-between",
+        marginTop: 2,
+      },
 
-      paddingLeft: 48,
+      resetVolumeButton: {
+        position: "absolute",
 
-      marginTop: 2,
-    },
+        left: "30%",
+        top: 0,
+
+        transform: [
+          {
+            translateX: -38,
+          },
+        ],
+      },
 
     volumeLabelText: {
       color:
