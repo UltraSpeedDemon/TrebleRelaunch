@@ -1,668 +1,2676 @@
-import React, { useState, useEffect } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  Alert,
   ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
+  Platform,
   ScrollView,
-} from 'react-native';
-import { auth } from '../utils/firebase';
-import { useRoute } from '@react-navigation/native';
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
+
 import {
-  getUser,
-  getFollowers,
-  getFriends,
+  useFocusEffect,
+  useRoute,
+} from "@react-navigation/native";
+
+import { auth } from "../utils/firebase";
+
+import {
+  deleteReview,
   followUser,
-  unfollowUser,
-  requestFollow,
+  getFollowers,
   getFollowRequests,
-  getUserTopReviews,
+  getFriends,
+  getReviewSong,
+  getUser,
+  getUserActivity,
   getUserFavorites,
   getUserMostUpvoted,
-  getUserActivity,
-  upvoteReview,
+  getUserTopReviews,
   removeUpvoteFromReview,
-  deleteReview,
-  getReviewSong, // New function for enriching reviews
-} from '../providers/rest';
-import colours from '../styles/colours';
-import Sidebar from '../components/Sidebar';
-import BottomNavbar from '../components/BottomNavbar';
-import ReviewCard from '../components/Review';
+  requestFollow,
+  unfollowUser,
+  upvoteReview,
+} from "../providers/rest";
 
-export default function UserProfiles({ navigation }) {
+import colours from "../styles/colours";
+
+import Sidebar from "../components/Sidebar";
+import BottomNavbar from "../components/BottomNavbar";
+import ReviewCard from "../components/Review";
+
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+const BOTTOM_NAV_HEIGHT = 72;
+const MAX_CONTENT_WIDTH = 1080;
+
+const FALLBACK_AVATAR =
+  require("../images/avatarIcon.png");
+
+const SPOTIFY_LOGO =
+  require("../images/spotifyLogo.png");
+
+const ADMIN_BADGE =
+  require("../images/adminBadge.png");
+
+export default function UserProfiles({
+  navigation,
+}) {
   const route = useRoute();
-  const { userId } = route.params;
 
+  const { width } =
+    useWindowDimensions();
 
-  // Basic user info
-  const [username, setUsername] = useState('');
-  const [avatar, setAvatar] = useState(null);
-  const noAvatar = require('../images/avatarIcon.png');
+  const isWeb =
+    Platform.OS === "web";
 
-  // Followers & Friends
-  const [theirFollowers, setTheirFollowers] = useState([]);
-  const [myFriends, setMyFriends] = useState([]);
-  const [followersCount, setFollowersCount] = useState(0);
-  const [followingCount, setFollowingCount] = useState(0);
+  const isDesktopWeb =
+    isWeb &&
+    width >= DESKTOP_BREAKPOINT;
 
-  // Account
-  const [isPublic, setIsPublic] = useState(true);
-  const [isSpotifyLinked, setIsSpotifyLinked] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const isMobileWeb =
+    isWeb &&
+    width < DESKTOP_BREAKPOINT;
 
-  // Follow requests
-  const [followRequested, setFollowRequested] = useState(false);
+  const isCompact =
+    width < 640;
 
-  // Review sections
-  const [topReviews, setTopReviews] = useState([]);
-  const [favorites, setFavorites] = useState([]);
-  const [mostUpvoted, setMostUpvoted] = useState([]);
-  const [activity, setActivity] = useState([]);
-  const [totalReviews, setTotalReviews] = useState(0);
-
-  const [loading, setLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [canViewFullContent, setCanViewFullContent] = useState(true);
-
-  // Helper: capitalize first letter
-  const formatUsername = (name) => {
-    if (!name) return '';
-    return name.charAt(0).toUpperCase() + name.slice(1);
-  };
-
-
-  // Fetch data when userId changes
-  useEffect(() => {
-    fetchUserData();
-    fetchTheirFollowers();
-    fetchMyFriends();
-  }, [userId]);
-
-  useEffect(() => {
-    async function checkFollowRequest() {
-      try {
-        const resp = await getFollowRequests(userId);
-        if (resp.ok) {
-          const requests = await resp.json();
-          const alreadyRequested = requests.some(
-            (req) => req.userId === auth.currentUser.uid
-          );
-          setFollowRequested(alreadyRequested);
-        }
-      } catch (error) {
-        console.error('Error fetching follow request status:', error);
-      }
-    }
-    checkFollowRequest();
-  }, [userId]);
-
-  async function fetchUserData() {
-    try {
-      setLoading(true);
-      const resp = await getUser(userId);
-      if (!resp.ok) throw new Error('Failed to fetch user data');
-      const data = await resp.json();
-      setUsername(data.username || '');
-      setFollowersCount(data.followersCount || 0);
-      setFollowingCount(data.followingCount || 0);
-      setIsPublic(data.isPublic !== false);
-      setIsSpotifyLinked(data.spotifyIsLinked === true);
-      setIsAdmin(data.isAdmin || false);
-      if (
-        data.avatar &&
-        data.avatar !== 'None' &&
-        (data.avatar.startsWith('http') || data.avatar.startsWith('data:'))
-      ) {
-        setAvatar(data.avatar);
-      } else {
-        setAvatar(null);
-      }
-      const currentUserId = auth.currentUser?.uid;
-      const isSelf = currentUserId === userId;
-      const iAmFollowing = await checkIfImFollowing(userId);
-      const canView = data.isPublic || isSelf || iAmFollowing;
-      setCanViewFullContent(canView);
-      if (canView) {
-        await loadAllReviewsSections();
-      } else {
-        setTopReviews([]);
-        setFavorites([]);
-        setMostUpvoted([]);
-        setActivity([]);
-        setTotalReviews(0);
-      }
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-      Alert.alert('Error', 'Unable to fetch user data.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function checkIfImFollowing(targetUserId) {
-    try {
-      const resp = await getFollowers(targetUserId);
-      if (resp.ok) {
-        const arr = await resp.json();
-        return arr.some((f) => f.userId === auth.currentUser?.uid);
-      }
-    } catch (error) {
-      console.error("Error checking if I'm following:", error);
-    }
-    return false;
-  }
-
-  async function fetchTheirFollowers() {
-    try {
-      const resp = await getFollowers(userId);
-      if (resp.ok) {
-        const arr = await resp.json();
-        setTheirFollowers(arr);
-      }
-    } catch (error) {
-      console.error('Error fetching their followers:', error);
-    }
-  }
-
-  async function fetchMyFriends() {
-    try {
-      const resp = await getFriends(auth.currentUser.uid);
-      if (resp.ok) {
-        const friendsArr = await resp.json();
-        setMyFriends(friendsArr);
-      }
-    } catch (error) {
-      console.error('Error fetching my friends:', error);
-    }
-  }
-
-  // Enrichment function – now attaches only the song's RID (plus type and listenableId)
-  async function enrichReviewsWithSong(reviews) {
-    const enriched = await Promise.all(
-      reviews.map(async (review) => {
-        if (!review.song) {
-          try {
-            console.log("DEBUG: Calling getReviewSong for", review.id);
-            const response = await getReviewSong(userId, review.id);
-            if (response && response.ok) {
-              const songData = await response.json();
-              // If the backend returns an object with a title then we assume we have valid song info.
-              return songData;
-            }
-          } catch (err) {
-            console.error("Error enriching review with song:", err);
-          }
-        }
-        return review;
-      })
-    );
-    return enriched;
-  }
-
-
-  async function loadAllReviewsSections() {
-      try {
-        const [topResp, favResp, upvotedResp, activityResp] = await Promise.all([
-          getUserTopReviews(userId),
-          getUserFavorites(userId),
-          getUserMostUpvoted(userId),
-          getUserActivity(userId),
-        ]);
-  
-        if (topResp.ok) {
-          let topData = await topResp.json();
-          var topData2 = await enrichReviewsWithSong(topData);
-  
-          const enrichedReviews = topData.map((review, index) => ({
-            ...review,
-            song: topData2[index]
-          }));
-          
-          setTopReviews(enrichedReviews);
-          console.log("DEBUG: Enriched reviews:", enrichedReviews);
-        }
-        if (favResp.ok) {
-          let favData = await favResp.json();
-          var favData2 = await enrichReviewsWithSong(favData);
-  
-          const enrichedReviews = favData.map((review, index) => ({
-            ...review,
-            song: favData2[index]
-          }));
-          setFavorites(enrichedReviews);
-        }
-        if (upvotedResp.ok) {
-          let upvotedData = await upvotedResp.json();
-          var upvotedData2 = await enrichReviewsWithSong(upvotedData);
-  
-          const enrichedReviews = upvotedData.map((review, index) => ({
-            ...review,
-            song: upvotedData2[index]
-          }));
-  
-          setMostUpvoted(enrichedReviews);
-        }
-        if (activityResp.ok) {
-          let activityData = await activityResp.json();
-          var activityData2 = await enrichReviewsWithSong(activityData);
-  
-          const enrichedReviews = activityData.map((review, index) => ({
-            ...review,
-            song: activityData2[index]
-          }));
-  
-          setActivity(enrichedReviews);
-          setTotalReviews(activityData.length);
-        }
-      } catch (err) {
-        console.error("Error loading review sections:", err);
-      }
-    }
-
-  // Helper: update a review array for a given reviewId
-  const updateReviewArray = (array, reviewId) =>
-    array.map((r) =>
-      r.id === reviewId
-        ? { ...r, upvotes: r.upvoted ? r.upvotes - 1 : r.upvotes + 1, upvoted: !r.upvoted }
-        : r
+  const userId =
+    String(
+      route?.params?.userId ||
+      ""
     );
 
-  // Updated upvote handler to mimic SongPage behavior
-  const handleUpvote = async (reviewId) => {
-    const combined = [...topReviews, ...favorites, ...mostUpvoted, ...activity];
-    const rev = combined.find((r) => r.id === reviewId);
-    if (!rev) return;
-    try {
-      if (!rev.upvoted) {
-        await upvoteReview(reviewId);
-      } else {
-        await removeUpvoteFromReview(reviewId);
-      }
-      setTopReviews((prev) => updateReviewArray(prev, reviewId));
-      setFavorites((prev) => updateReviewArray(prev, reviewId));
-      setMostUpvoted((prev) => updateReviewArray(prev, reviewId));
-      setActivity((prev) => updateReviewArray(prev, reviewId));
-    } catch (err) {
-      console.error('Error upvoting review:', err);
-    }
-  };
+  const currentUserId =
+    String(
+      auth.currentUser?.uid ||
+      ""
+    );
 
-  const handleDelete = async (reviewId) => {
-    const combined = [...topReviews, ...favorites, ...mostUpvoted, ...activity];
-    const rev = combined.find((r) => r.id === reviewId);
-    if (!rev) return;
-    try {
-      if (rev.isUser) {
-        await deleteReview(reviewId);
-      }
-      await loadAllReviewsSections();
-    } catch (err) {
-      console.error('Error deleting review:', err);
-    }
-  };
+  const isSelf =
+    currentUserId === userId;
 
-  // Badge popup handlers
-  const handleSpotifyBadgePress = () => {
-    Alert.alert('Spotify Badge', 'User is linked to Spotify!');
-  };
-  const handleAdminBadgePress = () => {
-    Alert.alert('Admin Badge', 'User is an Admin/Developer!');
-  };
+  const [
+    username,
+    setUsername,
+  ] = useState("");
 
-  // Follow logic
-  const iAmFollowing = theirFollowers.some(
-    (f) => f.userId === auth.currentUser.uid
-  );
-  const isInMyFriends = myFriends.some((fr) => fr.userId === userId);
-  let finalButtonLabel = 'Follow';
-  if (iAmFollowing || isInMyFriends) {
-    finalButtonLabel = 'Following';
-  } else if (!isPublic && followRequested) {
-    finalButtonLabel = 'Requested';
-  }
-  const showFriendsLabel = isInMyFriends;
+  const [
+    avatar,
+    setAvatar,
+  ] = useState(null);
 
-  async function handleFollowPress() {
-    if (finalButtonLabel === 'Following') {
-      try {
-        const resp = await unfollowUser(auth.currentUser.uid, userId);
-        if (resp.ok) {
-          setFollowersCount((prev) => Math.max(0, prev - 1));
-          await fetchTheirFollowers();
-          setMyFriends((prev) => prev.filter((f) => f.userId !== userId));
-        }
-      } catch (error) {
-        console.error('Error unfollowing user:', error);
-      }
-      return;
-    }
-    if (isPublic) {
-      try {
-        const resp = await followUser(auth.currentUser.uid, userId);
-        if (resp.ok) {
-          setFollowersCount((prev) => prev + 1);
-          await fetchTheirFollowers();
-          const updatedFriendsResp = await getFriends(auth.currentUser.uid);
-          if (updatedFriendsResp.ok) {
-            const updatedFriends = await updatedFriendsResp.json();
-            setMyFriends(updatedFriends);
-          }
-        }
-      } catch (error) {
-        console.error('Error following user:', error);
-      }
+  const [
+    theirFollowers,
+    setTheirFollowers,
+  ] = useState([]);
+
+  const [
+    myFriends,
+    setMyFriends,
+  ] = useState([]);
+
+  const [
+    followersCount,
+    setFollowersCount,
+  ] = useState(0);
+
+  const [
+    followingCount,
+    setFollowingCount,
+  ] = useState(0);
+
+  const [
+    isPublic,
+    setIsPublic,
+  ] = useState(true);
+
+  const [
+    isSpotifyLinked,
+    setIsSpotifyLinked,
+  ] = useState(false);
+
+  const [
+    isAdmin,
+    setIsAdmin,
+  ] = useState(false);
+
+  const [
+    followRequested,
+    setFollowRequested,
+  ] = useState(false);
+
+  const [
+    followLoading,
+    setFollowLoading,
+  ] = useState(false);
+
+  const [
+    topReviews,
+    setTopReviews,
+  ] = useState([]);
+
+  const [
+    favorites,
+    setFavorites,
+  ] = useState([]);
+
+  const [
+    mostUpvoted,
+    setMostUpvoted,
+  ] = useState([]);
+
+  const [
+    activity,
+    setActivity,
+  ] = useState([]);
+
+  const [
+    totalReviews,
+    setTotalReviews,
+  ] = useState(0);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
+
+  const [
+    menuOpen,
+    setMenuOpen,
+  ] = useState(false);
+
+  const [
+    canViewFullContent,
+    setCanViewFullContent,
+  ] = useState(true);
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
+
+  useEffect(() => {
+    if (isDesktopWeb) {
+      setMenuOpen(true);
     } else {
-      if (!followRequested) {
+      setMenuOpen(false);
+    }
+  }, [isDesktopWeb]);
+
+  const parseResponse =
+    useCallback(
+      async (
+        response,
+        fallbackMessage
+      ) => {
+        if (!response) {
+          throw new Error(
+            "The backend returned no response."
+          );
+        }
+
+        const responseText =
+          await response.text();
+
+        let data = {};
+
         try {
-          const resp = await requestFollow(auth.currentUser.uid, userId);
-          if (resp.ok) {
-            setFollowRequested(true);
-            Alert.alert('Request Sent', 'Your follow request was sent.');
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch {
+          throw new Error(
+            responseText ||
+            "The backend returned invalid data."
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            data?.message ||
+            `${fallbackMessage} HTTP ${response.status}`
+          );
+        }
+
+        return data;
+      },
+      []
+    );
+
+  const formatUsername =
+    useCallback((name) => {
+      const cleanName =
+        String(name || "").trim();
+
+      return cleanName ||
+        "Treble User";
+    }, []);
+
+  const normalizeArray =
+    useCallback((data) => {
+      if (Array.isArray(data)) {
+        return data;
+      }
+
+      if (
+        Array.isArray(
+          data?.results
+        )
+      ) {
+        return data.results;
+      }
+
+      if (
+        Array.isArray(
+          data?.users
+        )
+      ) {
+        return data.users;
+      }
+
+      if (
+        Array.isArray(
+          data?.requests
+        )
+      ) {
+        return data.requests;
+      }
+
+      return [];
+    }, []);
+
+  const enrichReviewsWithSong =
+    useCallback(
+      async (reviews) => {
+        const safeReviews =
+          Array.isArray(reviews)
+            ? reviews
+            : [];
+
+        return Promise.all(
+          safeReviews.map(
+            async (review) => {
+              if (review?.song) {
+                return review;
+              }
+
+              try {
+                const response =
+                  await getReviewSong(
+                    userId,
+                    review.id
+                  );
+
+                if (!response?.ok) {
+                  return review;
+                }
+
+                const songData =
+                  await response.json();
+
+                return {
+                  ...review,
+                  song:
+                    songData,
+                };
+              } catch (error) {
+                console.warn(
+                  "[UserProfiles] Unable to enrich review:",
+                  error
+                );
+
+                return review;
+              }
+            }
+          )
+        );
+      },
+      [userId]
+    );
+
+  const loadAllReviewsSections =
+    useCallback(async () => {
+      try {
+        const [
+          topResponse,
+          favoritesResponse,
+          upvotedResponse,
+          activityResponse,
+        ] = await Promise.all([
+          getUserTopReviews(
+            userId
+          ),
+
+          getUserFavorites(
+            userId
+          ),
+
+          getUserMostUpvoted(
+            userId
+          ),
+
+          getUserActivity(
+            userId
+          ),
+        ]);
+
+        const [
+          topData,
+          favoritesData,
+          upvotedData,
+          activityData,
+        ] = await Promise.all([
+          topResponse?.ok
+            ? topResponse.json()
+            : [],
+
+          favoritesResponse?.ok
+            ? favoritesResponse.json()
+            : [],
+
+          upvotedResponse?.ok
+            ? upvotedResponse.json()
+            : [],
+
+          activityResponse?.ok
+            ? activityResponse.json()
+            : [],
+        ]);
+
+        const [
+          enrichedTop,
+          enrichedFavorites,
+          enrichedUpvoted,
+          enrichedActivity,
+        ] = await Promise.all([
+          enrichReviewsWithSong(
+            normalizeArray(topData)
+          ),
+
+          enrichReviewsWithSong(
+            normalizeArray(
+              favoritesData
+            )
+          ),
+
+          enrichReviewsWithSong(
+            normalizeArray(
+              upvotedData
+            )
+          ),
+
+          enrichReviewsWithSong(
+            normalizeArray(
+              activityData
+            )
+          ),
+        ]);
+
+        setTopReviews(
+          enrichedTop
+        );
+
+        setFavorites(
+          enrichedFavorites
+        );
+
+        setMostUpvoted(
+          enrichedUpvoted
+        );
+
+        setActivity(
+          enrichedActivity
+        );
+
+        setTotalReviews(
+          enrichedActivity.length
+        );
+      } catch (error) {
+        console.error(
+          "[UserProfiles] Review section error:",
+          error
+        );
+      }
+    }, [
+      enrichReviewsWithSong,
+      normalizeArray,
+      userId,
+    ]);
+
+  const checkIfFollowing =
+    useCallback(
+      async (
+        targetUserId
+      ) => {
+        try {
+          const response =
+            await getFollowers(
+              targetUserId
+            );
+
+          if (!response?.ok) {
+            return false;
+          }
+
+          const data =
+            await response.json();
+
+          const followers =
+            normalizeArray(data);
+
+          return followers.some(
+            (follower) =>
+              String(
+                follower?.userId ||
+                follower?.uid ||
+                ""
+              ) ===
+              currentUserId
+          );
+        } catch (error) {
+          console.error(
+            "[UserProfiles] Follow status error:",
+            error
+          );
+
+          return false;
+        }
+      },
+      [
+        currentUserId,
+        normalizeArray,
+      ]
+    );
+
+  const fetchTheirFollowers =
+    useCallback(async () => {
+      if (!userId) {
+        return [];
+      }
+
+      try {
+        const response =
+          await getFollowers(
+            userId
+          );
+
+        if (!response?.ok) {
+          return [];
+        }
+
+        const data =
+          await response.json();
+
+        const followers =
+          normalizeArray(data);
+
+        setTheirFollowers(
+          followers
+        );
+
+        return followers;
+      } catch (error) {
+        console.error(
+          "[UserProfiles] Followers error:",
+          error
+        );
+
+        return [];
+      }
+    }, [
+      normalizeArray,
+      userId,
+    ]);
+
+  const fetchMyFriends =
+    useCallback(async () => {
+      if (!currentUserId) {
+        return [];
+      }
+
+      try {
+        const response =
+          await getFriends(
+            currentUserId
+          );
+
+        if (!response?.ok) {
+          return [];
+        }
+
+        const data =
+          await response.json();
+
+        const friends =
+          normalizeArray(data);
+
+        setMyFriends(
+          friends
+        );
+
+        return friends;
+      } catch (error) {
+        console.error(
+          "[UserProfiles] Friends error:",
+          error
+        );
+
+        return [];
+      }
+    }, [
+      currentUserId,
+      normalizeArray,
+    ]);
+
+  const checkFollowRequest =
+    useCallback(async () => {
+      if (
+        !userId ||
+        !currentUserId ||
+        isSelf
+      ) {
+        setFollowRequested(
+          false
+        );
+
+        return;
+      }
+
+      try {
+        const response =
+          await getFollowRequests(
+            userId
+          );
+
+        if (!response?.ok) {
+          return;
+        }
+
+        const data =
+          await response.json();
+
+        const requests =
+          normalizeArray(data);
+
+        const requested =
+          requests.some(
+            (request) =>
+              String(
+                request?.userId ||
+                request?.requesterId ||
+                request?.fromUserId ||
+                ""
+              ) ===
+              currentUserId
+          );
+
+        setFollowRequested(
+          requested
+        );
+      } catch (error) {
+        console.error(
+          "[UserProfiles] Follow request error:",
+          error
+        );
+      }
+    }, [
+      currentUserId,
+      isSelf,
+      normalizeArray,
+      userId,
+    ]);
+
+  const fetchUserData =
+    useCallback(
+      async (
+        isRefresh = false
+      ) => {
+        if (!userId) {
+          setErrorMessage(
+            "No user was selected."
+          );
+
+          setLoading(false);
+
+          return;
+        }
+
+        try {
+          if (isRefresh) {
+            setRefreshing(true);
           } else {
-            console.error('Failed to request follow');
+            setLoading(true);
+          }
+
+          setErrorMessage("");
+
+          const response =
+            await getUser(
+              userId
+            );
+
+          const data =
+            await parseResponse(
+              response,
+              "Unable to load this profile."
+            );
+
+          const finalUsername =
+            String(
+              data?.username ||
+              data?.displayName ||
+              "Treble User"
+            );
+
+          const finalAvatar =
+            typeof data?.avatar ===
+              "string" &&
+            data.avatar !== "None" &&
+            (
+              data.avatar.startsWith(
+                "http://"
+              ) ||
+              data.avatar.startsWith(
+                "https://"
+              ) ||
+              data.avatar.startsWith(
+                "data:"
+              )
+            )
+              ? data.avatar
+              : null;
+
+          const publicValue =
+            data?.isPublic;
+
+          const finalIsPublic =
+            publicValue === true ||
+            publicValue ===
+              "true" ||
+            publicValue === 1 ||
+            publicValue ===
+              undefined;
+
+          setUsername(
+            finalUsername
+          );
+
+          setAvatar(
+            finalAvatar
+          );
+
+          setFollowersCount(
+            Number(
+              data?.followersCount
+            ) || 0
+          );
+
+          setFollowingCount(
+            Number(
+              data?.followingCount
+            ) || 0
+          );
+
+          setIsPublic(
+            finalIsPublic
+          );
+
+          setIsSpotifyLinked(
+            data?.spotifyIsLinked ===
+              true ||
+            data?.spotifyIsLinked ===
+              "true"
+          );
+
+          setIsAdmin(
+            Boolean(
+              data?.isAdmin
+            )
+          );
+
+          const [
+            following,
+          ] = await Promise.all([
+            checkIfFollowing(
+              userId
+            ),
+
+            fetchTheirFollowers(),
+
+            fetchMyFriends(),
+
+            checkFollowRequest(),
+          ]);
+
+          const canView =
+            finalIsPublic ||
+            isSelf ||
+            following;
+
+          setCanViewFullContent(
+            canView
+          );
+
+          if (canView) {
+            await loadAllReviewsSections();
+          } else {
+            setTopReviews([]);
+            setFavorites([]);
+            setMostUpvoted([]);
+            setActivity([]);
+            setTotalReviews(0);
           }
         } catch (error) {
-          console.error('Error requesting follow:', error);
+          console.error(
+            "[UserProfiles] Load error:",
+            error
+          );
+
+          setErrorMessage(
+            error?.message ||
+            "Unable to load this profile."
+          );
+        } finally {
+          setLoading(false);
+          setRefreshing(false);
         }
+      },
+      [
+        checkFollowRequest,
+        checkIfFollowing,
+        fetchMyFriends,
+        fetchTheirFollowers,
+        isSelf,
+        loadAllReviewsSections,
+        parseResponse,
+        userId,
+      ]
+    );
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserData(false);
+    }, [fetchUserData])
+  );
+
+  const iAmFollowing =
+    useMemo(
+      () =>
+        theirFollowers.some(
+          (follower) =>
+            String(
+              follower?.userId ||
+              follower?.uid ||
+              ""
+            ) ===
+            currentUserId
+        ),
+      [
+        currentUserId,
+        theirFollowers,
+      ]
+    );
+
+  const isInMyFriends =
+    useMemo(
+      () =>
+        myFriends.some(
+          (friend) =>
+            String(
+              friend?.userId ||
+              friend?.uid ||
+              ""
+            ) ===
+            userId
+        ),
+      [
+        myFriends,
+        userId,
+      ]
+    );
+
+  const finalButtonLabel =
+    useMemo(() => {
+      if (
+        iAmFollowing ||
+        isInMyFriends
+      ) {
+        return "Following";
       }
-    }
-  }
 
-  const currentUserId = auth.currentUser.uid;
-  const isSelf = currentUserId === userId;
+      if (
+        !isPublic &&
+        followRequested
+      ) {
+        return "Requested";
+      }
 
-  if (loading) {
+      return "Follow";
+    }, [
+      followRequested,
+      iAmFollowing,
+      isInMyFriends,
+      isPublic,
+    ]);
+
+  const updateReviewArray =
+    useCallback(
+      (
+        reviews,
+        reviewId
+      ) =>
+        reviews.map(
+          (review) => {
+            if (
+              String(review?.id) !==
+              String(reviewId)
+            ) {
+              return review;
+            }
+
+            const currentlyUpvoted =
+              Boolean(
+                review?.upvoted
+              );
+
+            const currentUpvotes =
+              Number(
+                review?.upvotes
+              ) || 0;
+
+            return {
+              ...review,
+
+              upvotes:
+                currentlyUpvoted
+                  ? Math.max(
+                      0,
+                      currentUpvotes -
+                        1
+                    )
+                  : currentUpvotes +
+                    1,
+
+              upvoted:
+                !currentlyUpvoted,
+            };
+          }
+        ),
+      []
+    );
+
+  const handleUpvote =
+    useCallback(
+      async (reviewId) => {
+        const combined = [
+          ...topReviews,
+          ...favorites,
+          ...mostUpvoted,
+          ...activity,
+        ];
+
+        const review =
+          combined.find(
+            (item) =>
+              String(item?.id) ===
+              String(reviewId)
+          );
+
+        if (!review) {
+          return;
+        }
+
+        try {
+          if (
+            review?.upvoted
+          ) {
+            await removeUpvoteFromReview(
+              reviewId
+            );
+          } else {
+            await upvoteReview(
+              reviewId
+            );
+          }
+
+          setTopReviews(
+            (current) =>
+              updateReviewArray(
+                current,
+                reviewId
+              )
+          );
+
+          setFavorites(
+            (current) =>
+              updateReviewArray(
+                current,
+                reviewId
+              )
+          );
+
+          setMostUpvoted(
+            (current) =>
+              updateReviewArray(
+                current,
+                reviewId
+              )
+          );
+
+          setActivity(
+            (current) =>
+              updateReviewArray(
+                current,
+                reviewId
+              )
+          );
+        } catch (error) {
+          console.error(
+            "[UserProfiles] Upvote error:",
+            error
+          );
+        }
+      },
+      [
+        activity,
+        favorites,
+        mostUpvoted,
+        topReviews,
+        updateReviewArray,
+      ]
+    );
+
+  const handleDelete =
+    useCallback(
+      async (reviewId) => {
+        const combined = [
+          ...topReviews,
+          ...favorites,
+          ...mostUpvoted,
+          ...activity,
+        ];
+
+        const review =
+          combined.find(
+            (item) =>
+              String(item?.id) ===
+              String(reviewId)
+          );
+
+        if (
+          !review ||
+          !review?.isUser
+        ) {
+          return;
+        }
+
+        try {
+          await deleteReview(
+            reviewId
+          );
+
+          await loadAllReviewsSections();
+        } catch (error) {
+          console.error(
+            "[UserProfiles] Delete error:",
+            error
+          );
+        }
+      },
+      [
+        activity,
+        favorites,
+        loadAllReviewsSections,
+        mostUpvoted,
+        topReviews,
+      ]
+    );
+
+  const handleFollowPress =
+    useCallback(async () => {
+      if (
+        followLoading ||
+        !currentUserId ||
+        !userId ||
+        isSelf
+      ) {
+        return;
+      }
+
+      try {
+        setFollowLoading(true);
+
+        if (
+          finalButtonLabel ===
+          "Following"
+        ) {
+          const response =
+            await unfollowUser(
+              currentUserId,
+              userId
+            );
+
+          await parseResponse(
+            response,
+            "Unable to unfollow this user."
+          );
+
+          setFollowersCount(
+            (current) =>
+              Math.max(
+                0,
+                current - 1
+              )
+          );
+
+          setMyFriends(
+            (current) =>
+              current.filter(
+                (friend) =>
+                  String(
+                    friend?.userId ||
+                    friend?.uid ||
+                    ""
+                  ) !== userId
+              )
+          );
+
+          await fetchTheirFollowers();
+
+          return;
+        }
+
+        if (isPublic) {
+          const response =
+            await followUser(
+              currentUserId,
+              userId
+            );
+
+          await parseResponse(
+            response,
+            "Unable to follow this user."
+          );
+
+          setFollowersCount(
+            (current) =>
+              current + 1
+          );
+
+          await Promise.all([
+            fetchTheirFollowers(),
+            fetchMyFriends(),
+          ]);
+
+          return;
+        }
+
+        if (!followRequested) {
+          const response =
+            await requestFollow(
+              currentUserId,
+              userId
+            );
+
+          await parseResponse(
+            response,
+            "Unable to send the follow request."
+          );
+
+          setFollowRequested(
+            true
+          );
+
+          if (
+            Platform.OS === "web"
+          ) {
+            window.alert(
+              "Your follow request was sent."
+            );
+          } else {
+            Alert.alert(
+              "Request sent",
+              "Your follow request was sent."
+            );
+          }
+        }
+      } catch (error) {
+        console.error(
+          "[UserProfiles] Follow action error:",
+          error
+        );
+
+        const message =
+          error?.message ||
+          "Please try again.";
+
+        if (
+          Platform.OS === "web"
+        ) {
+          window.alert(
+            message
+          );
+        } else {
+          Alert.alert(
+            "Unable to update follow status",
+            message
+          );
+        }
+      } finally {
+        setFollowLoading(false);
+      }
+    }, [
+      currentUserId,
+      fetchMyFriends,
+      fetchTheirFollowers,
+      finalButtonLabel,
+      followLoading,
+      followRequested,
+      isPublic,
+      isSelf,
+      parseResponse,
+      userId,
+    ]);
+
+  const handleSpotifyBadgePress =
+    useCallback(() => {
+      if (
+        Platform.OS === "web"
+      ) {
+        window.alert(
+          "This user has linked their Spotify account."
+        );
+      } else {
+        Alert.alert(
+          "Spotify linked",
+          "This user has linked their Spotify account."
+        );
+      }
+    }, []);
+
+  const handleAdminBadgePress =
+    useCallback(() => {
+      if (
+        Platform.OS === "web"
+      ) {
+        window.alert(
+          "This user is a Treble administrator or developer."
+        );
+      } else {
+        Alert.alert(
+          "Treble administrator",
+          "This user is a Treble administrator or developer."
+        );
+      }
+    }, []);
+
+  const avatarSource =
+    avatar
+      ? {
+          uri: avatar,
+        }
+      : FALLBACK_AVATAR;
+
+  const renderReviewSection =
+    useCallback(
+      (
+        title,
+        reviews,
+        emptyMessage
+      ) => (
+        <View
+          style={
+            styles.cardSection
+          }
+        >
+          <View
+            style={
+              styles.sectionHeader
+            }
+          >
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
+              {title}
+            </Text>
+
+            <Text
+              style={
+                styles.sectionCount
+              }
+            >
+              {reviews.length}
+            </Text>
+          </View>
+
+          {reviews.length === 0 ? (
+            <View
+              style={
+                styles.sectionEmptyBox
+              }
+            >
+              <Text
+                style={
+                  styles.sectionPlaceholder
+                }
+              >
+                {emptyMessage}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={
+                reviews
+              }
+              horizontal
+              keyExtractor={(
+                item,
+                index
+              ) =>
+                `${title}-${item?.id || index}`
+              }
+              showsHorizontalScrollIndicator={
+                false
+              }
+              contentContainerStyle={
+                styles.horizontalReviewList
+              }
+              renderItem={({
+                item,
+              }) => (
+                <View
+                  style={
+                    styles.reviewSnippetCard
+                  }
+                >
+                  <ReviewCard
+                    item={
+                      item
+                    }
+                    avatar={
+                      avatar
+                    }
+                    handleUpvote={
+                      handleUpvote
+                    }
+                    handleDelete={
+                      handleDelete
+                    }
+                    navigation={
+                      navigation
+                    }
+                  />
+                </View>
+              )}
+            />
+          )}
+        </View>
+      ),
+      [
+        avatar,
+        handleDelete,
+        handleUpvote,
+        navigation,
+      ]
+    );
+
+  if (
+    loading &&
+    !username
+  ) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="white" />
+      <View
+        style={
+          styles.loader
+        }
+      >
+        <ActivityIndicator
+          size="large"
+          color={
+            colours.lightblue ||
+            "#35afe5"
+          }
+        />
+
+        <Text
+          style={
+            styles.loaderText
+          }
+        >
+          Loading profile...
+        </Text>
       </View>
     );
   }
-  if (!username) {
+
+  if (
+    errorMessage &&
+    !username
+  ) {
     return (
-      <View style={styles.loader}>
-        <Text style={styles.errorText}>User not found.</Text>
+      <View
+        style={
+          styles.loader
+        }
+      >
+        <Text
+          style={
+            styles.errorTitle
+          }
+        >
+          Unable to load profile
+        </Text>
+
+        <Text
+          style={
+            styles.errorText
+          }
+        >
+          {errorMessage}
+        </Text>
+
+        <TouchableOpacity
+          style={
+            styles.retryButton
+          }
+          onPress={() =>
+            fetchUserData(false)
+          }
+        >
+          <Text
+            style={
+              styles.retryButtonText
+            }
+          >
+            Try Again
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Sidebar */}
-      <View style={styles.sideMenu}>
-        <Sidebar menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+    <View
+      style={[
+        styles.container,
+
+        isWeb &&
+          styles.webContainer,
+      ]}
+    >
+      <View
+        style={[
+          styles.sideMenu,
+
+          isDesktopWeb &&
+            styles.desktopSideMenu,
+
+          isMobileWeb &&
+            styles.mobileSideMenu,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={
+            isDesktopWeb
+              ? true
+              : menuOpen
+          }
+          setMenuOpen={
+            isDesktopWeb
+              ? () => {}
+              : setMenuOpen
+          }
+          isDesktop={
+            isDesktopWeb
+          }
+        />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Profile Header */}
-        <View style={styles.profileHeader}>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate('UserProfile', { userId: userId })
-            }
+      <View
+        style={[
+          styles.pageContent,
+
+          isDesktopWeb &&
+            styles.desktopPageContent,
+
+          isMobileWeb &&
+            styles.mobilePageContent,
+        ]}
+      >
+        <ScrollView
+          style={[
+            styles.profileScroll,
+
+            isWeb &&
+              styles.webProfileScroll,
+          ]}
+          contentContainerStyle={[
+            styles.scrollContainer,
+
+            isDesktopWeb &&
+              styles.desktopScrollContainer,
+          ]}
+          showsVerticalScrollIndicator={
+            false
+          }
+          keyboardShouldPersistTaps="handled"
+          refreshing={
+            refreshing
+          }
+          onRefresh={() =>
+            fetchUserData(true)
+          }
+        >
+          <View
+            style={[
+              styles.profileHeader,
+
+              isCompact &&
+                styles.compactProfileHeader,
+            ]}
           >
-            <Image
-              source={avatar ? { uri: avatar } : noAvatar}
-              style={styles.avatar}
-            />
-          </TouchableOpacity>
-          <View style={styles.headerInfo}>
-            <Text style={styles.username}>{formatUsername(username)}</Text>
-              <Text style={styles.stats}>Followers: {followersCount}</Text>
-              <Text style={styles.stats}>Following: {followingCount}</Text>
-            <View style={styles.badgeContainer}>
-              {isSpotifyLinked && (
-                <TouchableOpacity onPress={handleSpotifyBadgePress}>
-                  <Image
-                    source={require('../images/spotifyLogo.png')}
-                    style={styles.badgeIcon}
-                  />
-                </TouchableOpacity>
-              )}
-              {isAdmin && (
-                <TouchableOpacity onPress={handleAdminBadgePress}>
-                  <Image
-                    source={require('../images/adminBadge.png')}
-                    style={styles.badgeIcon}
-                  />
-                </TouchableOpacity>
-              )}
+            <View
+              style={
+                styles.avatarContainer
+              }
+            >
+              <Image
+                key={
+                  avatar ||
+                  "fallback-avatar"
+                }
+                source={
+                  avatarSource
+                }
+                style={
+                  styles.avatar
+                }
+                onError={() =>
+                  setAvatar(null)
+                }
+              />
+
+              <View
+                style={[
+                  styles.privacyBadge,
+
+                  !isPublic &&
+                    styles.privateBadge,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.privacyBadgeText
+                  }
+                >
+                  {isPublic
+                    ? "Public"
+                    : "Private"}
+                </Text>
+              </View>
             </View>
-          </View>
-          {!isSelf && (
-            <View style={styles.followContainer}>
+
+            <View
+              style={
+                styles.headerInfo
+              }
+            >
+              <View
+                style={
+                  styles.usernameRow
+                }
+              >
+                <Text
+                  style={
+                    styles.username
+                  }
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {formatUsername(
+                    username
+                  )}
+                </Text>
+
+                <View
+                  style={
+                    styles.badgeContainer
+                  }
+                >
+                  {isSpotifyLinked ? (
+                    <TouchableOpacity
+                      onPress={
+                        handleSpotifyBadgePress
+                      }
+                    >
+                      <Image
+                        source={
+                          SPOTIFY_LOGO
+                        }
+                        style={
+                          styles.badgeIcon
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {isAdmin ? (
+                    <TouchableOpacity
+                      onPress={
+                        handleAdminBadgePress
+                      }
+                    >
+                      <Image
+                        source={
+                          ADMIN_BADGE
+                        }
+                        style={
+                          styles.badgeIcon
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+
+              <Text
+                style={
+                  styles.profileLabel
+                }
+              >
+                Treble profile
+              </Text>
+
+              <View
+                style={
+                  styles.statsRow
+                }
+              >
+                <View
+                  style={
+                    styles.statBox
+                  }
+                >
+                  <Text
+                    style={
+                      styles.statNumber
+                    }
+                  >
+                    {
+                      followersCount
+                    }
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.statLabel
+                    }
+                  >
+                    Followers
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.statDivider
+                  }
+                />
+
+                <View
+                  style={
+                    styles.statBox
+                  }
+                >
+                  <Text
+                    style={
+                      styles.statNumber
+                    }
+                  >
+                    {
+                      followingCount
+                    }
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.statLabel
+                    }
+                  >
+                    Following
+                  </Text>
+                </View>
+
+                <View
+                  style={
+                    styles.statDivider
+                  }
+                />
+
+                <View
+                  style={
+                    styles.statBox
+                  }
+                >
+                  <Text
+                    style={
+                      styles.statNumber
+                    }
+                  >
+                    {
+                      totalReviews
+                    }
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.statLabel
+                    }
+                  >
+                    Reviews
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {!isSelf ? (
+              <View
+                style={[
+                  styles.followContainer,
+
+                  isCompact &&
+                    styles.compactFollowContainer,
+                ]}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.followButton,
+
+                    finalButtonLabel ===
+                      "Following" &&
+                      styles.followingButton,
+
+                    finalButtonLabel ===
+                      "Requested" &&
+                      styles.requestedButton,
+
+                    followLoading &&
+                      styles.disabledButton,
+                  ]}
+                  onPress={
+                    handleFollowPress
+                  }
+                  disabled={
+                    followLoading ||
+                    finalButtonLabel ===
+                      "Requested"
+                  }
+                  activeOpacity={
+                    0.8
+                  }
+                >
+                  {followLoading ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#ffffff"
+                    />
+                  ) : (
+                    <Text
+                      style={
+                        styles.followButtonText
+                      }
+                    >
+                      {
+                        finalButtonLabel
+                      }
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                {isInMyFriends ? (
+                  <Text
+                    style={
+                      styles.friendText
+                    }
+                  >
+                    Friends
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
               <TouchableOpacity
                 style={
-                  finalButtonLabel === 'Requested'
-                    ? styles.requestedButton
-                    : styles.followButton
+                  styles.editProfileButton
                 }
-                onPress={handleFollowPress}
-                disabled={finalButtonLabel === 'Requested'}
+                onPress={() =>
+                  navigation.navigate(
+                    "EditProfile"
+                  )
+                }
               >
-                <Text style={styles.followButtonText}>{finalButtonLabel}</Text>
-              </TouchableOpacity>
-              {showFriendsLabel && (
-                <Text style={styles.friendText}>Friends</Text>
-              )}
-            </View>
-          )}
-        </View>
-
-        {/* If account is private, show only the privacy message */}
-        {!canViewFullContent ? (
-          <View style={styles.privateContainer}>
-            <Text style={styles.privateText}>
-              User's Account is Private
-            </Text>
-            <Text style={styles.privateText2}>
-              Request to follow to view their content.
-            </Text>
-          </View>
-        ) : (
-          <>
-            {/* Top Reviews Section */}
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Top Reviews</Text>
-              {topReviews.length === 0 ? (
-                <Text style={styles.sectionPlaceholder}>No top reviews.</Text>
-              ) : (
-                <FlatList
-                  data={topReviews}
-                  horizontal
-                  keyExtractor={(item) => item.id}
-                  showsHorizontalScrollIndicator={false}
-                  renderItem={({ item }) => (
-                    <View style={styles.reviewSnippetCard}>
-                      <ReviewCard
-                        item={item}
-                        avatar={avatar}
-                        handleUpvote={handleUpvote}
-                        handleDelete={handleDelete}
-                        navigation={navigation}
-                      />
-                    </View>
-                  )}
-                />
-              )}
-            </View>
-
-            {/* Favourites Section */}
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Favourites</Text>
-              {favorites.length === 0 ? (
-                <Text style={styles.sectionPlaceholder}>No favourites.</Text>
-              ) : (
-                <FlatList
-                  data={favorites}
-                  horizontal
-                  keyExtractor={(item) => item.id}
-                  showsHorizontalScrollIndicator={false}
-                  renderItem={({ item }) => (
-                    <View style={styles.reviewSnippetCard}>
-                      <ReviewCard
-                        item={item}
-                        avatar={avatar}
-                        handleUpvote={handleUpvote}
-                        handleDelete={handleDelete}
-                        navigation={navigation}
-                      />
-                    </View>
-                  )}
-                />
-              )}
-            </View>
-
-            {/* Most Upvoted Section */}
-            <View style={styles.cardSection}>
-              <Text style={styles.sectionTitle}>Most Upvoted</Text>
-              {mostUpvoted.length === 0 ? (
-                <Text style={styles.sectionPlaceholder}>
-                  No most-upvoted reviews.
+                <Text
+                  style={
+                    styles.editProfileButtonText
+                  }
+                >
+                  Edit Profile
                 </Text>
-              ) : (
-                <FlatList
-                  data={mostUpvoted}
-                  horizontal
-                  keyExtractor={(item) => item.id}
-                  showsHorizontalScrollIndicator={false}
-                  renderItem={({ item }) => (
-                    <View style={styles.reviewSnippetCard}>
-                      <ReviewCard
-                        item={item}
-                        avatar={avatar}
-                        handleUpvote={handleUpvote}
-                        handleDelete={handleDelete}
-                        navigation={navigation}
-                      />
-                    </View>
-                  )}
-                />
-              )}
-            </View>
+              </TouchableOpacity>
+            )}
+          </View>
 
-            {/* Activity Section */}
-            <View style={styles.cardSection}>
-              <View style={styles.activityHeader}>
-                <Text style={styles.sectionTitle}>Activity</Text>
-                <Text style={styles.activitySubtitle}>Newest to Oldest</Text>
+          {!canViewFullContent ? (
+            <View
+              style={
+                styles.privateContainer
+              }
+            >
+              <View
+                style={
+                  styles.privateIcon
+                }
+              >
+                <Text
+                  style={
+                    styles.privateIconText
+                  }
+                >
+                  🔒
+                </Text>
               </View>
-              <Text style={styles.totalActivity}>
-                Total Reviews: {totalReviews}
-              </Text>
-              {activity.length === 0 ? (
-                <Text style={styles.sectionPlaceholder}>No reviews found.</Text>
-              ) : (
-                <View style={styles.activityContainer}>
-                  {activity.map((item) => (
-                    <View key={item.id} style={styles.activityReviewWrapper}>
-                      <ReviewCard
-                        item={item}
-                        avatar={avatar}
-                        handleUpvote={handleUpvote}
-                        handleDelete={handleDelete}
-                        navigation={navigation}
-                      />
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          </>
-        )}
-      </ScrollView>
 
-      <View style={styles.bottomNavBar}>
+              <Text
+                style={
+                  styles.privateText
+                }
+              >
+                This profile is private
+              </Text>
+
+              <Text
+                style={
+                  styles.privateText2
+                }
+              >
+                Send a follow request to view this user’s reviews, favourites, and activity.
+              </Text>
+            </View>
+          ) : (
+            <>
+              {renderReviewSection(
+                "Top Reviews",
+                topReviews,
+                "No top reviews yet."
+              )}
+
+              {renderReviewSection(
+                "Favourites",
+                favorites,
+                "No favourites yet."
+              )}
+
+              {renderReviewSection(
+                "Most Upvoted",
+                mostUpvoted,
+                "No upvoted reviews yet."
+              )}
+
+              <View
+                style={
+                  styles.cardSection
+                }
+              >
+                <View
+                  style={
+                    styles.activityHeader
+                  }
+                >
+                  <View>
+                    <Text
+                      style={
+                        styles.sectionTitle
+                      }
+                    >
+                      Activity
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.activitySubtitle
+                      }
+                    >
+                      Newest reviews first
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.activityCountBadge
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.activityCountText
+                      }
+                    >
+                      {
+                        totalReviews
+                      }
+                    </Text>
+                  </View>
+                </View>
+
+                {activity.length ===
+                0 ? (
+                  <View
+                    style={
+                      styles.sectionEmptyBox
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.sectionPlaceholder
+                      }
+                    >
+                      No activity found.
+                    </Text>
+                  </View>
+                ) : (
+                  <View
+                    style={
+                      styles.activityContainer
+                    }
+                  >
+                    {activity.map(
+                      (
+                        item,
+                        index
+                      ) => (
+                        <View
+                          key={`activity-${item?.id || index}`}
+                          style={
+                            styles.activityReviewWrapper
+                          }
+                        >
+                          <ReviewCard
+                            item={
+                              item
+                            }
+                            avatar={
+                              avatar
+                            }
+                            handleUpvote={
+                              handleUpvote
+                            }
+                            handleDelete={
+                              handleDelete
+                            }
+                            navigation={
+                              navigation
+                            }
+                          />
+                        </View>
+                      )
+                    )}
+                  </View>
+                )}
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </View>
+
+      <View
+        style={[
+          styles.bottomNavBar,
+
+          isDesktopWeb &&
+            styles.desktopBottomNavBar,
+        ]}
+      >
         <BottomNavbar />
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colours.bluegrey },
-  scrollContainer: { paddingBottom: 120 },
-  sideMenu: { position: 'absolute', top: 40, right: 525, bottom: 0, zIndex: 10 },
-  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    marginTop: 120,
-    backgroundColor: colours.darkblue,
-    borderRadius: 10,
-    marginHorizontal: 10,
-  },
-  avatar: { width: 80, height: 80, borderRadius: 40, marginRight: 15 },
-  headerInfo: { flex: 1 },
-  username: { fontSize: 18, fontWeight: 'bold', color: colours.lightblue },
-  stats: { fontSize: 14, fontWeight: 'bold', color: '#fff' },
-  badgeContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
-  badgeIcon: { width: 24, height: 24, marginRight: 5 },
-  editButton: { padding: 10, borderRadius: 5 },
-  editButtonText: { color: '#fff', fontWeight: 'bold' },
-  followContainer: { alignItems: 'center', marginLeft: 10 },
-  followButton: {
-    backgroundColor: colours.lightblue,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-  },
-  requestedButton: {
-    backgroundColor: '#999',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-  },
-  followButtonText: { color: '#fff', fontWeight: 'bold' },
-  friendText: { marginTop: 8, fontSize: 14, fontWeight: 'bold', color: '#fff' },
-  cardSection: {
-    backgroundColor: colours.darkblue,
-    padding: 10,
-    borderRadius: 10,
-    marginHorizontal: 10,
-    marginVertical: 10,
-  },
-  reviewSnippetCard: { width: 250, marginRight: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: colours.lightblue },
-  sectionPlaceholder: {
-    fontSize: 14,
-    color: '#fff',
-    fontStyle: 'italic',
-    marginVertical: 5,
-  },
-  totalActivity: { fontSize: 14, fontWeight: 'bold', color: '#fff', marginBottom: 7 },
-  activityHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  activitySubtitle: { fontSize: 12, color: '#ccc', fontStyle: 'italic' },
-  activityContainer: { paddingHorizontal: 5 },
-  activityReviewWrapper: { marginVertical: 5 },
-  privateContainer: {
-    margin: 20,
-    padding: 20,
-    backgroundColor: colours.darkblue,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  privateText: {
-    fontSize: 17,
-    color: colours.lightblue,
-    fontWeight: 'bold',
-  },
-  privateText2: {
-    marginTop: 5,
-    fontSize: 12,
-    color: colours.secondaryblue,
-    fontWeight: 'bold',
-  },
-  bottomNavBar: { position: 'absolute', bottom: 0, width: '100%' },
-});
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      minHeight: 0,
+
+      backgroundColor:
+        colours.background ||
+        colours.bluegrey ||
+        "#101010",
+    },
+
+    webContainer: {
+      width: "100%",
+      height: "100vh",
+
+      minHeight: 0,
+
+      overflow: "hidden",
+    },
+
+    loader: {
+      flex: 1,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 24,
+
+      backgroundColor:
+        colours.background ||
+        colours.bluegrey ||
+        "#101010",
+    },
+
+    loaderText: {
+      color:
+        "rgba(255,255,255,0.65)",
+
+      fontSize: 14,
+
+      marginTop: 12,
+    },
+
+    errorTitle: {
+      color: "#ffffff",
+
+      fontSize: 22,
+      fontWeight: "800",
+
+      textAlign: "center",
+    },
+
+    errorText: {
+      maxWidth: 420,
+
+      color:
+        "rgba(255,255,255,0.6)",
+
+      fontSize: 14,
+      lineHeight: 21,
+
+      textAlign: "center",
+
+      marginTop: 8,
+    },
+
+    retryButton: {
+      minWidth: 130,
+      height: 42,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      marginTop: 18,
+
+      borderRadius: 21,
+
+      backgroundColor:
+        colours.lightblue ||
+        "#35afe5",
+    },
+
+    retryButtonText: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      fontWeight: "800",
+    },
+
+    sideMenu: {
+      position: "absolute",
+
+      top: 40,
+      left: 0,
+      bottom: 0,
+
+      zIndex: 100,
+      elevation: 20,
+    },
+
+    desktopSideMenu: {
+      position: "fixed",
+
+      top: 0,
+      left: 0,
+      right: undefined,
+      bottom: 0,
+
+      width:
+        DESKTOP_SIDEBAR_WIDTH,
+
+      height: "100vh",
+
+      overflow: "hidden",
+
+      zIndex: 100,
+      elevation: 20,
+    },
+
+    mobileSideMenu: {
+      position: "absolute",
+
+      top: 40,
+      left: 0,
+      right: undefined,
+      bottom: 0,
+
+      zIndex: 100,
+    },
+
+    pageContent: {
+      flex: 1,
+      minHeight: 0,
+
+      overflow: "hidden",
+    },
+
+    desktopPageContent: {
+      position: "absolute",
+
+      top: 0,
+
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
+
+      right: 0,
+
+      bottom:
+        BOTTOM_NAV_HEIGHT,
+
+      minHeight: 0,
+
+      paddingTop: 24,
+      paddingHorizontal: 28,
+
+      overflow: "hidden",
+    },
+
+    mobilePageContent: {
+      position: "absolute",
+
+      top: 0,
+      left: 0,
+      right: 0,
+
+      bottom:
+        BOTTOM_NAV_HEIGHT,
+
+      minHeight: 0,
+
+      paddingTop: 70,
+      paddingHorizontal: 12,
+
+      overflow: "hidden",
+    },
+
+    profileScroll: {
+      flex: 1,
+      minHeight: 0,
+
+      width: "100%",
+    },
+
+    webProfileScroll: {
+      height: "100%",
+
+      overflowY: "auto",
+      overflowX: "hidden",
+
+      WebkitOverflowScrolling:
+        "touch",
+
+      scrollbarWidth: "none",
+      msOverflowStyle: "none",
+    },
+
+    scrollContainer: {
+      width: "100%",
+
+      paddingBottom: 45,
+    },
+
+    desktopScrollContainer: {
+      width: "100%",
+
+      maxWidth:
+        MAX_CONTENT_WIDTH,
+
+      alignSelf: "center",
+    },
+
+    profileHeader: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "center",
+
+      padding: 24,
+      marginBottom: 20,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.1)",
+
+      borderRadius: 20,
+
+      backgroundColor:
+        colours.darkblue ||
+        "rgba(255,255,255,0.045)",
+    },
+
+    compactProfileHeader: {
+      flexDirection: "column",
+
+      alignItems: "center",
+    },
+
+    avatarContainer: {
+      position: "relative",
+
+      flexShrink: 0,
+    },
+
+    avatar: {
+      width: 118,
+      height: 118,
+
+      borderWidth: 3,
+      borderColor:
+        colours.lightblue ||
+        "#35afe5",
+
+      borderRadius: 59,
+
+      resizeMode: "cover",
+
+      backgroundColor:
+        "rgba(255,255,255,0.08)",
+    },
+
+    privacyBadge: {
+      position: "absolute",
+
+      left: "50%",
+      bottom: -9,
+
+      minWidth: 68,
+      height: 25,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 10,
+
+      borderWidth: 2,
+      borderColor:
+        colours.darkblue ||
+        "#142334",
+
+      borderRadius: 13,
+
+      transform: [
+        {
+          translateX: -34,
+        },
+      ],
+
+      backgroundColor:
+        "#299acb",
+    },
+
+    privateBadge: {
+      backgroundColor:
+        "#777777",
+    },
+
+    privacyBadgeText: {
+      color: "#ffffff",
+
+      fontSize: 10,
+      fontWeight: "800",
+    },
+
+    headerInfo: {
+      flex: 1,
+      minWidth: 0,
+
+      marginLeft: 24,
+    },
+
+    usernameRow: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    username: {
+      flexShrink: 1,
+      minWidth: 0,
+
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 27,
+      lineHeight: 34,
+      fontWeight: "900",
+    },
+
+    profileLabel: {
+      color:
+        "rgba(255,255,255,0.52)",
+
+      fontSize: 13,
+
+      marginTop: 2,
+    },
+
+    badgeContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+
+      flexShrink: 0,
+
+      marginLeft: 10,
+    },
+
+    badgeIcon: {
+      width: 27,
+      height: 27,
+
+      marginLeft: 6,
+
+      resizeMode: "contain",
+    },
+
+    statsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+
+      marginTop: 19,
+    },
+
+    statBox: {
+      minWidth: 78,
+
+      alignItems: "flex-start",
+    },
+
+    statNumber: {
+      color: "#ffffff",
+
+      fontSize: 18,
+      fontWeight: "900",
+    },
+
+    statLabel: {
+      color:
+        "rgba(255,255,255,0.5)",
+
+      fontSize: 11,
+
+      marginTop: 2,
+    },
+
+    statDivider: {
+      width: 1,
+      height: 34,
+
+      marginHorizontal: 18,
+
+      backgroundColor:
+        "rgba(255,255,255,0.11)",
+    },
+
+    followContainer: {
+      alignItems: "center",
+
+      flexShrink: 0,
+
+      marginLeft: 20,
+    },
+
+    compactFollowContainer: {
+      width: "100%",
+
+      marginLeft: 0,
+      marginTop: 24,
+    },
+
+    followButton: {
+      minWidth: 125,
+      height: 44,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 20,
+
+      borderRadius: 22,
+
+      backgroundColor:
+        colours.lightblue ||
+        "#35afe5",
+    },
+
+    followingButton: {
+      backgroundColor:
+        "#237fa9",
+    },
+
+    requestedButton: {
+      backgroundColor:
+        "#777777",
+    },
+
+    followButtonText: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    disabledButton: {
+      opacity: 0.55,
+    },
+
+    friendText: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 12,
+      fontWeight: "800",
+
+      marginTop: 8,
+    },
+
+    editProfileButton: {
+      minWidth: 125,
+      height: 44,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      flexShrink: 0,
+
+      marginLeft: 20,
+      paddingHorizontal: 20,
+
+      borderWidth: 1,
+      borderColor:
+        colours.lightblue ||
+        "#35afe5",
+
+      borderRadius: 22,
+
+      backgroundColor:
+        "rgba(53,175,229,0.12)",
+    },
+
+    editProfileButtonText: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      fontWeight: "800",
+    },
+
+    cardSection: {
+      width: "100%",
+
+      padding: 20,
+      marginBottom: 18,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.1)",
+
+      borderRadius: 18,
+
+      backgroundColor:
+        colours.darkblue ||
+        "rgba(255,255,255,0.045)",
+    },
+
+    sectionHeader: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+
+      marginBottom: 14,
+    },
+
+    sectionTitle: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 20,
+      lineHeight: 26,
+      fontWeight: "900",
+    },
+
+    sectionCount: {
+      minWidth: 30,
+      height: 26,
+
+      color: "#ffffff",
+
+      fontSize: 12,
+      lineHeight: 26,
+      fontWeight: "800",
+
+      textAlign: "center",
+
+      paddingHorizontal: 8,
+
+      borderRadius: 13,
+
+      backgroundColor:
+        "rgba(255,255,255,0.1)",
+    },
+
+    horizontalReviewList: {
+      paddingRight: 12,
+    },
+
+    reviewSnippetCard: {
+      width: 310,
+
+      marginRight: 14,
+    },
+
+    sectionEmptyBox: {
+      width: "100%",
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      minHeight: 76,
+
+      padding: 15,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.07)",
+
+      borderRadius: 12,
+
+      backgroundColor:
+        "rgba(255,255,255,0.025)",
+    },
+
+    sectionPlaceholder: {
+      color:
+        "rgba(255,255,255,0.5)",
+
+      fontSize: 14,
+      fontStyle: "italic",
+
+      textAlign: "center",
+    },
+
+    activityHeader: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+
+      marginBottom: 15,
+    },
+
+    activitySubtitle: {
+      color:
+        "rgba(255,255,255,0.48)",
+
+      fontSize: 12,
+
+      marginTop: 2,
+    },
+
+    activityCountBadge: {
+      minWidth: 38,
+      height: 30,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 10,
+
+      borderRadius: 15,
+
+      backgroundColor:
+        "rgba(53,175,229,0.15)",
+    },
+
+    activityCountText: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    activityContainer: {
+      width: "100%",
+    },
+
+    activityReviewWrapper: {
+      width: "100%",
+
+      marginBottom: 12,
+    },
+
+    privateContainer: {
+      width: "100%",
+
+      minHeight: 310,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      padding: 28,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.1)",
+
+      borderRadius: 18,
+
+      backgroundColor:
+        colours.darkblue ||
+        "rgba(255,255,255,0.045)",
+    },
+
+    privateIcon: {
+      width: 68,
+      height: 68,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderRadius: 34,
+
+      backgroundColor:
+        "rgba(255,255,255,0.07)",
+    },
+
+    privateIconText: {
+      fontSize: 27,
+    },
+
+    privateText: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 21,
+      fontWeight: "900",
+
+      marginTop: 18,
+    },
+
+    privateText2: {
+      maxWidth: 460,
+
+      color:
+        "rgba(255,255,255,0.55)",
+
+      fontSize: 14,
+      lineHeight: 21,
+
+      textAlign: "center",
+
+      marginTop: 7,
+    },
+
+    bottomNavBar: {
+      position: "absolute",
+
+      left: 0,
+      right: 0,
+      bottom: 0,
+
+      zIndex: 90,
+    },
+
+    desktopBottomNavBar: {
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
+
+      right: 0,
+    },
+  });

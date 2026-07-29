@@ -1606,51 +1606,105 @@ export default function Search({
 
                               return (
                                 <View
-                                  key={`user-${userId}`}
-                                  style={
-                                    styles.cardWrapper
-                                  }
-                                >
-                                  <MusicCard
-                                    id={
-                                      userId
+                                    key={`user-${userId}`}
+                                    style={
+                                      styles.userCardWrapper
                                     }
-                                    name={formatUsername(
-                                      item?.username
-                                    )}
-                                    image={
-                                      avatar
-                                    }
-                                    imageSource={getAvatarSource(
-                                      avatar
-                                    )}
-                                    isPublic={
-                                      item?.isPublic
-                                    }
-                                    isFollowing={
-                                      isFollowing
-                                    }
-                                    buttonLabel={
-                                      finalButtonLabel
-                                    }
-                                    userCard
-                                    canFollow={
-                                      !isCurrentUser
-                                    }
-                                    disabled={
-                                      isUpdating ||
-                                      (
-                                        !userIsPublic &&
-                                        alreadyRequested &&
-                                        !isFollowing
-                                      )
-                                    }
-                                    followLoading={
-                                      isUpdating
-                                    }
-                                    onFollow={
-                                      !isCurrentUser
-                                        ? () => {
+                                  >
+                                    <TouchableOpacity
+                                      style={
+                                        styles.userResultCard
+                                      }
+                                      activeOpacity={0.82}
+                                      onPress={() =>
+                                        navigation.navigate(
+                                          "UserProfiles",
+                                          {
+                                            userId,
+                                          }
+                                        )
+                                      }
+                                    >
+                                      <Image
+                                        source={
+                                          getAvatarSource(
+                                            avatar
+                                          )
+                                        }
+                                        style={
+                                          styles.userResultAvatar
+                                        }
+                                        onError={(event) => {
+                                          console.warn(
+                                            "[Search] User avatar failed:",
+                                            event?.nativeEvent?.error
+                                          );
+                                        }}
+                                      />
+
+                                      <View
+                                        style={
+                                          styles.userResultInformation
+                                        }
+                                      >
+                                        <Text
+                                          style={
+                                            styles.userResultUsername
+                                          }
+                                          numberOfLines={1}
+                                          ellipsizeMode="tail"
+                                        >
+                                          {formatUsername(
+                                            item?.username
+                                          )}
+                                        </Text>
+
+                                        <Text
+                                          style={
+                                            styles.userResultPrivacy
+                                          }
+                                          numberOfLines={1}
+                                        >
+                                          {userIsPublic
+                                            ? "Public profile"
+                                            : "Private profile"}
+                                        </Text>
+                                      </View>
+
+                                      {!isCurrentUser ? (
+                                        <TouchableOpacity
+                                          style={[
+                                            styles.userFollowButton,
+
+                                            isFollowing &&
+                                              styles.userFollowingButton,
+
+                                            alreadyRequested &&
+                                            !isFollowing &&
+                                              styles.userRequestedButton,
+
+                                            (
+                                              isUpdating ||
+                                              (
+                                                !userIsPublic &&
+                                                alreadyRequested &&
+                                                !isFollowing
+                                              )
+                                            ) &&
+                                              styles.userFollowButtonDisabled,
+                                          ]}
+                                          disabled={
+                                            isUpdating ||
+                                            (
+                                              !userIsPublic &&
+                                              alreadyRequested &&
+                                              !isFollowing
+                                            )
+                                          }
+                                          activeOpacity={0.8}
+                                          onPress={(event) => {
+                                            event?.stopPropagation?.();
+
                                             if (
                                               isUpdating
                                             ) {
@@ -1668,19 +1722,41 @@ export default function Search({
                                                 item
                                               );
                                             }
+                                          }}
+                                        >
+                                          {isUpdating ? (
+                                            <ActivityIndicator
+                                              size="small"
+                                              color="#ffffff"
+                                            />
+                                          ) : (
+                                            <Text
+                                              style={
+                                                styles.userFollowButtonText
+                                              }
+                                              numberOfLines={1}
+                                            >
+                                              {finalButtonLabel}
+                                            </Text>
+                                          )}
+                                        </TouchableOpacity>
+                                      ) : (
+                                        <View
+                                          style={
+                                            styles.currentUserBadge
                                           }
-                                        : undefined
-                                    }
-                                    onPressCard={() =>
-                                      navigation.navigate(
-                                        "UserProfiles",
-                                        {
-                                          userId,
-                                        }
-                                      )
-                                    }
-                                  />
-                                </View>
+                                        >
+                                          <Text
+                                            style={
+                                              styles.currentUserBadgeText
+                                            }
+                                          >
+                                            You
+                                          </Text>
+                                        </View>
+                                      )}
+                                    </TouchableOpacity>
+                                  </View>
                               );
                             }
                           )
@@ -1945,10 +2021,13 @@ const styles = StyleSheet.create({
 
   desktopContentInner: {
     width: "100%",
+
     maxWidth:
       MAX_CONTENT_WIDTH,
 
     alignSelf: "center",
+
+    paddingHorizontal: 10,
   },
 
   /* =====================================================
@@ -2057,13 +2136,14 @@ const styles = StyleSheet.create({
 
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
 
     flexWrap: "wrap",
 
     gap: 10,
 
-    marginBottom: 16,
+    paddingVertical: 4,
+    marginBottom: 22,
   },
 
   compactChipContainer: {
@@ -2117,12 +2197,155 @@ const styles = StyleSheet.create({
 
   cardWrapper: {
     width: "100%",
-    maxWidth: 780,
+    maxWidth: 860,
 
     alignSelf: "center",
 
-    marginBottom: 12,
+    marginBottom: 10,
   },
+
+  userCardWrapper: {
+  width: "100%",
+  maxWidth: 860,
+
+  alignSelf: "center",
+
+  marginBottom: 12,
+},
+
+userResultCard: {
+  width: "100%",
+  minHeight: 76,
+
+  flexDirection: "row",
+  alignItems: "center",
+
+  paddingVertical: 10,
+  paddingHorizontal: 12,
+
+  borderWidth: 1,
+  borderColor:
+    "rgba(255,255,255,0.12)",
+
+  borderRadius: 14,
+
+  backgroundColor:
+    "rgba(255,255,255,0.96)",
+},
+
+userResultAvatar: {
+  width: 54,
+  height: 54,
+
+  flexShrink: 0,
+
+  borderRadius: 10,
+
+  resizeMode: "cover",
+
+  backgroundColor:
+    "rgba(0,0,0,0.16)",
+},
+
+userResultInformation: {
+  flex: 1,
+  minWidth: 0,
+
+  justifyContent: "center",
+
+  marginLeft: 14,
+  marginRight: 14,
+},
+
+userResultUsername: {
+  width: "100%",
+
+  color: "#111111",
+
+  fontSize: 16,
+  lineHeight: 21,
+  fontWeight: "800",
+},
+
+userResultPrivacy: {
+  color:
+    "rgba(0,0,0,0.52)",
+
+  fontSize: 12,
+  lineHeight: 17,
+
+  marginTop: 3,
+},
+
+userFollowButton: {
+  minWidth: 108,
+  height: 40,
+
+  flexShrink: 0,
+
+  alignItems: "center",
+  justifyContent: "center",
+
+  paddingHorizontal: 18,
+
+  borderRadius: 20,
+
+  backgroundColor:
+    colours.lightblue ||
+    "#35afe5",
+},
+
+userFollowingButton: {
+  backgroundColor:
+    "#258bb9",
+},
+
+userRequestedButton: {
+  backgroundColor:
+    "#777777",
+},
+
+userFollowButtonDisabled: {
+  opacity: 0.62,
+},
+
+userFollowButtonText: {
+  color: "#ffffff",
+
+  fontSize: 14,
+  fontWeight: "800",
+},
+
+currentUserBadge: {
+  minWidth: 58,
+  height: 34,
+
+  flexShrink: 0,
+
+  alignItems: "center",
+  justifyContent: "center",
+
+  paddingHorizontal: 14,
+
+  borderWidth: 1,
+  borderColor:
+    colours.lightblue ||
+    "#35afe5",
+
+  borderRadius: 17,
+
+  backgroundColor:
+    "rgba(53,175,229,0.12)",
+},
+
+currentUserBadgeText: {
+  color:
+    colours.lightblue ||
+    "#35afe5",
+
+  fontSize: 13,
+  fontWeight: "800",
+},
 
   emptySectionText: {
     color:

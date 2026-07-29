@@ -1,420 +1,1295 @@
-import React, { useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+
 import {
-    View,
-    FlatList,
-    StyleSheet,
-    ActivityIndicator,
-    TouchableOpacity,
-    Image
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
+
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
-import SectionDivider from "../components/SectionDivider";
 import MusicCard from "../components/MusicCard";
+
 import {
   getArtistTracks,
   getArtistAlbums,
 } from "../providers/rest";
+
 import colours from "../styles/colours";
 
-export default function ArtistListenables({ navigation, route }) {
-    const [page, setPage] = useState(0)
-    const [loading, setLoading] = useState(true);
-    const [menuOpen, setMenuOpen] = useState(false);
-    const [listenableData, setListenableData] = useState([]);
-    const [onEndReachedCalledDuringMomentum, setOnEndReachedCalledDuringMomentum] = useState(true);
-    const { type, artist } = route.params;
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+const DESKTOP_HEADER_HEIGHT = 86;
+const BOTTOM_NAV_HEIGHT = 72;
+const MAX_CONTENT_WIDTH = 980;
 
-    function renderListenableItem({ item }) {
-        if (item.type === "track") {
-            const artistName =
-                artist?.name ||
-                artist?.title ||
-                item.artistName ||
-                item.artist?.name ||
-                "Unknown Artist";
+const BACK_ICON =
+  require("../images/arrowLeftIconWhite.png");
 
-            const albumTitle =
-                typeof item.album === "string"
-                ? item.album
-                : item.album?.title || "";
+export default function ArtistListenables({
+  navigation,
+  route,
+}) {
+  const { width } =
+    useWindowDimensions();
 
-            const track = {
-                ...item,
+  const isWeb =
+    Platform.OS === "web";
 
-                id: String(item.id),
-                listenableId: String(
-                item.listenableId ||
-                item.id
-                ),
+  const isDesktopWeb =
+    isWeb &&
+    width >= DESKTOP_BREAKPOINT;
 
-                type: "track",
+  const isMobileWeb =
+    isWeb &&
+    width < DESKTOP_BREAKPOINT;
 
-                title:
-                item.title ||
-                item.name ||
-                "Unknown Track",
+  const [
+    menuOpen,
+    setMenuOpen,
+  ] = useState(false);
 
-                name:
-                item.name ||
-                item.title ||
-                "Unknown Track",
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-                artist: {
-                id: String(
-                    artist?.id ||
-                    item.artist?.id ||
-                    ""
-                ),
-                name: artistName,
-                },
+  const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
 
-                artistName,
+  const [
+    listenableData,
+    setListenableData,
+  ] = useState([]);
 
-                album: {
-                ...(typeof item.album === "object"
-                    ? item.album
-                    : {}),
-                title: albumTitle,
-                },
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
 
-                image:
-                item.image ||
-                item.coverArt ||
-                item.album?.cover_xl ||
-                item.album?.cover_big ||
-                "",
+  const type =
+    route?.params?.type === "album"
+      ? "album"
+      : "track";
 
-                coverArt:
-                item.coverArt ||
-                item.image ||
-                item.album?.cover_xl ||
-                item.album?.cover_big ||
-                "",
+  const artist =
+    route?.params?.artist || {};
 
-                preview:
-                item.preview ||
-                item.previewUrl ||
-                "",
-            };
+  const artistId =
+    String(
+      artist?.id ||
+      artist?.listenableId ||
+      artist?.artistId ||
+      ""
+    );
 
-            return (
-                <MusicCard
-                id={track.id}
-                image={track.image}
-                name={track.title}
-                artist={artistName}
-                album={albumTitle}
-                onPressCard={() =>
-                    navigation.navigate(
-                    "SongPage",
-                    { track }
-                    )
-                }
-                />
-            );
-            }
-        else {
-            const artistName =
-                artist?.name ||
-                artist?.title ||
-                item.artistName ||
-                item.artist?.name ||
-                "Unknown Artist";
+  const artistName =
+    String(
+      artist?.name ||
+      artist?.title ||
+      artist?.artistName ||
+      "Unknown Artist"
+    ).trim();
 
-                const album = {
-                ...item,
+  const pageTitle =
+    type === "track"
+      ? `Songs by ${artistName}`
+      : `Albums by ${artistName}`;
 
-                id: String(item.id),
-                listenableId: String(
-                    item.listenableId ||
-                    item.id
-                ),
+  const pageDescription =
+    type === "track"
+      ? `Browse songs featuring ${artistName}.`
+      : `Browse albums by ${artistName}.`;
 
-                type: "album",
-
-                title:
-                    item.title ||
-                    item.name ||
-                    "Unknown Album",
-
-                name:
-                    item.name ||
-                    item.title ||
-                    "Unknown Album",
-
-                artist:
-                    item.artist &&
-                    typeof item.artist === "object"
-                    ? item.artist
-                    : {
-                        id: String(
-                            artist?.id || ""
-                        ),
-                        name: artistName,
-                        },
-
-                artistName,
-
-                image:
-                    item.image ||
-                    item.coverArt ||
-                    item.cover_xl ||
-                    item.cover_big ||
-                    "",
-
-                coverArt:
-                    item.coverArt ||
-                    item.image ||
-                    item.cover_xl ||
-                    item.cover_big ||
-                    "",
-                };
-
-                return (
-                <MusicCard
-                    id={album.id}
-                    image={album.image}
-                    name={album.title}
-                    artist={artistName}
-                    onPressCard={() =>
-                    navigation.navigate(
-                        "AlbumPage",
-                        { album }
-                    )
-                    }
-                />
-                );
-        }
+  useEffect(() => {
+    if (isDesktopWeb) {
+      setMenuOpen(true);
+    } else {
+      setMenuOpen(false);
     }
+  }, [isDesktopWeb]);
 
-    useEffect(() => {
-        setPage(0);
-        setListenableData([]);
-        loadNextListenables();
-        }, [artist?.id, type]);
+  const parseResponse =
+    useCallback(
+      async (
+        response,
+        fallbackMessage
+      ) => {
+        if (!response) {
+          throw new Error(
+            "The backend returned no response."
+          );
+        }
 
-    async function loadNextListenables() {
-        if (loading && page > 0) {
-            return;
+        const responseText =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch {
+          throw new Error(
+            responseText ||
+            "The backend returned invalid data."
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            data?.message ||
+            `${fallbackMessage} HTTP ${response.status}`
+          );
+        }
+
+        return data;
+      },
+      []
+    );
+
+  const normalizeTrack =
+    useCallback(
+      (item) => {
+        const itemArtistName =
+          typeof item?.artist === "string"
+            ? item.artist
+            : item?.artist?.name ||
+              item?.artistName ||
+              artistName;
+
+        const albumTitle =
+          typeof item?.album === "string"
+            ? item.album
+            : item?.album?.title ||
+              item?.album?.name ||
+              item?.albumName ||
+              "";
+
+        const image =
+          item?.image ||
+          item?.coverArt ||
+          item?.album?.cover_xl ||
+          item?.album?.cover_big ||
+          item?.album?.cover_medium ||
+          item?.album?.cover ||
+          "";
+
+        return {
+          ...item,
+
+          id: String(
+            item?.id ||
+            item?.listenableId ||
+            item?.trackId ||
+            ""
+          ),
+
+          listenableId: String(
+            item?.listenableId ||
+            item?.id ||
+            item?.trackId ||
+            ""
+          ),
+
+          type: "track",
+
+          title:
+            item?.title ||
+            item?.name ||
+            "Unknown Track",
+
+          name:
+            item?.name ||
+            item?.title ||
+            "Unknown Track",
+
+          artist: {
+            id: String(
+              item?.artist?.id ||
+              artistId
+            ),
+
+            name:
+              itemArtistName,
+          },
+
+          artistName:
+            itemArtistName,
+
+          album: {
+            ...(
+              item?.album &&
+              typeof item.album === "object"
+                ? item.album
+                : {}
+            ),
+
+            title:
+              albumTitle,
+          },
+
+          albumName:
+            albumTitle,
+
+          image,
+
+          coverArt:
+            item?.coverArt ||
+            image,
+
+          preview:
+            item?.preview ||
+            item?.previewUrl ||
+            "",
+        };
+      },
+      [
+        artistId,
+        artistName,
+      ]
+    );
+
+  const normalizeAlbum =
+    useCallback(
+      (item) => {
+        const itemArtistName =
+          typeof item?.artist === "string"
+            ? item.artist
+            : item?.artist?.name ||
+              item?.artistName ||
+              artistName;
+
+        const image =
+          item?.image ||
+          item?.coverArt ||
+          item?.cover_xl ||
+          item?.cover_big ||
+          item?.cover_medium ||
+          item?.cover ||
+          "";
+
+        return {
+          ...item,
+
+          id: String(
+            item?.id ||
+            item?.listenableId ||
+            item?.albumId ||
+            ""
+          ),
+
+          listenableId: String(
+            item?.listenableId ||
+            item?.id ||
+            item?.albumId ||
+            ""
+          ),
+
+          type: "album",
+
+          title:
+            item?.title ||
+            item?.name ||
+            "Unknown Album",
+
+          name:
+            item?.name ||
+            item?.title ||
+            "Unknown Album",
+
+          artist: {
+            ...(
+              item?.artist &&
+              typeof item.artist === "object"
+                ? item.artist
+                : {}
+            ),
+
+            id: String(
+              item?.artist?.id ||
+              artistId
+            ),
+
+            name:
+              itemArtistName,
+          },
+
+          artistName:
+            itemArtistName,
+
+          image,
+
+          coverArt:
+            item?.coverArt ||
+            image,
+        };
+      },
+      [
+        artistId,
+        artistName,
+      ]
+    );
+
+  const loadListenables =
+    useCallback(
+      async (
+        isRefresh = false
+      ) => {
+        if (!artistId) {
+          setErrorMessage(
+            "This artist does not have a valid ID."
+          );
+
+          setListenableData([]);
+          setLoading(false);
+          setRefreshing(false);
+
+          return;
         }
 
         try {
+          setErrorMessage("");
+
+          if (isRefresh) {
+            setRefreshing(true);
+          } else {
             setLoading(true);
+          }
 
-            const artistId = String(
-            artist?.id ||
-            artist?.listenableId ||
-            ""
-            );
-
-            if (!artistId) {
-            throw new Error(
-                "This artist does not have a valid ID."
-            );
-            }
-
-            const response =
+          const response =
             type === "track"
-                ? await getArtistTracks(
-                    artistId,
-                    50
+              ? await getArtistTracks(
+                  artistId,
+                  50
                 )
-                : await getArtistAlbums(
-                    artistId,
-                    50
+              : await getArtistAlbums(
+                  artistId,
+                  50
                 );
 
-            const responseText =
-            await response.text();
-
-            let data = {};
-
-            try {
-            data = responseText
-                ? JSON.parse(responseText)
-                : {};
-            } catch {
-            throw new Error(
-                responseText ||
-                "The backend returned invalid JSON."
+          const data =
+            await parseResponse(
+              response,
+              type === "track"
+                ? "Unable to load artist songs."
+                : "Unable to load artist albums."
             );
-            }
 
-            if (!response.ok) {
-            throw new Error(
-                data?.error ||
-                `Backend returned HTTP ${response.status}`
-            );
-            }
-
-            const newItems =
+          const rawItems =
             type === "track"
-                ? Array.isArray(data.tracks)
+              ? Array.isArray(data?.tracks)
                 ? data.tracks
-                : []
-                : Array.isArray(data.albums)
+                : Array.isArray(data)
+                  ? data
+                  : []
+              : Array.isArray(data?.albums)
                 ? data.albums
-                : [];
+                : Array.isArray(data)
+                  ? data
+                  : [];
 
-            setListenableData((previousItems) => {
-            const existingIds = new Set(
-                previousItems.map((item) =>
-                String(item.id)
-                )
-            );
-
-            const uniqueNewItems =
-                newItems.filter(
+          const normalizedItems =
+            rawItems
+              .map(
+                type === "track"
+                  ? normalizeTrack
+                  : normalizeAlbum
+              )
+              .filter(
                 (item) =>
-                    !existingIds.has(
-                    String(item.id)
-                    )
-                );
+                  Boolean(item?.id)
+              );
 
-            return [
-                ...previousItems,
-                ...uniqueNewItems,
-            ];
-            });
-
-            setPage(
-            (previousPage) =>
-                previousPage + 1
+          const uniqueItems =
+            Array.from(
+              new Map(
+                normalizedItems.map(
+                  (item) => [
+                    `${item.type}-${item.id}`,
+                    item,
+                  ]
+                )
+              ).values()
             );
 
-            console.log(
-            `[ArtistListenables] Loaded ${newItems.length} ${type}s`
-            );
+          setListenableData(
+            uniqueItems
+          );
+
+          console.log(
+            `[ArtistListenables] Loaded ${uniqueItems.length} ${type}s for ${artistName}`
+          );
         } catch (error) {
-            console.error(
+          console.error(
             "[ArtistListenables] Load error:",
             error
-            );
+          );
 
-            setListenableData([]);
+          setErrorMessage(
+            error?.message ||
+            "Unable to load this artist's music."
+          );
+
+          setListenableData([]);
         } finally {
-            setLoading(false);
+          setLoading(false);
+          setRefreshing(false);
         }
+      },
+      [
+        artistId,
+        artistName,
+        normalizeAlbum,
+        normalizeTrack,
+        parseResponse,
+        type,
+      ]
+    );
+
+  useEffect(() => {
+    setListenableData([]);
+    setErrorMessage("");
+
+    loadListenables(false);
+  }, [loadListenables]);
+
+  const handleRefresh =
+    useCallback(() => {
+      loadListenables(true);
+    }, [loadListenables]);
+
+  const handleGoBack =
+    useCallback(() => {
+      if (
+        navigation.canGoBack()
+      ) {
+        navigation.goBack();
+        return;
+      }
+
+      navigation.navigate(
+        "Search"
+      );
+    }, [navigation]);
+
+  const renderListenableItem =
+    useCallback(
+      ({ item }) => {
+        if (
+          item?.type === "track"
+        ) {
+          const trackArtistName =
+            item?.artistName ||
+            item?.artist?.name ||
+            artistName;
+
+          const albumTitle =
+            item?.albumName ||
+            item?.album?.title ||
+            "";
+
+          return (
+            <View
+              style={
+                styles.cardWrapper
+              }
+            >
+              <MusicCard
+                id={
+                  item.id
+                }
+                image={
+                  item.image
+                }
+                name={
+                  item.title
+                }
+                artist={
+                  trackArtistName
+                }
+                album={
+                  albumTitle
+                }
+                onPressCard={() =>
+                  navigation.navigate(
+                    "SongPage",
+                    {
+                      track:
+                        item,
+                    }
+                  )
+                }
+              />
+            </View>
+          );
         }
 
-    return (
-        <View style={styles.container}>
-            <TouchableOpacity onPress={() => { navigation.goBack(); }} style={styles.goBackButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Image
-                    source={require("../images/arrowLeftIconWhite.png")}
-                    style={styles.backIcon}
-                />
+        const albumArtistName =
+          item?.artistName ||
+          item?.artist?.name ||
+          artistName;
+
+        return (
+          <View
+            style={
+              styles.cardWrapper
+            }
+          >
+            <MusicCard
+              id={
+                item.id
+              }
+              image={
+                item.image
+              }
+              name={
+                item.title
+              }
+              artist={
+                albumArtistName
+              }
+              onPressCard={() =>
+                navigation.navigate(
+                  "AlbumPage",
+                  {
+                    album:
+                      item,
+                  }
+                )
+              }
+            />
+          </View>
+        );
+      },
+      [
+        artistName,
+        navigation,
+      ]
+    );
+
+  const keyExtractor =
+    useCallback(
+      (item, index) =>
+        `${
+          item?.type || type
+        }-${
+          item?.id || index
+        }`,
+      [type]
+    );
+
+  const renderHeader =
+    useCallback(
+      () => (
+        <View>
+          <View
+            style={
+              styles.headingRow
+            }
+          >
+            <TouchableOpacity
+              style={
+                styles.backButton
+              }
+              onPress={
+                handleGoBack
+              }
+              activeOpacity={0.8}
+              hitSlop={{
+                top: 10,
+                bottom: 10,
+                left: 10,
+                right: 10,
+              }}
+            >
+              <Image
+                source={
+                  BACK_ICON
+                }
+                style={
+                  styles.backIcon
+                }
+              />
             </TouchableOpacity>
 
-            {/* Main Content */}
-            <View style={styles.content}>
-                <View style={{ marginBottom: 15 }}>
-                    <SectionDivider title={type == "track" ? `Songs by ${artist.name}` : `Albums by ${artist.name}`} />
-                </View>
-                {loading && <ActivityIndicator size="large" color="white" />}
-                <View key="Listenables">
-                    <FlatList
-                        data={listenableData}
-                        renderItem={renderListenableItem}
-                        keyExtractor={(item, index) =>
-                        `${item.type || type}-${item.id}-${index}`
-                        }
-                        contentContainerStyle={styles.feedList}
-                        onMomentumScrollBegin={() => {
-                            setOnEndReachedCalledDuringMomentum(false);
-                        }}
-                        onEndReached={() => {}}
-                        onEndReachedThreshold={0.01}
-                        showsVerticalScrollIndicator={false}
-                    />
-                </View>
-            </View>
+            <View
+              style={
+                styles.headingInformation
+              }
+            >
+              <Text
+                style={
+                  styles.pageTitle
+                }
+                numberOfLines={2}
+              >
+                {pageTitle}
+              </Text>
 
-            {/* Bottom Navigation Bar fix*/}
-            <View style={styles.bottomNavBar}>
-                <BottomNavbar />
+              <Text
+                style={
+                  styles.pageDescription
+                }
+              >
+                {pageDescription}
+              </Text>
+
+              {!loading &&
+              !errorMessage ? (
+                <Text
+                  style={
+                    styles.resultCount
+                  }
+                >
+                  {
+                    listenableData.length
+                  }{" "}
+                  {listenableData.length ===
+                  1
+                    ? type ===
+                      "track"
+                      ? "song"
+                      : "album"
+                    : type ===
+                        "track"
+                      ? "songs"
+                      : "albums"}
+                </Text>
+              ) : null}
             </View>
+          </View>
+
+          <View
+            style={
+              styles.listDivider
+            }
+          />
         </View>
+      ),
+      [
+        errorMessage,
+        handleGoBack,
+        listenableData.length,
+        loading,
+        pageDescription,
+        pageTitle,
+        type,
+      ]
     );
+
+  const renderEmpty =
+    useCallback(() => {
+      if (loading) {
+        return null;
+      }
+
+      if (errorMessage) {
+        return (
+          <View
+            style={
+              styles.emptyContainer
+            }
+          >
+            <Text
+              style={
+                styles.emptyTitle
+              }
+            >
+              Unable to load music
+            </Text>
+
+            <Text
+              style={
+                styles.emptyDescription
+              }
+            >
+              {errorMessage}
+            </Text>
+
+            <TouchableOpacity
+              style={
+                styles.retryButton
+              }
+              onPress={() =>
+                loadListenables(
+                  false
+                )
+              }
+              activeOpacity={0.8}
+            >
+              <Text
+                style={
+                  styles.retryButtonText
+                }
+              >
+                Try Again
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+      }
+
+      return (
+        <View
+          style={
+            styles.emptyContainer
+          }
+        >
+          <Text
+            style={
+              styles.emptyTitle
+            }
+          >
+            {type === "track"
+              ? "No songs found"
+              : "No albums found"}
+          </Text>
+
+          <Text
+            style={
+              styles.emptyDescription
+            }
+          >
+            {type === "track"
+              ? `No songs are currently available for ${artistName}.`
+              : `No albums are currently available for ${artistName}.`}
+          </Text>
+        </View>
+      );
+    }, [
+      artistName,
+      errorMessage,
+      loadListenables,
+      loading,
+      type,
+    ]);
+
+  return (
+    <View
+      style={[
+        styles.container,
+
+        isWeb &&
+          styles.webContainer,
+      ]}
+    >
+      {/* SIDEBAR */}
+      <View
+        style={[
+          styles.sideMenu,
+
+          isDesktopWeb &&
+            styles.desktopSideMenu,
+
+          isMobileWeb &&
+            styles.mobileSideMenu,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={
+            isDesktopWeb
+              ? true
+              : menuOpen
+          }
+          setMenuOpen={
+            isDesktopWeb
+              ? () => {}
+              : setMenuOpen
+          }
+          isDesktop={
+            isDesktopWeb
+          }
+        />
+      </View>
+
+      {/* PAGE */}
+      <View
+        style={[
+          styles.pageContent,
+
+          isDesktopWeb &&
+            styles.desktopPageContent,
+
+          isMobileWeb &&
+            styles.mobilePageContent,
+        ]}
+      >
+        <View
+          style={[
+            styles.contentInner,
+
+            isDesktopWeb &&
+              styles.desktopContentInner,
+          ]}
+        >
+          {loading &&
+          listenableData.length ===
+            0 ? (
+            <View
+              style={
+                styles.loadingContainer
+              }
+            >
+              <ActivityIndicator
+                size="large"
+                color={
+                  colours.lightblue ||
+                  "#35afe5"
+                }
+              />
+
+              <Text
+                style={
+                  styles.loadingText
+                }
+              >
+                {type === "track"
+                  ? `Loading songs by ${artistName}...`
+                  : `Loading albums by ${artistName}...`}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              style={[
+                styles.list,
+
+                isWeb &&
+                  styles.webList,
+              ]}
+              data={
+                listenableData
+              }
+              renderItem={
+                renderListenableItem
+              }
+              keyExtractor={
+                keyExtractor
+              }
+              ListHeaderComponent={
+                renderHeader
+              }
+              ListEmptyComponent={
+                renderEmpty
+              }
+              contentContainerStyle={[
+                styles.listContent,
+
+                listenableData.length ===
+                  0 &&
+                  styles.emptyListContent,
+              ]}
+              refreshing={
+                refreshing
+              }
+              onRefresh={
+                handleRefresh
+              }
+              showsVerticalScrollIndicator={
+                false
+              }
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={12}
+              maxToRenderPerBatch={12}
+              windowSize={8}
+              removeClippedSubviews={
+                Platform.OS !== "web"
+              }
+            />
+          )}
+        </View>
+      </View>
+
+      {/* BOTTOM NAVIGATION */}
+      <View
+        style={[
+          styles.bottomNavBar,
+
+          isDesktopWeb &&
+            styles.desktopBottomNavBar,
+        ]}
+      >
+        <BottomNavbar />
+      </View>
+    </View>
+  );
 }
 
-// ------------------- Styles -------------------
-const styles = StyleSheet.create({
+const styles =
+  StyleSheet.create({
     container: {
-        flex: 1,
-        backgroundColor: colours.bluegrey,
+      flex: 1,
+      minHeight: 0,
+
+      backgroundColor:
+        colours.background ||
+        colours.bluegrey ||
+        "#101010",
     },
-    feedList: {
-        paddingBottom: 100,
+
+    webContainer: {
+      width: "100%",
+      height: "100vh",
+
+      minHeight: 0,
+
+      overflow: "hidden",
     },
-    goBackButton: {
-        top: 70,
-        left: 20,
-    },
-    backIcon: {
-        width: 20,
-        height: 20,
-    },
-    notificationsIcon: {
-        width: 40,
-        height: 40,
-        position: "absolute",
-        top: 70,
-        right: 20,
-    },
-    notifIcon: {
-        width: "90%",
-        height: "90%",
-        resizeMode: "contain",
-        left: 10,
-        top: 2,
-    },
-    notificationBadge: {
-        position: "absolute",
-        top: -5,
-        right: -5,
-        backgroundColor: "red",
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 10,
-    },
-    notificationBadgeText: {
-        color: "black",
-        fontSize: 12,
-        fontWeight: "bold",
-    },
+
+    /* SIDEBAR */
+
     sideMenu: {
-        position: "absolute",
-        top: 40,
-        right: 525,
-        bottom: 0,
-        shadowColor: "#000",
-        shadowOffset: { width: 2, height: 0 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 5,
-        zIndex: 10,
+      position: "absolute",
+
+      top: 40,
+      left: 0,
+      bottom: 0,
+
+      zIndex: 100,
+      elevation: 20,
     },
-    content: {
-        flex: 1,
-        marginTop: 120,
-        paddingBottom: 100,
-        justifyContent: "center",
-        alignItems: "center",
+
+    desktopSideMenu: {
+      position: "fixed",
+
+      top: 0,
+      left: 0,
+      right: undefined,
+      bottom: 0,
+
+      width:
+        DESKTOP_SIDEBAR_WIDTH,
+
+      height: "100vh",
+
+      overflow: "hidden",
+
+      zIndex: 100,
+      elevation: 20,
     },
+
+    mobileSideMenu: {
+      position: "absolute",
+
+      top: 40,
+      left: 0,
+      right: undefined,
+      bottom: 0,
+
+      zIndex: 100,
+    },
+
+    /* PAGE */
+
+    pageContent: {
+      flex: 1,
+      minHeight: 0,
+
+      overflow: "hidden",
+    },
+
+    desktopPageContent: {
+      position: "absolute",
+
+      top: 0,
+
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
+
+      right: 0,
+
+      bottom:
+        BOTTOM_NAV_HEIGHT,
+
+      minHeight: 0,
+
+      paddingTop: 18,
+      paddingLeft: 28,
+      paddingRight: 28,
+
+      overflow: "hidden",
+    },
+
+    mobilePageContent: {
+      position: "absolute",
+
+      top: 0,
+      left: 0,
+      right: 0,
+
+      bottom:
+        BOTTOM_NAV_HEIGHT,
+
+      minHeight: 0,
+
+      paddingTop: 62,
+      paddingHorizontal: 12,
+
+      overflow: "hidden",
+    },
+
+    contentInner: {
+      flex: 1,
+      minHeight: 0,
+
+      width: "100%",
+    },
+
+    desktopContentInner: {
+      width: "100%",
+
+      maxWidth:
+        MAX_CONTENT_WIDTH,
+
+      alignSelf: "center",
+    },
+
+    /* HEADER */
+
+    headingRow: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "flex-start",
+
+      paddingTop: 12,
+      paddingBottom: 18,
+    },
+
+    backButton: {
+      width: 44,
+      height: 44,
+
+      flexShrink: 0,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      marginRight: 14,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.14)",
+
+      borderRadius: 22,
+
+      backgroundColor:
+        "rgba(255,255,255,0.06)",
+    },
+
+    backIcon: {
+      width: 19,
+      height: 19,
+
+      resizeMode: "contain",
+    },
+
+    headingInformation: {
+      flex: 1,
+      minWidth: 0,
+
+      paddingTop: 1,
+    },
+
+    pageTitle: {
+      color: "#ffffff",
+
+      fontSize: 29,
+      lineHeight: 36,
+      fontWeight: "800",
+    },
+
+    pageDescription: {
+      color:
+        "rgba(255,255,255,0.58)",
+
+      fontSize: 14,
+      lineHeight: 20,
+
+      marginTop: 3,
+    },
+
+    resultCount: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 13,
+      fontWeight: "800",
+
+      marginTop: 7,
+    },
+
+    listDivider: {
+      width: "100%",
+      height: 1,
+
+      marginBottom: 16,
+
+      backgroundColor:
+        "rgba(255,255,255,0.12)",
+    },
+
+    /* LIST */
+
+    list: {
+      flex: 1,
+      minHeight: 0,
+
+      width: "100%",
+    },
+
+    webList: {
+      height: "100%",
+
+      overflowY: "auto",
+      overflowX: "hidden",
+
+      WebkitOverflowScrolling:
+        "touch",
+
+      scrollbarWidth: "none",
+      msOverflowStyle: "none",
+    },
+
+    listContent: {
+      width: "100%",
+
+      paddingBottom: 40,
+    },
+
+    emptyListContent: {
+      flexGrow: 1,
+    },
+
+    cardWrapper: {
+      width: "100%",
+
+      maxWidth: 860,
+
+      alignSelf: "center",
+
+      marginBottom: 10,
+    },
+
+    /* LOADING */
+
+    loadingContainer: {
+      flex: 1,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingBottom:
+        DESKTOP_HEADER_HEIGHT,
+    },
+
+    loadingText: {
+      color:
+        "rgba(255,255,255,0.66)",
+
+      fontSize: 14,
+      lineHeight: 20,
+
+      textAlign: "center",
+
+      marginTop: 12,
+    },
+
+    /* EMPTY / ERROR */
+
+    emptyContainer: {
+      flex: 1,
+
+      minHeight: 300,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 24,
+      paddingBottom: 70,
+    },
+
+    emptyTitle: {
+      color: "#ffffff",
+
+      fontSize: 22,
+      lineHeight: 28,
+      fontWeight: "800",
+
+      textAlign: "center",
+    },
+
+    emptyDescription: {
+      maxWidth: 440,
+
+      color:
+        "rgba(255,255,255,0.56)",
+
+      fontSize: 14,
+      lineHeight: 21,
+
+      textAlign: "center",
+
+      marginTop: 7,
+    },
+
+    retryButton: {
+      minWidth: 130,
+      height: 42,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 20,
+
+      marginTop: 18,
+
+      borderRadius: 21,
+
+      backgroundColor:
+        colours.lightblue ||
+        "#35afe5",
+    },
+
+    retryButtonText: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      fontWeight: "800",
+    },
+
+    /* BOTTOM NAVIGATION */
+
     bottomNavBar: {
-        position: "absolute",
-        bottom: 0,
-        width: "100%",
+      position: "absolute",
+
+      left: 0,
+      right: 0,
+      bottom: 0,
+
+      zIndex: 90,
     },
-    chipContainer: {
-        flexDirection: "row",
-        justifyContent: "center",
-        gap: 20,
-        marginVertical: 10,
+
+    desktopBottomNavBar: {
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
+
+      right: 0,
     },
-});
+  });

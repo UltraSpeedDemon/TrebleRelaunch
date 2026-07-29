@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -11,6 +12,7 @@ import {
   Image,
   Platform,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -39,49 +41,352 @@ import {
 
 const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
+const BOTTOM_NAV_HEIGHT = 72;
 const MAX_CONTENT_WIDTH = 1120;
+
+/*
+ * Horizontal song row that supports:
+ *
+ * - Touch swiping on mobile
+ * - Trackpad scrolling
+ * - Shift + mouse wheel
+ * - Mouse click-and-drag on web
+ */
+function DraggableSongRow({
+  children,
+  isWeb,
+}) {
+  const scrollReference =
+    useRef(null);
+
+  const dragState =
+    useRef({
+      dragging: false,
+      startX: 0,
+      startOffset: 0,
+      moved: false,
+    });
+
+  const [
+    dragging,
+    setDragging,
+  ] = useState(false);
+
+  const getScrollNode =
+    useCallback(() => {
+      const reference =
+        scrollReference.current;
+
+      if (!reference) {
+        return null;
+      }
+
+      if (
+        typeof reference
+          .getScrollableNode ===
+        "function"
+      ) {
+        return reference
+          .getScrollableNode();
+      }
+
+      return reference;
+    }, []);
+
+  const handleMouseDown =
+    useCallback(
+      (event) => {
+        if (!isWeb) {
+          return;
+        }
+
+        const node =
+          getScrollNode();
+
+        const pageX =
+          event?.nativeEvent?.pageX ??
+          event?.pageX ??
+          0;
+
+        dragState.current = {
+          dragging: true,
+          startX: pageX,
+          startOffset:
+            Number(
+              node?.scrollLeft
+            ) || 0,
+          moved: false,
+        };
+
+        setDragging(true);
+
+        event?.preventDefault?.();
+      },
+      [
+        getScrollNode,
+        isWeb,
+      ]
+    );
+
+  const handleMouseMove =
+    useCallback(
+      (event) => {
+        if (
+          !isWeb ||
+          !dragState.current
+            .dragging
+        ) {
+          return;
+        }
+
+        const node =
+          getScrollNode();
+
+        if (!node) {
+          return;
+        }
+
+        const pageX =
+          event?.nativeEvent?.pageX ??
+          event?.pageX ??
+          0;
+
+        const difference =
+          pageX -
+          dragState.current
+            .startX;
+
+        if (
+          Math.abs(difference) >
+          4
+        ) {
+          dragState.current.moved =
+            true;
+        }
+
+        const nextOffset =
+          dragState.current
+            .startOffset -
+          difference;
+
+        if (
+          typeof node.scrollTo ===
+          "function"
+        ) {
+          node.scrollTo({
+            left:
+              nextOffset,
+            behavior:
+              "auto",
+          });
+        } else {
+          node.scrollLeft =
+            nextOffset;
+        }
+
+        event?.preventDefault?.();
+      },
+      [
+        getScrollNode,
+        isWeb,
+      ]
+    );
+
+  const stopDragging =
+    useCallback(() => {
+      if (
+        !dragState.current
+          .dragging
+      ) {
+        return;
+      }
+
+      dragState.current.dragging =
+        false;
+
+      setDragging(false);
+
+      /*
+       * Reset this shortly afterward so a normal
+       * click still works when the user did not drag.
+       */
+      setTimeout(() => {
+        dragState.current.moved =
+          false;
+      }, 80);
+    }, []);
+
+  const handleWheel =
+    useCallback(
+      (event) => {
+        if (!isWeb) {
+          return;
+        }
+
+        const nativeEvent =
+          event?.nativeEvent ||
+          event;
+
+        const horizontalAmount =
+          Number(
+            nativeEvent?.deltaX
+          ) || 0;
+
+        const verticalAmount =
+          Number(
+            nativeEvent?.deltaY
+          ) || 0;
+
+        /*
+         * Let trackpad horizontal scrolling work normally.
+         * Convert Shift + vertical wheel into horizontal movement.
+         */
+        const movement =
+          Math.abs(
+            horizontalAmount
+          ) >
+          Math.abs(
+            verticalAmount
+          )
+            ? horizontalAmount
+            : nativeEvent?.shiftKey
+              ? verticalAmount
+              : 0;
+
+        if (!movement) {
+          return;
+        }
+
+        const node =
+          getScrollNode();
+
+        if (!node) {
+          return;
+        }
+
+        node.scrollLeft +=
+          movement;
+
+        event?.preventDefault?.();
+      },
+      [
+        getScrollNode,
+        isWeb,
+      ]
+    );
+
+  return (
+    <ScrollView
+      ref={
+        scrollReference
+      }
+      horizontal
+      nestedScrollEnabled
+      showsHorizontalScrollIndicator={
+        false
+      }
+      directionalLockEnabled
+      keyboardShouldPersistTaps="handled"
+      scrollEventThrottle={16}
+      style={[
+        styles.horizontalScroll,
+
+        isWeb &&
+          styles.webHorizontalScroll,
+
+        dragging &&
+          styles.draggingHorizontalScroll,
+      ]}
+      contentContainerStyle={
+        styles.horizontalListContent
+      }
+      onMouseDown={
+        isWeb
+          ? handleMouseDown
+          : undefined
+      }
+      onMouseMove={
+        isWeb
+          ? handleMouseMove
+          : undefined
+      }
+      onMouseUp={
+        isWeb
+          ? stopDragging
+          : undefined
+      }
+      onMouseLeave={
+        isWeb
+          ? stopDragging
+          : undefined
+      }
+      onWheel={
+        isWeb
+          ? handleWheel
+          : undefined
+      }
+    >
+      {children}
+    </ScrollView>
+  );
+}
 
 export default function Explore({
   navigation,
 }) {
-  const { width } = useWindowDimensions();
+  const { width } =
+    useWindowDimensions();
 
-  const isWeb = Platform.OS === "web";
+  const isWeb =
+    Platform.OS === "web";
 
   const isDesktopWeb =
     isWeb &&
-    width >= DESKTOP_BREAKPOINT;
+    width >=
+      DESKTOP_BREAKPOINT;
 
   const isMobileWeb =
     isWeb &&
-    width < DESKTOP_BREAKPOINT;
+    width <
+      DESKTOP_BREAKPOINT;
 
-  const isCompact = width < 600;
+  const isCompact =
+    width < 600;
 
-  const [menuOpen, setMenuOpen] =
-    useState(false);
+  const [
+    menuOpen,
+    setMenuOpen,
+  ] = useState(false);
 
   const [
     notificationsCount,
     setNotificationsCount,
   ] = useState(0);
 
-  const [topReviewed, setTopReviewed] =
-    useState([]);
+  const [
+    topReviewed,
+    setTopReviewed,
+  ] = useState([]);
 
-  const [topLiked, setTopLiked] =
-    useState([]);
+  const [
+    topLiked,
+    setTopLiked,
+  ] = useState([]);
 
   const [
     recommendedSongs,
     setRecommendedSongs,
   ] = useState([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const [refreshing, setRefreshing] =
-    useState(false);
+  const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
 
   /*
    * Keep the sidebar permanently open on desktop.
@@ -97,51 +402,55 @@ export default function Explore({
   /*
    * Safely read JSON from the backend.
    */
-  const parseResponse = useCallback(
-    async (
-      response,
-      fallbackMessage
-    ) => {
-      if (!response) {
-        throw new Error(
-          "The backend returned no response."
-        );
-      }
+  const parseResponse =
+    useCallback(
+      async (
+        response,
+        fallbackMessage
+      ) => {
+        if (!response) {
+          throw new Error(
+            "The backend returned no response."
+          );
+        }
 
-      const responseText =
-        await response.text();
+        const responseText =
+          await response.text();
 
-      let data = {};
+        let data = {};
 
-      try {
-        data = responseText
-          ? JSON.parse(responseText)
-          : {};
-      } catch {
-        throw new Error(
-          responseText ||
-            "The backend returned invalid JSON."
-        );
-      }
+        try {
+          data = responseText
+            ? JSON.parse(
+                responseText
+              )
+            : {};
+        } catch {
+          throw new Error(
+            responseText ||
+              "The backend returned invalid JSON."
+          );
+        }
 
-      if (!response.ok) {
-        throw new Error(
-          data?.error ||
-            `${fallbackMessage} HTTP ${response.status}`
-        );
-      }
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+              data?.message ||
+              `${fallbackMessage} HTTP ${response.status}`
+          );
+        }
 
-      return data;
-    },
-    []
-  );
+        return data;
+      },
+      []
+    );
 
   /*
-   * Convert different song formats into one consistent
-   * object for the Explore cards and SongPage.
+   * Convert every backend song shape into one
+   * consistent object for Explore and SongPage.
    */
-  const normalizeTrack = useCallback(
-    (song) => {
+  const normalizeTrack =
+    useCallback((song) => {
       const track =
         song?.track ||
         song?.song ||
@@ -170,7 +479,8 @@ export default function Explore({
         null;
 
       const artistName =
-        typeof rawArtist === "string"
+        typeof rawArtist ===
+        "string"
           ? rawArtist
           : rawArtist?.name ||
             track?.artistName ||
@@ -178,12 +488,15 @@ export default function Explore({
             "Unknown Artist";
 
       const artist =
-        typeof rawArtist === "string"
+        typeof rawArtist ===
+        "string"
           ? {
-              name: rawArtist,
+              name:
+                rawArtist,
             }
           : rawArtist || {
-              name: artistName,
+              name:
+                artistName,
             };
 
       const album =
@@ -214,11 +527,14 @@ export default function Explore({
         ...song,
         ...track,
 
-        id: String(id),
+        id:
+          String(id),
 
-        listenableId: String(id),
+        listenableId:
+          String(id),
 
-        type: "track",
+        type:
+          "track",
 
         title,
 
@@ -241,9 +557,11 @@ export default function Explore({
 
         preview,
 
-        previewUrl: preview,
+        previewUrl:
+          preview,
 
-        playbackUrl: preview,
+        playbackUrl:
+          preview,
 
         reviewCount:
           Number(
@@ -259,17 +577,19 @@ export default function Explore({
               0
           ),
       };
-    },
-    []
-  );
+    }, []);
 
   const fetchNotifications =
     useCallback(async () => {
       const currentUser =
         auth.currentUser;
 
-      if (!currentUser?.uid) {
-        setNotificationsCount(0);
+      if (
+        !currentUser?.uid
+      ) {
+        setNotificationsCount(
+          0
+        );
 
         return;
       }
@@ -291,7 +611,7 @@ export default function Explore({
             ? data
             : Array.isArray(
                   data?.requests
-                )
+              )
               ? data.requests
               : [];
 
@@ -304,7 +624,9 @@ export default function Explore({
           error
         );
 
-        setNotificationsCount(0);
+        setNotificationsCount(
+          0
+        );
       }
     }, [parseResponse]);
 
@@ -313,7 +635,9 @@ export default function Explore({
       const currentUser =
         auth.currentUser;
 
-      if (!currentUser?.uid) {
+      if (
+        !currentUser?.uid
+      ) {
         setTopReviewed([]);
 
         return;
@@ -333,15 +657,19 @@ export default function Explore({
 
         const songs =
           Array.isArray(
-            data?.topSongsByReviews
+            data
+              ?.topSongsByReviews
           )
-            ? data.topSongsByReviews
+            ? data
+                .topSongsByReviews
             : Array.isArray(data)
               ? data
               : [];
 
         setTopReviewed(
-          songs.map(normalizeTrack)
+          songs.map(
+            normalizeTrack
+          )
         );
       } catch (error) {
         console.error(
@@ -361,7 +689,9 @@ export default function Explore({
       const currentUser =
         auth.currentUser;
 
-      if (!currentUser?.uid) {
+      if (
+        !currentUser?.uid
+      ) {
         setTopLiked([]);
 
         return;
@@ -383,13 +713,16 @@ export default function Explore({
           Array.isArray(
             data?.topSongsByLikes
           )
-            ? data.topSongsByLikes
+            ? data
+                .topSongsByLikes
             : Array.isArray(data)
               ? data
               : [];
 
         setTopLiked(
-          songs.map(normalizeTrack)
+          songs.map(
+            normalizeTrack
+          )
         );
       } catch (error) {
         console.error(
@@ -409,8 +742,12 @@ export default function Explore({
       const currentUser =
         auth.currentUser;
 
-      if (!currentUser?.uid) {
-        setRecommendedSongs([]);
+      if (
+        !currentUser?.uid
+      ) {
+        setRecommendedSongs(
+          []
+        );
 
         return;
       }
@@ -429,20 +766,28 @@ export default function Explore({
 
         const songs =
           Array.isArray(
-            data?.recommendedSongs
+            data
+              ?.recommendedSongs
           )
-            ? data.recommendedSongs
+            ? data
+                .recommendedSongs
             : Array.isArray(
-                  data?.recommendations
+                  data
+                    ?.recommendations
+              )
+              ? data
+                  .recommendations
+              : Array.isArray(
+                    data
                 )
-              ? data.recommendations
-              : Array.isArray(data)
                 ? data
                 : [];
 
         setRecommendedSongs(
           songs
-            .map(normalizeTrack)
+            .map(
+              normalizeTrack
+            )
             .slice(0, 20)
         );
       } catch (error) {
@@ -451,7 +796,9 @@ export default function Explore({
           error
         );
 
-        setRecommendedSongs([]);
+        setRecommendedSongs(
+          []
+        );
       }
     }, [
       normalizeTrack,
@@ -466,11 +813,17 @@ export default function Explore({
         const currentUser =
           auth.currentUser;
 
-        if (!currentUser?.uid) {
+        if (
+          !currentUser?.uid
+        ) {
           setTopReviewed([]);
           setTopLiked([]);
-          setRecommendedSongs([]);
-          setNotificationsCount(0);
+          setRecommendedSongs(
+            []
+          );
+          setNotificationsCount(
+            0
+          );
           setLoading(false);
           setRefreshing(false);
 
@@ -496,11 +849,23 @@ export default function Explore({
             error
           );
 
-          Alert.alert(
-            "Unable to load Explore",
+          const message =
             error?.message ||
-              "Please try again."
-          );
+            "Please try again.";
+
+          if (
+            Platform.OS ===
+            "web"
+          ) {
+            window.alert(
+              `Unable to load Explore: ${message}`
+            );
+          } else {
+            Alert.alert(
+              "Unable to load Explore",
+              message
+            );
+          }
         } finally {
           setLoading(false);
           setRefreshing(false);
@@ -538,12 +903,18 @@ export default function Explore({
             track: {
               ...item,
 
-              id: String(item.id),
+              id:
+                String(
+                  item.id
+                ),
 
               listenableId:
-                String(item.id),
+                String(
+                  item.id
+                ),
 
-              type: "track",
+              type:
+                "track",
 
               title:
                 item.title ||
@@ -586,7 +957,10 @@ export default function Explore({
 
   const renderTrackCard =
     useCallback(
-      ({ item }) => {
+      (
+        item,
+        sectionTitle
+      ) => {
         const title =
           item?.title ||
           item?.name ||
@@ -596,28 +970,38 @@ export default function Explore({
           typeof item?.artist ===
           "string"
             ? item.artist
-            : item?.artist?.name ||
-              item?.artistName ||
+            : item?.artist
+                  ?.name ||
+              item
+                ?.artistName ||
               "Unknown Artist";
 
         const imageUri =
           item?.image ||
           item?.coverArt ||
-          item?.album?.cover_xl ||
-          item?.album?.cover_big ||
-          item?.album?.cover_medium ||
+          item?.album
+            ?.cover_xl ||
+          item?.album
+            ?.cover_big ||
+          item?.album
+            ?.cover_medium ||
           "";
 
         return (
           <TouchableOpacity
+            key={`${sectionTitle}-${item?.id}`}
             style={[
               styles.trackCard,
+
               isDesktopWeb &&
                 styles.desktopTrackCard,
+
               isCompact &&
                 styles.compactTrackCard,
             ]}
-            activeOpacity={0.82}
+            activeOpacity={
+              0.82
+            }
             onPress={() =>
               openTrack(item)
             }
@@ -630,12 +1014,15 @@ export default function Explore({
               {imageUri ? (
                 <Image
                   source={{
-                    uri: imageUri,
+                    uri:
+                      imageUri,
                   }}
                   style={[
                     styles.trackImage,
+
                     isDesktopWeb &&
                       styles.desktopTrackImage,
+
                     isCompact &&
                       styles.compactTrackImage,
                   ]}
@@ -644,8 +1031,10 @@ export default function Explore({
                 <View
                   style={[
                     styles.imagePlaceholder,
+
                     isDesktopWeb &&
                       styles.desktopTrackImage,
+
                     isCompact &&
                       styles.compactTrackImage,
                   ]}
@@ -682,6 +1071,7 @@ export default function Explore({
                 styles.trackName
               }
               numberOfLines={1}
+              ellipsizeMode="tail"
             >
               {title}
             </Text>
@@ -691,6 +1081,7 @@ export default function Explore({
                 styles.trackArtist
               }
               numberOfLines={1}
+              ellipsizeMode="tail"
             >
               {artistName}
             </Text>
@@ -713,7 +1104,9 @@ export default function Explore({
         emptyText,
       }) => (
         <View
-          style={styles.cardSection}
+          style={
+            styles.cardSection
+          }
         >
           <View
             style={
@@ -754,7 +1147,9 @@ export default function Explore({
                   styles.sectionCountText
                 }
               >
-                {data.length}
+                {
+                  data.length
+                }
               </Text>
             </View>
           </View>
@@ -782,63 +1177,100 @@ export default function Explore({
               </Text>
             </View>
           ) : (
-            <FlatList
-              data={data}
-              renderItem={
-                renderTrackCard
-              }
-              keyExtractor={(
-                item,
-                index
-              ) =>
-                String(
-                  item?.id ||
-                    `${title}-${index}`
-                )
-              }
-              horizontal
-              showsHorizontalScrollIndicator={
-                false
-              }
-              contentContainerStyle={
-                styles.horizontalListContent
-              }
-              nestedScrollEnabled
-              removeClippedSubviews={
-                false
-              }
-            />
+            <>
+              <DraggableSongRow
+                isWeb={
+                  isWeb
+                }
+              >
+                {data.map(
+                  (item) =>
+                    renderTrackCard(
+                      item,
+                      title
+                    )
+                )}
+              </DraggableSongRow>
+
+              <View
+                style={
+                  styles.dragHintRow
+                }
+              >
+                <Text
+                  style={
+                    styles.dragHintText
+                  }
+                >
+                  {isWeb
+                    ? "Drag to explore more songs"
+                    : "Swipe to explore more songs"}
+                </Text>
+
+                <Text
+                  style={
+                    styles.dragArrow
+                  }
+                >
+                  →
+                </Text>
+              </View>
+            </>
           )}
         </View>
       ),
-      [renderTrackCard]
+      [
+        isWeb,
+        renderTrackCard,
+      ]
     );
 
   const exploreSections = [
     {
-      id: "top-reviewed",
-      title: "Top Reviewed",
+      id:
+        "top-reviewed",
+
+      title:
+        "Top Reviewed",
+
       subtitle:
         "The most-reviewed songs in Treble",
-      data: topReviewed,
+
+      data:
+        topReviewed,
+
       emptyText:
         "No top-reviewed songs are available yet.",
     },
     {
-      id: "top-liked",
-      title: "Top Liked",
+      id:
+        "top-liked",
+
+      title:
+        "Top Liked",
+
       subtitle:
         "Songs receiving the most likes",
-      data: topLiked,
+
+      data:
+        topLiked,
+
       emptyText:
         "No top-liked songs are available yet.",
     },
     {
-      id: "recommended",
-      title: "Recommended for You",
+      id:
+        "recommended",
+
+      title:
+        "Recommended for You",
+
       subtitle:
         "Suggestions based on your music activity",
-      data: recommendedSongs,
+
+      data:
+        recommendedSongs,
+
       emptyText:
         "Like and review music to improve your recommendations.",
     },
@@ -848,18 +1280,19 @@ export default function Explore({
     <View
       style={[
         styles.container,
+
         isWeb &&
           styles.webContainer,
       ]}
     >
-      {/* =====================================================
-          SIDEBAR
-      ===================================================== */}
+      {/* SIDEBAR */}
       <View
         style={[
           styles.sideMenu,
+
           isDesktopWeb &&
             styles.desktopSideMenu,
+
           isMobileWeb &&
             styles.mobileSideMenu,
         ]}
@@ -876,97 +1309,112 @@ export default function Explore({
               ? () => {}
               : setMenuOpen
           }
-          isDesktop={isDesktopWeb}
+          isDesktop={
+            isDesktopWeb
+          }
         />
       </View>
 
-      {/* =====================================================
-          MAIN CONTENT
-      ===================================================== */}
+      {/* MAIN CONTENT */}
       <View
         style={[
           styles.pageContent,
+
           isDesktopWeb &&
             styles.desktopPageContent,
+
           isMobileWeb &&
             styles.mobilePageContent,
         ]}
       >
-        {/* HEADER */}
-        <View
-          style={[
-            styles.pageHeader,
-            isCompact &&
-              styles.compactPageHeader,
-          ]}
-        >
-          <View
-            style={
-              styles.headerTextContainer
-            }
-          >
-            <Text
-              style={styles.pageTitle}
-            >
-              Explore
-            </Text>
-
-            <Text
-              style={
-                styles.pageSubtitle
-              }
-            >
-              Discover popular music and personalized recommendations.
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={
-              styles.notificationsButton
-            }
-            activeOpacity={0.8}
-            onPress={() =>
-              navigation.navigate(
-                "Notifications"
-              )
-            }
-          >
-            <Image
-              source={require("../images/notificationsIcon2.png")}
-              style={
-                styles.notificationsIcon
-              }
-            />
-
-            {notificationsCount >
-            0 ? (
-              <View
-                style={
-                  styles.notificationBadge
-                }
-              >
-                <Text
-                  style={
-                    styles.notificationBadgeText
-                  }
-                >
-                  {notificationsCount >
-                  99
-                    ? "99+"
-                    : notificationsCount}
-                </Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
-        </View>
-
-        {/* SEARCH */}
         <View
           style={
-            styles.searchBarContainer
+            styles.alignedContent
           }
         >
-          <SearchBar />
+          {/* HEADER */}
+          <View
+            style={[
+              styles.pageHeader,
+
+              isCompact &&
+                styles.compactPageHeader,
+            ]}
+          >
+            <View
+              style={
+                styles.headerTextContainer
+              }
+            >
+              <Text
+                style={
+                  styles.pageTitle
+                }
+              >
+                Explore
+              </Text>
+
+              <Text
+                style={
+                  styles.pageSubtitle
+                }
+              >
+                Discover popular music and personalized recommendations.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={
+                styles.notificationsButton
+              }
+              activeOpacity={
+                0.8
+              }
+              onPress={() =>
+                navigation.navigate(
+                  "Notifications"
+                )
+              }
+            >
+              <Image
+                source={require(
+                  "../images/notificationsIcon2.png"
+                )}
+                style={
+                  styles.notificationsIcon
+                }
+              />
+
+              {notificationsCount >
+              0 ? (
+                <View
+                  style={
+                    styles.notificationBadge
+                  }
+                >
+                  <Text
+                    style={
+                      styles.notificationBadgeText
+                    }
+                  >
+                    {notificationsCount >
+                    99
+                      ? "99+"
+                      : notificationsCount}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          </View>
+
+          {/* SEARCH */}
+          <View
+            style={
+              styles.searchBarContainer
+            }
+          >
+            <SearchBar />
+          </View>
         </View>
 
         {/* EXPLORE SECTIONS */}
@@ -979,52 +1427,68 @@ export default function Explore({
             <ActivityIndicator
               size="large"
               color={
-                colours.lightblue
+                colours.lightblue ||
+                "#35afe5"
               }
             />
 
             <Text
-              style={styles.loadingText}
+              style={
+                styles.loadingText
+              }
             >
               Loading music...
             </Text>
           </View>
         ) : (
           <FlatList
-            data={exploreSections}
-            keyExtractor={(item) =>
+            data={
+              exploreSections
+            }
+            keyExtractor={(
+              item
+            ) =>
               item.id
             }
-            renderItem={({ item }) =>
-              renderSection(item)
+            renderItem={({
+              item,
+            }) =>
+              renderSection(
+                item
+              )
             }
             style={[
               styles.contentList,
+
               isWeb &&
                 styles.webContentList,
             ]}
-            contentContainerStyle={[
-              styles.contentContainer,
-              isDesktopWeb &&
-                styles.desktopContentContainer,
-            ]}
+            contentContainerStyle={
+              styles.contentContainer
+            }
             showsVerticalScrollIndicator={
               false
             }
             scrollEnabled
             nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
-            removeClippedSubviews={false}
+            removeClippedSubviews={
+              false
+            }
             refreshControl={
               <RefreshControl
                 refreshing={
                   refreshing
                 }
                 onRefresh={() =>
-                  loadExplore(true)
+                  loadExplore(
+                    true
+                  )
                 }
                 tintColor="#ffffff"
-                colors={["#ffffff"]}
+                colors={[
+                  "#ffffff",
+                ]}
                 progressBackgroundColor={
                   colours.darkblue
                 }
@@ -1034,11 +1498,13 @@ export default function Explore({
         )}
       </View>
 
-      {/* MOBILE BOTTOM NAVIGATION */}
+      {/* BOTTOM NAVIGATION */}
       <View
         style={[
           styles.bottomNavBar,
-          isDesktopWeb && styles.desktopBottomNavBar,
+
+          isDesktopWeb &&
+            styles.desktopBottomNavBar,
         ]}
       >
         <BottomNavbar />
@@ -1047,572 +1513,631 @@ export default function Explore({
   );
 }
 
-const styles = StyleSheet.create({
-  /* =====================================================
-     PAGE
-  ===================================================== */
-    desktopBottomNavBar: {
-  left: DESKTOP_SIDEBAR_WIDTH,
-  right: 0,
-},
-  container: {
-    flex: 1,
-    minHeight: 0,
-
-    backgroundColor:
-      colours.background,
-  },
-
-  webContainer: {
-    width: "100%",
-    height: "100vh",
-
-    minHeight: 0,
-
-    overflow: "hidden",
-  },
-
-  /* =====================================================
-     SIDEBAR
-  ===================================================== */
-
-  sideMenu: {
-    position: "absolute",
-
-    top: 40,
-    left: 0,
-    bottom: 0,
-
-    zIndex: 100,
-    elevation: 20,
-  },
-
-  desktopSideMenu: {
-    position: "fixed",
-
-    top: 0,
-    left: 0,
-    right: undefined,
-    bottom: 0,
-
-    width:
-      DESKTOP_SIDEBAR_WIDTH,
-
-    height: "100vh",
-
-    overflow: "hidden",
-
-    zIndex: 100,
-    elevation: 20,
-  },
-
-  mobileSideMenu: {
-    position: "absolute",
-
-    top: 40,
-    left: 0,
-    right: undefined,
-    bottom: 0,
-
-    zIndex: 100,
-  },
-
-  /* =====================================================
-     PAGE CONTENT
-  ===================================================== */
-
-  pageContent: {
-    flex: 1,
-    minHeight: 0,
-
-    paddingBottom: 74,
-
-    overflow: "hidden",
-  },
-
-  desktopPageContent: {
-    position: "absolute",
-
-    top: 0,
-    left:
-      DESKTOP_SIDEBAR_WIDTH,
-    right: 0,
-    bottom: 0,
-
-    minHeight: 0,
-
-    paddingTop: 23,
-    paddingHorizontal: 28,
-
-    overflow: "hidden",
-  },
-
-  mobilePageContent: {
-    position: "absolute",
-
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 72,
-
-    minHeight: 0,
-
-    paddingTop: 69,
-    paddingHorizontal: 12,
-
-    overflow: "hidden",
-  },
-
-  /* =====================================================
-     HEADER
-  ===================================================== */
-
-  pageHeader: {
-    width: "100%",
-    maxWidth:
-      MAX_CONTENT_WIDTH,
-
-    alignSelf: "center",
-
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent:
-      "space-between",
-
-    marginBottom: 14,
-  },
-
-  compactPageHeader: {
-    alignItems: "center",
-  },
-
-  headerTextContainer: {
-    flex: 1,
-    minWidth: 0,
-
-    paddingRight: 15,
-  },
-
-  pageTitle: {
-    color:
-      colours.lightblue,
-
-    fontSize: 32,
-    lineHeight: 39,
-    fontWeight: "800",
-  },
-
-  pageSubtitle: {
-    color:
-      "rgba(255,255,255,0.67)",
-
-    fontSize: 15,
-    lineHeight: 21,
-
-    marginTop: 3,
-  },
-
-  notificationsButton: {
-    width: 47,
-    height: 47,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.08)",
-
-    borderRadius: 24,
-
-    backgroundColor:
-      colours.darkblue,
-  },
-
-  notificationsIcon: {
-    width: 29,
-    height: 29,
-
-    resizeMode: "contain",
-  },
-
-  notificationBadge: {
-    position: "absolute",
-
-    top: -4,
-    right: -4,
-
-    minWidth: 21,
-    height: 21,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    paddingHorizontal: 5,
-
-    borderWidth: 2,
-    borderColor:
-      colours.background,
-
-    borderRadius: 11,
-
-    backgroundColor:
-      "#ff4545",
-  },
-
-  notificationBadgeText: {
-    color: "#ffffff",
-
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: "800",
-  },
-
-  /* =====================================================
-     SEARCH
-  ===================================================== */
-
-  searchBarContainer: {
-    width: "100%",
-    maxWidth:
-      MAX_CONTENT_WIDTH,
-
-    minHeight: 47,
-
-    alignSelf: "center",
-
-    marginBottom: 17,
-
-    position: "relative",
-    zIndex: 20,
-  },
-
-  /* =====================================================
-     VERTICAL SCROLLING
-  ===================================================== */
-
-  contentList: {
-    flex: 1,
-    minHeight: 0,
-
-    width: "100%",
-  },
-
-  webContentList: {
-    height: "100%",
-
-    overflowY: "auto",
-    overflowX: "hidden",
-
-    WebkitOverflowScrolling:
-      "touch",
-
-    overscrollBehaviorY:
-      "contain",
-
-    scrollbarWidth: "none",
-    msOverflowStyle: "none",
-  },
-
-  contentContainer: {
-    width: "100%",
-
-    paddingBottom: 110,
-  },
-
-  desktopContentContainer: {
-    width: "100%",
-    maxWidth:
-      MAX_CONTENT_WIDTH,
-
-    alignSelf: "center",
-
-    paddingBottom: 65,
-  },
-
-  loadingContainer: {
-    flex: 1,
-    minHeight: 260,
-
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  loadingText: {
-    color:
-      "rgba(255,255,255,0.68)",
-
-    fontSize: 14,
-
-    marginTop: 12,
-  },
-
-  /* =====================================================
-     SECTIONS
-  ===================================================== */
-
-  cardSection: {
-    width: "100%",
-
-    padding: 18,
-    marginBottom: 17,
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.08)",
-
-    borderRadius: 17,
-
-    backgroundColor:
-      colours.darkblue,
-
-    shadowColor: "#000000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      minHeight: 0,
+
+      backgroundColor:
+        colours.background ||
+        "#101010",
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 9,
 
-    elevation: 3,
-  },
+    webContainer: {
+      width: "100%",
+      height: "100vh",
 
-  sectionHeader: {
-    width: "100%",
+      minHeight: 0,
 
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent:
-      "space-between",
+      overflow: "hidden",
+    },
 
-    marginBottom: 14,
-  },
+    sideMenu: {
+      position: "absolute",
 
-  sectionHeadingGroup: {
-    flex: 1,
-    minWidth: 0,
+      top: 40,
+      left: 0,
+      bottom: 0,
 
-    paddingRight: 12,
-  },
+      zIndex: 100,
+      elevation: 20,
+    },
 
-  sectionTitle: {
-    color:
-      colours.lightblue,
+    desktopSideMenu: {
+      position: "fixed",
 
-    fontSize: 19,
-    lineHeight: 25,
-    fontWeight: "800",
-  },
+      top: 0,
+      left: 0,
+      right: undefined,
+      bottom: 0,
 
-  sectionSubtitle: {
-    color:
-      "rgba(255,255,255,0.47)",
+      width:
+        DESKTOP_SIDEBAR_WIDTH,
 
-    fontSize: 12,
-    lineHeight: 17,
+      height: "100vh",
 
-    marginTop: 2,
-  },
+      overflow: "hidden",
 
-  sectionCountBadge: {
-    minWidth: 31,
-    height: 31,
+      zIndex: 100,
+      elevation: 20,
+    },
 
-    alignItems: "center",
-    justifyContent: "center",
+    mobileSideMenu: {
+      position: "absolute",
 
-    paddingHorizontal: 7,
+      top: 40,
+      left: 0,
+      right: undefined,
+      bottom: 0,
 
-    borderRadius: 16,
+      zIndex: 100,
+    },
 
-    backgroundColor:
-      "rgba(255,255,255,0.07)",
-  },
+    pageContent: {
+      flex: 1,
+      minHeight: 0,
 
-  sectionCountText: {
-    color: "#ffffff",
+      paddingBottom:
+        BOTTOM_NAV_HEIGHT,
 
-    fontSize: 12,
-    fontWeight: "800",
-  },
+      overflow: "hidden",
+    },
 
-  horizontalListContent: {
-    paddingRight: 3,
-  },
+    desktopPageContent: {
+      position: "absolute",
 
-  /* =====================================================
-     TRACK CARDS
-  ===================================================== */
+      top: 0,
 
-  trackCard: {
-    width: 128,
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
 
-    marginRight: 14,
+      right: 0,
 
-    alignItems: "flex-start",
-  },
+      bottom:
+        BOTTOM_NAV_HEIGHT,
 
-  desktopTrackCard: {
-    width: 160,
+      minHeight: 0,
 
-    marginRight: 17,
-  },
+      paddingTop: 23,
+      paddingHorizontal: 28,
 
-  compactTrackCard: {
-    width: 116,
+      overflow: "hidden",
+    },
 
-    marginRight: 12,
-  },
+    mobilePageContent: {
+      position: "absolute",
 
-  trackImageContainer: {
-    position: "relative",
+      top: 0,
+      left: 0,
+      right: 0,
 
-    width: "100%",
+      bottom:
+        BOTTOM_NAV_HEIGHT,
 
-    marginBottom: 9,
-  },
+      minHeight: 0,
 
-  trackImage: {
-    width: 128,
-    height: 128,
+      paddingTop: 69,
+      paddingHorizontal: 12,
 
-    borderRadius: 12,
+      overflow: "hidden",
+    },
 
-    resizeMode: "cover",
+    /*
+     * The header and search bar share this exact wrapper.
+     * The section list below uses the same width.
+     */
+    alignedContent: {
+      width: "100%",
 
-    backgroundColor:
-      "rgba(255,255,255,0.07)",
-  },
+      maxWidth:
+        MAX_CONTENT_WIDTH,
 
-  desktopTrackImage: {
-    width: 160,
-    height: 160,
+      alignSelf: "center",
+    },
 
-    borderRadius: 14,
-  },
+    pageHeader: {
+      width: "100%",
 
-  compactTrackImage: {
-    width: 116,
-    height: 116,
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent:
+        "space-between",
 
-    borderRadius: 11,
-  },
+      marginBottom: 14,
+    },
 
-  imagePlaceholder: {
-    width: 128,
-    height: 128,
+    compactPageHeader: {
+      alignItems: "center",
+    },
 
-    alignItems: "center",
-    justifyContent: "center",
+    headerTextContainer: {
+      flex: 1,
+      minWidth: 0,
 
-    borderRadius: 12,
+      paddingRight: 15,
+    },
 
-    backgroundColor:
-      "rgba(255,255,255,0.07)",
-  },
+    pageTitle: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
 
-  placeholderIcon: {
-    color: "#ffffff",
+      fontSize: 32,
+      lineHeight: 39,
+      fontWeight: "800",
+    },
 
-    fontSize: 39,
+    pageSubtitle: {
+      color:
+        "rgba(255,255,255,0.67)",
 
-    opacity: 0.65,
-  },
+      fontSize: 15,
+      lineHeight: 21,
 
-  previewBadge: {
-    position: "absolute",
+      marginTop: 3,
+    },
 
-    left: 7,
-    bottom: 7,
+    notificationsButton: {
+      position: "relative",
 
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+      width: 47,
+      height: 47,
 
-    borderRadius: 9,
+      flexShrink: 0,
 
-    backgroundColor:
-      "rgba(0,0,0,0.72)",
-  },
+      alignItems: "center",
+      justifyContent: "center",
 
-  previewBadgeText: {
-    color: "#ffffff",
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.08)",
 
-    fontSize: 9,
-    fontWeight: "800",
-  },
+      borderRadius: 24,
 
-  trackName: {
-    width: "100%",
+      backgroundColor:
+        colours.darkblue ||
+        "#222222",
+    },
 
-    color: "#ffffff",
+    notificationsIcon: {
+      width: 29,
+      height: 29,
 
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: "800",
-  },
+      resizeMode: "contain",
+    },
 
-  trackArtist: {
-    width: "100%",
+    notificationBadge: {
+      position: "absolute",
 
-    color:
-      "rgba(255,255,255,0.53)",
+      top: -4,
+      right: -4,
 
-    fontSize: 12,
-    lineHeight: 17,
+      minWidth: 21,
+      height: 21,
 
-    marginTop: 2,
-  },
+      alignItems: "center",
+      justifyContent: "center",
 
-  /* =====================================================
-     EMPTY SECTION
-  ===================================================== */
+      paddingHorizontal: 5,
 
-  emptySection: {
-    minHeight: 115,
+      borderWidth: 2,
+      borderColor:
+        colours.background ||
+        "#101010",
 
-    alignItems: "center",
-    justifyContent: "center",
+      borderRadius: 11,
 
-    paddingHorizontal: 20,
+      backgroundColor:
+        "#ff4545",
+    },
 
-    borderRadius: 12,
+    notificationBadgeText: {
+      color: "#ffffff",
 
-    backgroundColor:
-      "rgba(255,255,255,0.035)",
-  },
+      fontSize: 10,
+      lineHeight: 13,
+      fontWeight: "800",
+    },
 
-  emptySectionIcon: {
-    color:
-      colours.lightblue,
+    searchBarContainer: {
+      width: "100%",
 
-    fontSize: 33,
+      minHeight: 47,
 
-    opacity: 0.7,
-  },
+      marginBottom: 17,
 
-  emptySectionText: {
-    color:
-      "rgba(255,255,255,0.59)",
+      position: "relative",
+      zIndex: 20,
+    },
 
-    fontSize: 13,
-    lineHeight: 19,
+    contentList: {
+      flex: 1,
+      minHeight: 0,
 
-    textAlign: "center",
+      width: "100%",
+    },
 
-    marginTop: 7,
-  },
+    webContentList: {
+      height: "100%",
 
-  /* =====================================================
-     MOBILE NAVIGATION
-  ===================================================== */
+      overflowY: "auto",
+      overflowX: "hidden",
 
-  bottomNavBar: {
-    position: "absolute",
+      WebkitOverflowScrolling:
+        "touch",
 
-    left: 0,
-    right: 0,
-    bottom: 0,
+      overscrollBehaviorY:
+        "contain",
 
-    zIndex: 90,
-  },
-});
+      scrollbarWidth:
+        "none",
+
+      msOverflowStyle:
+        "none",
+    },
+
+    contentContainer: {
+      width: "100%",
+
+      maxWidth:
+        MAX_CONTENT_WIDTH,
+
+      alignSelf: "center",
+
+      paddingBottom: 65,
+    },
+
+    loadingContainer: {
+      flex: 1,
+      minHeight: 260,
+
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    loadingText: {
+      color:
+        "rgba(255,255,255,0.68)",
+
+      fontSize: 14,
+
+      marginTop: 12,
+    },
+
+    cardSection: {
+      width: "100%",
+
+      padding: 18,
+      marginBottom: 17,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.08)",
+
+      borderRadius: 17,
+
+      backgroundColor:
+        colours.darkblue ||
+        "#222222",
+
+      shadowColor:
+        "#000000",
+
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
+
+      shadowOpacity: 0.15,
+      shadowRadius: 9,
+
+      elevation: 3,
+
+      overflow: "hidden",
+    },
+
+    sectionHeader: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent:
+        "space-between",
+
+      marginBottom: 14,
+    },
+
+    sectionHeadingGroup: {
+      flex: 1,
+      minWidth: 0,
+
+      paddingRight: 12,
+    },
+
+    sectionTitle: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 19,
+      lineHeight: 25,
+      fontWeight: "800",
+    },
+
+    sectionSubtitle: {
+      color:
+        "rgba(255,255,255,0.47)",
+
+      fontSize: 12,
+      lineHeight: 17,
+
+      marginTop: 2,
+    },
+
+    sectionCountBadge: {
+      minWidth: 31,
+      height: 31,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 7,
+
+      borderRadius: 16,
+
+      backgroundColor:
+        "rgba(255,255,255,0.07)",
+    },
+
+    sectionCountText: {
+      color: "#ffffff",
+
+      fontSize: 12,
+      fontWeight: "800",
+    },
+
+    horizontalScroll: {
+      width: "100%",
+
+      flexGrow: 0,
+    },
+
+    webHorizontalScroll: {
+      overflowX: "auto",
+      overflowY: "hidden",
+
+      cursor: "grab",
+
+      userSelect: "none",
+
+      WebkitUserSelect:
+        "none",
+
+      scrollbarWidth:
+        "none",
+
+      msOverflowStyle:
+        "none",
+
+      WebkitOverflowScrolling:
+        "touch",
+    },
+
+    draggingHorizontalScroll: {
+      cursor: "grabbing",
+    },
+
+    horizontalListContent: {
+      flexDirection: "row",
+
+      alignItems: "flex-start",
+
+      paddingRight: 24,
+    },
+
+    dragHintRow: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "flex-end",
+
+      marginTop: 10,
+    },
+
+    dragHintText: {
+      color:
+        "rgba(255,255,255,0.38)",
+
+      fontSize: 11,
+      lineHeight: 15,
+    },
+
+    dragArrow: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 17,
+      lineHeight: 18,
+
+      marginLeft: 6,
+    },
+
+    trackCard: {
+      width: 128,
+
+      flexShrink: 0,
+
+      marginRight: 14,
+
+      alignItems:
+        "flex-start",
+    },
+
+    desktopTrackCard: {
+      width: 160,
+
+      marginRight: 17,
+    },
+
+    compactTrackCard: {
+      width: 116,
+
+      marginRight: 12,
+    },
+
+    trackImageContainer: {
+      position: "relative",
+
+      width: "100%",
+
+      marginBottom: 9,
+    },
+
+    trackImage: {
+      width: 128,
+      height: 128,
+
+      borderRadius: 12,
+
+      resizeMode: "cover",
+
+      backgroundColor:
+        "rgba(255,255,255,0.07)",
+    },
+
+    desktopTrackImage: {
+      width: 160,
+      height: 160,
+
+      borderRadius: 14,
+    },
+
+    compactTrackImage: {
+      width: 116,
+      height: 116,
+
+      borderRadius: 11,
+    },
+
+    imagePlaceholder: {
+      width: 128,
+      height: 128,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderRadius: 12,
+
+      backgroundColor:
+        "rgba(255,255,255,0.07)",
+    },
+
+    placeholderIcon: {
+      color: "#ffffff",
+
+      fontSize: 39,
+
+      opacity: 0.65,
+    },
+
+    previewBadge: {
+      position: "absolute",
+
+      left: 7,
+      bottom: 7,
+
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+
+      borderRadius: 9,
+
+      backgroundColor:
+        "rgba(0,0,0,0.72)",
+    },
+
+    previewBadgeText: {
+      color: "#ffffff",
+
+      fontSize: 9,
+      fontWeight: "800",
+    },
+
+    trackName: {
+      width: "100%",
+
+      color: "#ffffff",
+
+      fontSize: 14,
+      lineHeight: 19,
+      fontWeight: "800",
+    },
+
+    trackArtist: {
+      width: "100%",
+
+      color:
+        "rgba(255,255,255,0.53)",
+
+      fontSize: 12,
+      lineHeight: 17,
+
+      marginTop: 2,
+    },
+
+    emptySection: {
+      minHeight: 115,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 20,
+
+      borderRadius: 12,
+
+      backgroundColor:
+        "rgba(255,255,255,0.035)",
+    },
+
+    emptySectionIcon: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 33,
+
+      opacity: 0.7,
+    },
+
+    emptySectionText: {
+      color:
+        "rgba(255,255,255,0.59)",
+
+      fontSize: 13,
+      lineHeight: 19,
+
+      textAlign: "center",
+
+      marginTop: 7,
+    },
+
+    bottomNavBar: {
+      position: "absolute",
+
+      left: 0,
+      right: 0,
+      bottom: 0,
+
+      zIndex: 90,
+    },
+
+    desktopBottomNavBar: {
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
+
+      right: 0,
+    },
+  });
