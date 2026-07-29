@@ -49,7 +49,7 @@ const MAX_CONTENT_WIDTH = 760;
 export const PREVIEW_VOLUME_STORAGE_KEY =
   "treble_preview_volume";
 
-export const DEFAULT_PREVIEW_VOLUME = 0.65;
+export const DEFAULT_PREVIEW_VOLUME = 0.30;
 
 export default function Settings({
   navigation,
@@ -397,7 +397,7 @@ export default function Settings({
 
   /*
    * Reset the preview volume
-   * to Treble's default of 65%.
+   * to Treble's default of 30%.
    */
   const handleResetVolume =
     useCallback(() => {
@@ -957,7 +957,7 @@ export default function Settings({
                     styles.resetVolumeText
                   }
                 >
-                  Reset to 65%
+                  Reset to 30%
                 </Text>
               </TouchableOpacity>
 
