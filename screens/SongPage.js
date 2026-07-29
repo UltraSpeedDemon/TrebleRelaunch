@@ -531,7 +531,7 @@ export default function SongPage({ route, navigation }) {
     );
   };
 
-  const handleAddReview = () => {
+ const handleAddReview = () => {
   if (!review.trim()) {
     Alert.alert(
       "Review required",
@@ -541,13 +541,36 @@ export default function SongPage({ route, navigation }) {
     return;
   }
 
+  const isUpdating =
+    Boolean(existingReviewId);
+
+  const confirmationMessage =
+    isUpdating
+      ? "Do you want to update your existing review?"
+      : "Are you sure you want to post this review?";
+
+  /*
+   * React Native Alert buttons do not work
+   * reliably on Expo Web.
+   */
+  if (Platform.OS === "web") {
+    const confirmed =
+      window.confirm(
+        confirmationMessage
+      );
+
+    if (confirmed) {
+      actuallyAddReview();
+    }
+
+    return;
+  }
+
   Alert.alert(
-    existingReviewId
+    isUpdating
       ? "Update Review?"
       : "Want to Post?",
-    existingReviewId
-      ? "Do you want to update your existing review?"
-      : "Are you sure you want to post this review?",
+    confirmationMessage,
     [
       {
         text: "No",
