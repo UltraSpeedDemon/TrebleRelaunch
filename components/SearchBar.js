@@ -39,7 +39,7 @@ const SearchBar = () => {
         onChangeText={setSearchQuery}
         style={styles.searchInput}
         placeholder="Search for Songs, Artists, Albums, and Users!"
-        placeholderTextColor="#020101"
+        placeholderTextColor="#aaa"
         selectionColor="#ffffff"
         returnKeyType="search"
         onSubmitEditing={submitSearch}

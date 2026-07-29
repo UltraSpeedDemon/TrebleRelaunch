@@ -445,6 +445,79 @@ export default function SongPage({ route, navigation }) {
     }
   };
 
+  const openArtistPage = () => {
+  const rawArtist =
+    track?.artist;
+
+  const normalizedArtist =
+    typeof rawArtist === "object" &&
+    rawArtist !== null
+      ? {
+          ...rawArtist,
+
+          id:
+            rawArtist.id ||
+            rawArtist.artistId ||
+            rawArtist.artist_id ||
+            track?.artistId ||
+            track?.artist_id ||
+            "",
+
+          name:
+            rawArtist.name ||
+            artistName ||
+            "Unknown Artist",
+
+          picture:
+            rawArtist.picture_xl ||
+            rawArtist.picture_big ||
+            rawArtist.picture_medium ||
+            rawArtist.picture ||
+            "",
+        }
+      : {
+          id:
+            track?.artistId ||
+            track?.artist_id ||
+            "",
+
+          name:
+            artistName ||
+            String(rawArtist || "") ||
+            "Unknown Artist",
+
+          picture:
+            "",
+        };
+
+  if (
+    !normalizedArtist.name ||
+    normalizedArtist.name ===
+      "Unknown Artist"
+  ) {
+    Alert.alert(
+      "Artist unavailable",
+      "This song does not contain valid artist information."
+    );
+
+    return;
+  }
+
+  navigation.navigate(
+    "ArtistListenables",
+    {
+      artist:
+        normalizedArtist,
+
+      artistId:
+        normalizedArtist.id,
+
+      artistName:
+        normalizedArtist.name,
+    }
+  );
+};
+
   const handleSaveToLibrary = () => setSavedToLibrary(!savedToLibrary);
   const handleToggleFavourite = () => {
     setFavourite((currentValue) => !currentValue);
@@ -1085,12 +1158,36 @@ export default function SongPage({ route, navigation }) {
                     {trackName || "Unknown Track"}
                   </Text>
 
-                  <Text
-                    style={styles.artist}
-                    numberOfLines={1}
+                  <TouchableOpacity
+                    style={
+                      styles.artistButton
+                    }
+                    activeOpacity={0.7}
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+                      openArtistPage();
+                    }}
                   >
-                    {artistName || "Unknown Artist"}
-                  </Text>
+                    <Text
+                      style={
+                        styles.artist
+                      }
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {artistName ||
+                        "Unknown Artist"}
+                    </Text>
+
+                    <Icon
+                      name="chevron-right"
+                      size={20}
+                      color={
+                        colours.lightblue ||
+                        "#42bfee"
+                      }
+                    />
+                  </TouchableOpacity>
 
                   {albumName ? (
                     <Text
@@ -1609,16 +1706,43 @@ desktopBottomNavBar: {
     textAlign: "center",
   },
 
-  artist: {
-    color: "rgba(255,255,255,0.75)",
+  artistButton: {
+  maxWidth: "100%",
 
-    fontSize: 17,
-    lineHeight: 23,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
 
-    textAlign: "center",
+  marginTop: 5,
 
-    marginTop: 5,
-  },
+  paddingVertical: 4,
+  paddingLeft: 10,
+  paddingRight: 5,
+
+  borderRadius: 15,
+
+  backgroundColor:
+    "rgba(66,191,238,0.08)",
+},
+
+artist: {
+  flexShrink: 1,
+
+  color:
+    colours.lightblue ||
+    "#42bfee",
+
+  fontSize: 17,
+  lineHeight: 23,
+  fontWeight: "700",
+
+  textAlign: "center",
+
+  textDecorationLine:
+    Platform.OS === "web"
+      ? "underline"
+      : "none",
+},
 
   album: {
     color: "rgba(255,255,255,0.55)",

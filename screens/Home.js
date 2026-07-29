@@ -6,7 +6,6 @@ import React, {
 
 import {
   ActivityIndicator,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -51,10 +50,24 @@ export default function Home({
     let componentMounted = true;
     let firebaseFinished = false;
     let sessionFinished = false;
+    let navigationStarted = false;
+
+    const goToFeed = () => {
+      if (
+        !componentMounted ||
+        navigationStarted
+      ) {
+        return;
+      }
+
+      navigationStarted = true;
+      openFeed();
+    };
 
     const finishSessionCheck = () => {
       if (
         componentMounted &&
+        !navigationStarted &&
         firebaseFinished &&
         sessionFinished
       ) {
@@ -62,21 +75,14 @@ export default function Home({
       }
     };
 
-    /*
-     * Firebase may restore its signed-in user automatically
-     * when the app or website is reopened.
-     */
     const unsubscribe =
       onAuthStateChanged(
         auth,
         (firebaseUser) => {
           firebaseFinished = true;
 
-          if (
-            firebaseUser?.uid &&
-            componentMounted
-          ) {
-            openFeed();
+          if (firebaseUser?.uid) {
+            goToFeed();
             return;
           }
 
@@ -93,11 +99,6 @@ export default function Home({
         }
       );
 
-    /*
-     * Check the same saved session written by Login.js:
-     *
-     * saveSession("userUid", user.uid)
-     */
     async function checkSavedSession() {
       try {
         const savedUserUid =
@@ -105,11 +106,8 @@ export default function Home({
             "userUid"
           );
 
-        if (
-          savedUserUid &&
-          componentMounted
-        ) {
-          openFeed();
+        if (savedUserUid) {
+          goToFeed();
           return;
         }
       } catch (error) {
@@ -149,6 +147,20 @@ export default function Home({
             styles.loadingCard
           }
         >
+          <View
+            style={
+              styles.loadingLogoCircle
+            }
+          >
+            <Text
+              style={
+                styles.loadingMusicNote
+              }
+            >
+              ♪
+            </Text>
+          </View>
+
           <Text
             style={
               styles.loadingLogo
@@ -183,6 +195,18 @@ export default function Home({
         styles.container
       }
     >
+      <View
+        style={
+          styles.backgroundGlowTop
+        }
+      />
+
+      <View
+        style={
+          styles.backgroundGlowBottom
+        }
+      />
+
       <ScrollView
         contentContainerStyle={
           styles.scrollContent
@@ -196,6 +220,26 @@ export default function Home({
             styles.homeCard
           }
         >
+          <View
+            style={
+              styles.cardAccent
+            }
+          />
+
+          <View
+            style={
+              styles.logoCircle
+            }
+          >
+            <Text
+              style={
+                styles.musicNote
+              }
+            >
+              ♪
+            </Text>
+          </View>
+
           <Text
             style={
               styles.logoText
@@ -209,7 +253,7 @@ export default function Home({
               styles.subtitle
             }
           >
-            A Music Social Platform
+            Your music. Your community.
           </Text>
 
           <Text
@@ -217,10 +261,95 @@ export default function Home({
               styles.description
             }
           >
-            Discover music, share reviews,
-            connect with listeners, and find
-            your next favourite song.
+            Discover new songs, share honest
+            reviews, connect with other music
+            lovers, and build a soundtrack that
+            feels like you.
           </Text>
+
+          <View
+            style={
+              styles.featureRow
+            }
+          >
+            <View
+              style={
+                styles.feature
+              }
+            >
+              <Text
+                style={
+                  styles.featureIcon
+                }
+              >
+                ♫
+              </Text>
+
+              <Text
+                style={
+                  styles.featureText
+                }
+              >
+                Discover
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.featureDivider
+              }
+            />
+
+            <View
+              style={
+                styles.feature
+              }
+            >
+              <Text
+                style={
+                  styles.featureIcon
+                }
+              >
+                ★
+              </Text>
+
+              <Text
+                style={
+                  styles.featureText
+                }
+              >
+                Review
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.featureDivider
+              }
+            />
+
+            <View
+              style={
+                styles.feature
+              }
+            >
+              <Text
+                style={
+                  styles.featureIcon
+                }
+              >
+                ♥
+              </Text>
+
+              <Text
+                style={
+                  styles.featureText
+                }
+              >
+                Connect
+              </Text>
+            </View>
+          </View>
 
           {sessionError ? (
             <View
@@ -243,7 +372,7 @@ export default function Home({
               styles.button,
               styles.primaryButton,
             ]}
-            activeOpacity={0.8}
+            activeOpacity={0.82}
             onPress={() =>
               navigation.navigate(
                 "Login"
@@ -264,7 +393,7 @@ export default function Home({
               styles.button,
               styles.registerButton,
             ]}
-            activeOpacity={0.8}
+            activeOpacity={0.82}
             onPress={() =>
               navigation.navigate(
                 "Register"
@@ -280,51 +409,13 @@ export default function Home({
             </Text>
           </TouchableOpacity>
 
-          <View
+          <Text
             style={
-              styles.dividerRow
+              styles.footerText
             }
           >
-            <View
-              style={
-                styles.dividerLine
-              }
-            />
-
-            <Text
-              style={
-                styles.dividerText
-              }
-            >
-              TREBLE
-            </Text>
-
-            <View
-              style={
-                styles.dividerLine
-              }
-            />
-          </View>
-
-          <TouchableOpacity
-            style={
-              styles.restartButton
-            }
-            activeOpacity={0.75}
-            onPress={() =>
-              navigation.navigate(
-                "Welcome"
-              )
-            }
-          >
-            <Text
-              style={
-                styles.restartButtonText
-              }
-            >
-              Restart Welcome Setup
-            </Text>
-          </TouchableOpacity>
+            Join the conversation around music.
+          </Text>
         </View>
       </ScrollView>
     </View>
@@ -336,10 +427,43 @@ const styles =
     container: {
       flex: 1,
 
+      position: "relative",
+      overflow: "hidden",
+
       backgroundColor:
         colours.background ||
         colours.bluegrey ||
         "#101010",
+    },
+
+    backgroundGlowTop: {
+      position: "absolute",
+
+      top: -180,
+      right: -150,
+
+      width: 420,
+      height: 420,
+
+      borderRadius: 210,
+
+      backgroundColor:
+        "rgba(53,159,225,0.12)",
+    },
+
+    backgroundGlowBottom: {
+      position: "absolute",
+
+      bottom: -230,
+      left: -190,
+
+      width: 480,
+      height: 480,
+
+      borderRadius: 240,
+
+      backgroundColor:
+        "rgba(66,191,238,0.08)",
     },
 
     scrollContent: {
@@ -348,27 +472,100 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
 
-      padding: 20,
+      paddingVertical: 35,
+      paddingHorizontal: 20,
     },
 
     homeCard: {
+      position: "relative",
+
       width: "100%",
-      maxWidth: 440,
+      maxWidth: 470,
 
       alignItems: "center",
 
-      paddingVertical: 36,
-      paddingHorizontal: 28,
+      paddingTop: 43,
+      paddingBottom: 34,
+      paddingHorizontal: 32,
 
       borderWidth: 1,
       borderColor:
-        "rgba(255,255,255,0.1)",
+        "rgba(255,255,255,0.12)",
 
-      borderRadius: 22,
+      borderRadius: 28,
 
       backgroundColor:
         colours.darkblue ||
-        "rgba(0,0,0,0.2)",
+        "#1b1f28",
+
+      shadowColor: "#000000",
+
+      shadowOffset: {
+        width: 0,
+        height: 14,
+      },
+
+      shadowOpacity: 0.36,
+      shadowRadius: 30,
+
+      elevation: 12,
+
+      overflow: "hidden",
+    },
+
+    cardAccent: {
+      position: "absolute",
+
+      top: 0,
+      left: 0,
+      right: 0,
+
+      height: 5,
+
+      backgroundColor:
+        colours.lightblue ||
+        "#42bfee",
+    },
+
+    logoCircle: {
+      width: 72,
+      height: 72,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(66,191,238,0.48)",
+
+      borderRadius: 36,
+
+      backgroundColor:
+        "rgba(66,191,238,0.13)",
+
+      shadowColor:
+        colours.lightblue ||
+        "#42bfee",
+
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
+
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+
+      elevation: 5,
+    },
+
+    musicNote: {
+      color:
+        colours.lightblue ||
+        "#42bfee",
+
+      fontSize: 38,
+      lineHeight: 43,
+      fontWeight: "800",
     },
 
     logoText: {
@@ -380,46 +577,107 @@ const styles =
       fontFamily: "Lobster",
 
       textAlign: "center",
+
+      marginTop: 8,
     },
 
     subtitle: {
       color:
-        "rgba(255,255,255,0.78)",
+        colours.lightblue ||
+        "#42bfee",
 
       fontSize: 17,
-      fontWeight: "700",
-
-      marginTop: 2,
+      lineHeight: 23,
+      fontWeight: "800",
 
       textAlign: "center",
     },
 
     description: {
-      maxWidth: 340,
+      width: "100%",
+      maxWidth: 365,
 
       color:
-        "rgba(255,255,255,0.58)",
+        "rgba(255,255,255,0.64)",
 
       fontSize: 14,
-      lineHeight: 21,
+      lineHeight: 22,
 
-      marginTop: 14,
-      marginBottom: 18,
+      marginTop: 15,
 
       textAlign: "center",
+    },
+
+    featureRow: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-around",
+
+      marginTop: 24,
+      marginBottom: 17,
+
+      paddingVertical: 14,
+      paddingHorizontal: 8,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.07)",
+
+      borderRadius: 15,
+
+      backgroundColor:
+        "rgba(255,255,255,0.035)",
+    },
+
+    feature: {
+      flex: 1,
+
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    featureIcon: {
+      color:
+        colours.lightblue ||
+        "#42bfee",
+
+      fontSize: 19,
+      lineHeight: 23,
+      fontWeight: "800",
+    },
+
+    featureText: {
+      color:
+        "rgba(255,255,255,0.7)",
+
+      fontSize: 11,
+      lineHeight: 16,
+      fontWeight: "700",
+
+      marginTop: 3,
+    },
+
+    featureDivider: {
+      width: 1,
+      height: 29,
+
+      backgroundColor:
+        "rgba(255,255,255,0.1)",
     },
 
     errorContainer: {
       width: "100%",
 
       padding: 12,
-      marginBottom: 8,
+      marginBottom: 7,
 
       borderWidth: 1,
       borderColor:
         "rgba(255,75,75,0.45)",
 
-      borderRadius: 10,
+      borderRadius: 11,
 
       backgroundColor:
         "rgba(255,50,50,0.1)",
@@ -436,20 +694,34 @@ const styles =
 
     button: {
       width: "100%",
-      height: 50,
+      height: 52,
 
       alignItems: "center",
       justifyContent: "center",
 
-      borderRadius: 25,
+      borderRadius: 26,
 
-      marginTop: 10,
+      marginTop: 11,
     },
 
     primaryButton: {
       backgroundColor:
         colours.primaryblue ||
         "#359fe1",
+
+      shadowColor:
+        colours.primaryblue ||
+        "#359fe1",
+
+      shadowOffset: {
+        width: 0,
+        height: 5,
+      },
+
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+
+      elevation: 4,
     },
 
     registerButton: {
@@ -459,7 +731,7 @@ const styles =
         "#359fe1",
 
       backgroundColor:
-        "rgba(55,160,225,0.2)",
+        "rgba(55,160,225,0.15)",
     },
 
     buttonText: {
@@ -469,49 +741,14 @@ const styles =
       fontWeight: "800",
     },
 
-    dividerRow: {
-      width: "100%",
-
-      flexDirection: "row",
-      alignItems: "center",
-
-      marginTop: 27,
-      marginBottom: 8,
-    },
-
-    dividerLine: {
-      flex: 1,
-      height: 1,
-
-      backgroundColor:
-        "rgba(255,255,255,0.12)",
-    },
-
-    dividerText: {
+    footerText: {
       color:
         "rgba(255,255,255,0.35)",
 
-      fontSize: 10,
-      fontWeight: "800",
-      letterSpacing: 2,
+      fontSize: 12,
+      lineHeight: 17,
 
-      marginHorizontal: 12,
-    },
-
-    restartButton: {
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-
-      marginTop: 4,
-    },
-
-    restartButtonText: {
-      color:
-        colours.lightblue ||
-        "#42bfee",
-
-      fontSize: 14,
-      fontWeight: "700",
+      marginTop: 20,
 
       textAlign: "center",
     },
@@ -543,11 +780,52 @@ const styles =
       borderColor:
         "rgba(255,255,255,0.1)",
 
-      borderRadius: 22,
+      borderRadius: 24,
 
       backgroundColor:
         colours.darkblue ||
         "rgba(0,0,0,0.2)",
+
+      shadowColor: "#000000",
+
+      shadowOffset: {
+        width: 0,
+        height: 10,
+      },
+
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+
+      elevation: 9,
+    },
+
+    loadingLogoCircle: {
+      width: 58,
+      height: 58,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      marginBottom: 7,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(66,191,238,0.45)",
+
+      borderRadius: 29,
+
+      backgroundColor:
+        "rgba(66,191,238,0.12)",
+    },
+
+    loadingMusicNote: {
+      color:
+        colours.lightblue ||
+        "#42bfee",
+
+      fontSize: 31,
+      lineHeight: 36,
+      fontWeight: "800",
     },
 
     loadingLogo: {
@@ -560,7 +838,7 @@ const styles =
 
       textAlign: "center",
 
-      marginBottom: 24,
+      marginBottom: 19,
     },
 
     loadingText: {
