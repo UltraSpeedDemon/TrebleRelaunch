@@ -48,6 +48,7 @@ import {
   Icon
 } from "@rneui/base";
 import { Audio } from "expo-av";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AnimatedCircularProgress } from "react-native-circular-progress";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 
@@ -166,43 +167,151 @@ export default function AlbumPage({ route, navigation }) {
   const [currentPreview, setCurrentPreview] = useState(null);
 
   const handlePlayPreview = async (previewUrl) => {
-    try {
-      if (currentPreview === previewUrl && sound) {
-        await sound.unloadAsync();
-        setSound(null);
-        setIsPlaying(false);
-        setProgress(0);
-        setCurrentPreview(null);
-        return;
-      }
+  if (!previewUrl) {
+    Alert.alert(
+      "Preview unavailable",
+      "This song does not have a preview available."
+    );
 
-      if (sound) {
-        await sound.unloadAsync();
-      }
+    return;
+  }
 
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: previewUrl },
-        { shouldPlay: true }
+  try {
+    /*
+     * Stop the preview if the same song
+     * is clicked again.
+     */
+    if (
+      currentPreview === previewUrl &&
+      sound
+    ) {
+      await sound.unloadAsync();
+
+      setSound(null);
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentPreview(null);
+
+      return;
+    }
+
+    /*
+     * Stop any other album preview.
+     */
+    if (sound) {
+      await sound.unloadAsync();
+
+      setSound(null);
+      setIsPlaying(false);
+      setProgress(0);
+      setCurrentPreview(null);
+    }
+
+    /*
+     * Read the volume saved in Settings.
+     */
+    const savedVolume =
+      await AsyncStorage.getItem(
+        "treble_preview_volume"
       );
-      setSound(newSound);
-      setIsPlaying(true);
-      setCurrentPreview(previewUrl);
 
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.isPlaying) {
-          setProgress((status.positionMillis / status.durationMillis) * 100);
+    const parsedVolume =
+      savedVolume !== null
+        ? Number(savedVolume)
+        : 0.65;
+
+    /*
+     * Expo requires a volume between 0 and 1.
+     */
+    const previewVolume =
+      Number.isFinite(parsedVolume)
+        ? Math.min(
+            1,
+            Math.max(
+              0,
+              parsedVolume
+            )
+          )
+        : 0.65;
+
+    console.log(
+      "[AlbumPage] Preview volume:",
+      previewVolume
+    );
+
+    /*
+     * Start the album song preview
+     * with the saved volume.
+     */
+    const { sound: newSound } =
+      await Audio.Sound.createAsync(
+        {
+          uri: previewUrl,
+        },
+        {
+          shouldPlay: true,
+          volume: previewVolume,
         }
+      );
+
+    setSound(newSound);
+    setIsPlaying(true);
+    setProgress(0);
+    setCurrentPreview(previewUrl);
+
+    newSound.setOnPlaybackStatusUpdate(
+      (status) => {
+        if (!status.isLoaded) {
+          return;
+        }
+
+        if (
+          status.durationMillis &&
+          status.positionMillis !== undefined
+        ) {
+          setProgress(
+            Math.min(
+              100,
+              (status.positionMillis /
+                status.durationMillis) *
+                100
+            )
+          );
+        }
+
+        setIsPlaying(
+          Boolean(status.isPlaying)
+        );
+
         if (status.didJustFinish) {
           setProgress(0);
           setIsPlaying(false);
           setCurrentPreview(null);
+          setSound(null);
+
+          newSound
+            .unloadAsync()
+            .catch(() => {});
         }
-      });
-    } catch (error) {
-      console.error("[ERROR] handlePlayPreview ->", error);
-      Alert.alert("Error", "Unable to play the song preview.");
-    }
-  };
+      }
+    );
+  } catch (error) {
+    console.error(
+      "[AlbumPage] Preview error:",
+      error
+    );
+
+    setSound(null);
+    setIsPlaying(false);
+    setProgress(0);
+    setCurrentPreview(null);
+
+    Alert.alert(
+      "Error",
+      "Unable to play the song preview."
+    );
+  }
+};
 
   useEffect(() => {
     return () => {

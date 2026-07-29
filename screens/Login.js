@@ -13,7 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
+import Icon from "react-native-vector-icons/MaterialIcons";
 import {
   signInWithEmailAndPassword,
 } from "firebase/auth";
@@ -139,6 +139,11 @@ export default function Login({
     password,
     setPassword,
   ] = useState("");
+
+  const [
+    showPassword,
+    setShowPassword,
+  ] = useState(false);
 
   const [
     error,
@@ -401,30 +406,54 @@ export default function Login({
               Password
             </Text>
 
-            <TextInput
-              style={
-                styles.input
-              }
-              placeholder="Enter your password"
-              placeholderTextColor={
-                colours.lightgrey ||
-                "#8c929c"
-              }
-              value={password}
-              onChangeText={
-                setPassword
-              }
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="password"
-              autoComplete="current-password"
-              editable={!loading}
-              returnKeyType="done"
-              onSubmitEditing={
-                handleLogin
-              }
-            />
+            <View style={styles.passwordInputContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Enter your password"
+                placeholderTextColor={
+                  colours.lightgrey ||
+                  "#8c929c"
+                }
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
+                autoComplete="current-password"
+                editable={!loading}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+
+              <TouchableOpacity
+                style={styles.passwordToggle}
+                onPress={() =>
+                  setShowPassword(
+                    (currentValue) =>
+                      !currentValue
+                  )
+                }
+                disabled={loading}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  showPassword
+                    ? "Hide password"
+                    : "Show password"
+                }
+              >
+                <Icon
+                  name={
+                    showPassword
+                      ? "visibility"
+                      : "visibility-off"
+                  }
+                  size={24}
+                  color="rgba(255,255,255,0.65)"
+                />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -791,6 +820,58 @@ const styles =
 
       outlineStyle: "none",
     },
+
+    passwordInputContainer: {
+  position: "relative",
+
+  width: "100%",
+  height: 52,
+
+  flexDirection: "row",
+  alignItems: "center",
+
+  borderWidth: 1,
+  borderColor:
+    "rgba(66,191,238,0.48)",
+
+  borderRadius: 13,
+
+  backgroundColor:
+    "rgba(255,255,255,0.05)",
+
+  overflow: "hidden",
+},
+
+passwordInput: {
+  flex: 1,
+  height: "100%",
+
+  color: "#ffffff",
+
+  paddingLeft: 15,
+  paddingRight: 52,
+
+  fontFamily: "Domine",
+  fontSize: 15,
+
+  outlineStyle: "none",
+
+  borderWidth: 0,
+  backgroundColor: "transparent",
+},
+
+passwordToggle: {
+  position: "absolute",
+
+  right: 0,
+  top: 0,
+  bottom: 0,
+
+  width: 52,
+
+  alignItems: "center",
+  justifyContent: "center",
+},
 
     forgotButton: {
       alignSelf: "flex-end",

@@ -14,7 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
+import Icon from "react-native-vector-icons/MaterialIcons";
 import {
   createUserWithEmailAndPassword,
   deleteUser,
@@ -139,6 +139,16 @@ export default function Register({
     confirmPassword,
     setConfirmPassword,
   ] = useState("");
+
+  const [
+    showPassword,
+    setShowPassword,
+  ] = useState(false);
+
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] = useState(false);
 
   const [
     loading,
@@ -581,28 +591,56 @@ export default function Register({
               Password
             </Text>
 
-            <TextInput
-              style={
-                styles.input
-              }
-              placeholder="Create a password"
-              placeholderTextColor={
-                colours.lightgrey ||
-                "#8c929c"
-              }
-              secureTextEntry
-              value={password}
-              onChangeText={(value) => {
-                setPassword(value);
-                clearError();
-              }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              editable={!loading}
-              returnKeyType="next"
-            />
+            <View style={styles.passwordInputContainer}>
+  <TextInput
+    style={styles.passwordInput}
+    placeholder="Create a password"
+    placeholderTextColor={
+      colours.lightgrey ||
+      "#8c929c"
+    }
+    secureTextEntry={!showPassword}
+    value={password}
+    onChangeText={(value) => {
+      setPassword(value);
+      clearError();
+    }}
+    autoCapitalize="none"
+    autoCorrect={false}
+    autoComplete="new-password"
+    textContentType="newPassword"
+    editable={!loading}
+    returnKeyType="next"
+  />
+
+  <TouchableOpacity
+    style={styles.passwordToggle}
+    onPress={() =>
+      setShowPassword(
+        (currentValue) =>
+          !currentValue
+      )
+    }
+    disabled={loading}
+    activeOpacity={0.7}
+    accessibilityRole="button"
+    accessibilityLabel={
+      showPassword
+        ? "Hide password"
+        : "Show password"
+    }
+  >
+    <Icon
+      name={
+        showPassword
+          ? "visibility"
+          : "visibility-off"
+      }
+      size={24}
+      color="rgba(255,255,255,0.65)"
+    />
+  </TouchableOpacity>
+</View>
 
             <Text
               style={
@@ -626,24 +664,18 @@ export default function Register({
               Confirm Password
             </Text>
 
+            <View style={styles.passwordInputContainer}>
             <TextInput
-              style={
-                styles.input
-              }
+              style={styles.passwordInput}
               placeholder="Re-enter your password"
               placeholderTextColor={
                 colours.lightgrey ||
                 "#8c929c"
               }
-              secureTextEntry
-              value={
-                confirmPassword
-              }
+              secureTextEntry={!showConfirmPassword}
+              value={confirmPassword}
               onChangeText={(value) => {
-                setConfirmPassword(
-                  value
-                );
-
+                setConfirmPassword(value);
                 clearError();
               }}
               autoCapitalize="none"
@@ -652,10 +684,37 @@ export default function Register({
               textContentType="newPassword"
               editable={!loading}
               returnKeyType="done"
-              onSubmitEditing={
-                handleRegister
-              }
+              onSubmitEditing={handleRegister}
             />
+
+            <TouchableOpacity
+              style={styles.passwordToggle}
+              onPress={() =>
+                setShowConfirmPassword(
+                  (currentValue) =>
+                    !currentValue
+                )
+              }
+              disabled={loading}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={
+                showConfirmPassword
+                  ? "Hide confirmed password"
+                  : "Show confirmed password"
+              }
+            >
+              <Icon
+                name={
+                  showConfirmPassword
+                    ? "visibility"
+                    : "visibility-off"
+                }
+                size={24}
+                color="rgba(255,255,255,0.65)"
+              />
+            </TouchableOpacity>
+          </View>
           </View>
 
           <TouchableOpacity
@@ -1008,6 +1067,58 @@ const styles =
 
       outlineStyle: "none",
     },
+
+    passwordInputContainer: {
+  position: "relative",
+
+  width: "100%",
+  height: 52,
+
+  flexDirection: "row",
+  alignItems: "center",
+
+  borderWidth: 1,
+  borderColor:
+    "rgba(66,191,238,0.48)",
+
+  borderRadius: 13,
+
+  backgroundColor:
+    "rgba(255,255,255,0.05)",
+
+  overflow: "hidden",
+},
+
+passwordInput: {
+  flex: 1,
+  height: "100%",
+
+  color: "#ffffff",
+
+  paddingLeft: 15,
+  paddingRight: 52,
+
+  fontFamily: "Domine",
+  fontSize: 15,
+
+  outlineStyle: "none",
+
+  borderWidth: 0,
+  backgroundColor: "transparent",
+},
+
+passwordToggle: {
+  position: "absolute",
+
+  right: 0,
+  top: 0,
+  bottom: 0,
+
+  width: 52,
+
+  alignItems: "center",
+  justifyContent: "center",
+},
 
     passwordHint: {
       color:

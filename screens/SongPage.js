@@ -44,6 +44,7 @@ import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 
 import { Audio } from "expo-av";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AnimatedCircularProgress } from "react-native-circular-progress";
 import Icon from "react-native-vector-icons/MaterialIcons";
 
@@ -742,42 +743,123 @@ export default function SongPage({ route, navigation }) {
   };
 
   // Handle song preview playback
-  const [sound, setSound] = useState(null);
-  const handlePlayPreview = async () => {
-    if (track.preview) {
-      try {
-        if (sound) {
-          await sound.unloadAsync();
-          setSound(null);
-          setProgress(0);
-          setIsPlaying(false);
-          return;
-        }
+  // Handle song preview playback
+const [sound, setSound] = useState(null);
 
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: track.preview },
-          { shouldPlay: true }
-        );
-        setSound(newSound);
-        setIsPlaying(true);
+const handlePlayPreview = async () => {
+  if (!track?.preview) {
+    Alert.alert(
+      "No Preview",
+      "This song does not have a preview available."
+    );
 
-        newSound.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded && status.isPlaying) {
-            setProgress((status.positionMillis / status.durationMillis) * 100);
-          }
-          if (status.didJustFinish) {
-            setProgress(0);
-            setIsPlaying(false);
-          }
-        });
-      } catch (error) {
-        console.error("Error playing preview:", error);
-        Alert.alert("Error", "Unable to play the song preview.");
-      }
-    } else {
-      Alert.alert("No Preview", "This song does not have a preview available.");
+    return;
+  }
+
+  try {
+    /*
+     * If the preview is already playing,
+     * clicking the button stops it.
+     */
+    if (sound) {
+      await sound.unloadAsync();
+
+      setSound(null);
+      setProgress(0);
+      setIsPlaying(false);
+
+      return;
     }
-  };
+
+    /*
+     * Read the volume saved on the Settings page.
+     */
+    const savedVolume = await AsyncStorage.getItem(
+      "treble_preview_volume"
+    );
+
+    const parsedVolume =
+      savedVolume !== null
+        ? Number(savedVolume)
+        : 0.65;
+
+    /*
+     * Keep the volume between 0 and 1.
+     */
+    const previewVolume = Number.isFinite(parsedVolume)
+      ? Math.min(1, Math.max(0, parsedVolume))
+      : 0.65;
+
+    console.log(
+      "[SongPage] Preview volume:",
+      previewVolume
+    );
+
+    /*
+     * Start the preview using the saved volume.
+     */
+    const { sound: newSound } =
+      await Audio.Sound.createAsync(
+        {
+          uri: track.preview,
+        },
+        {
+          shouldPlay: true,
+          volume: previewVolume,
+        }
+      );
+
+    setSound(newSound);
+    setProgress(0);
+    setIsPlaying(true);
+
+    newSound.setOnPlaybackStatusUpdate((status) => {
+      if (!status.isLoaded) {
+        return;
+      }
+
+      if (
+        status.durationMillis &&
+        status.positionMillis !== undefined
+      ) {
+        setProgress(
+          Math.min(
+            100,
+            (status.positionMillis /
+              status.durationMillis) *
+              100
+          )
+        );
+      }
+
+      setIsPlaying(Boolean(status.isPlaying));
+
+      if (status.didJustFinish) {
+        setProgress(0);
+        setIsPlaying(false);
+        setSound(null);
+
+        newSound
+          .unloadAsync()
+          .catch(() => {});
+      }
+    });
+  } catch (error) {
+    console.error(
+      "[SongPage] Error playing preview:",
+      error
+    );
+
+    setSound(null);
+    setProgress(0);
+    setIsPlaying(false);
+
+    Alert.alert(
+      "Error",
+      "Unable to play the song preview."
+    );
+  }
+};
 
   useEffect(() => {
     return () => {

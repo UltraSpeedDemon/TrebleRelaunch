@@ -27,6 +27,7 @@ import {
 
 import Toast from "react-native-toast-message";
 import { Audio } from "expo-av";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AnimatedCircularProgress } from "react-native-circular-progress";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useIsFocused } from "@react-navigation/native";
@@ -247,83 +248,108 @@ export default function Feed({ navigation }) {
   }, [sound]);
 
   const handlePlayPreview = useCallback(
-    async (previewUrl) => {
-      if (!previewUrl) {
-        Alert.alert(
-          "Preview unavailable",
-          "This item does not have a music preview."
-        );
+  async (previewUrl) => {
+    if (!previewUrl) {
+      Alert.alert(
+        "Preview unavailable",
+        "This item does not have a music preview."
+      );
+
+      return;
+    }
+
+    try {
+      if (currentPreview === previewUrl && sound) {
+        await stopCurrentPreview();
         return;
       }
 
-      try {
-        if (currentPreview === previewUrl && sound) {
-          await stopCurrentPreview();
+      await stopCurrentPreview();
+
+      const savedVolume = await AsyncStorage.getItem(
+        "treble_preview_volume"
+      );
+
+      const parsedVolume =
+        savedVolume !== null
+          ? Number(savedVolume)
+          : 0.65;
+
+      const previewVolume = Number.isFinite(parsedVolume)
+        ? Math.min(1, Math.max(0, parsedVolume))
+        : 0.65;
+
+      console.log(
+        "[Feed] Preview volume:",
+        previewVolume
+      );
+
+      const { sound: loadedSound } =
+        await Audio.Sound.createAsync(
+          {
+            uri: previewUrl,
+          },
+          {
+            shouldPlay: true,
+            volume: previewVolume,
+          }
+        );
+
+      setSound(loadedSound);
+      setCurrentPreview(previewUrl);
+      setIsPlaying(true);
+      setProgress(0);
+
+      loadedSound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) {
           return;
         }
 
-        await stopCurrentPreview();
-
-        const { sound: loadedSound } =
-          await Audio.Sound.createAsync(
-            {
-              uri: previewUrl,
-            },
-            {
-              shouldPlay: true,
-            }
+        if (
+          status.durationMillis &&
+          status.positionMillis !== undefined
+        ) {
+          setProgress(
+            Math.min(
+              100,
+              (status.positionMillis /
+                status.durationMillis) *
+                100
+            )
           );
+        }
 
-        setSound(loadedSound);
-        setCurrentPreview(previewUrl);
-        setIsPlaying(true);
-        setProgress(0);
+        setIsPlaying(Boolean(status.isPlaying));
 
-        loadedSound.setOnPlaybackStatusUpdate((status) => {
-          if (!status.isLoaded) {
-            return;
-          }
+        if (status.didJustFinish) {
+          setProgress(0);
+          setIsPlaying(false);
+          setCurrentPreview(null);
+          setSound(null);
 
-          if (
-            status.durationMillis &&
-            status.positionMillis !== undefined
-          ) {
-            setProgress(
-              Math.min(
-                100,
-                (status.positionMillis / status.durationMillis) * 100
-              )
-            );
-          }
+          loadedSound
+            .unloadAsync()
+            .catch(() => {});
+        }
+      });
+    } catch (error) {
+      console.error(
+        "[Feed] Preview error:",
+        error
+      );
 
-          setIsPlaying(Boolean(status.isPlaying));
-
-          if (status.didJustFinish) {
-            setProgress(0);
-            setIsPlaying(false);
-            setCurrentPreview(null);
-
-            loadedSound
-              .unloadAsync()
-              .catch(() => {});
-          }
-        });
-      } catch (error) {
-        console.error("[Feed] Preview error:", error);
-
-        Alert.alert(
-          "Preview error",
-          "The music preview could not be played."
-        );
-      }
-    },
-    [
-      currentPreview,
-      sound,
-      stopCurrentPreview,
-    ]
-  );
-
+      Alert.alert(
+        "Preview error",
+        "The music preview could not be played."
+      );
+    }
+  },
+  [
+    currentPreview,
+    sound,
+    stopCurrentPreview,
+  ]
+);
   useEffect(() => {
     return () => {
       if (tapTimerRef.current) {
