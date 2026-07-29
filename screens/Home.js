@@ -253,7 +253,7 @@ export default function Home({
               styles.subtitle
             }
           >
-            Join the Rotation
+            Discover Music Together
           </Text>
 
           <Text
