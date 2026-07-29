@@ -35,7 +35,7 @@
       "package": "com.aleks4920.musicadvancedproject"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/treblelogo.png"
     },
     "plugins": [
       "expo-asset",
