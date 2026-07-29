@@ -70,15 +70,11 @@ function findUserRecord(data) {
     return data[0] || null;
   }
 
-  if (
-    Array.isArray(data?.users)
-  ) {
+  if (Array.isArray(data?.users)) {
     return data.users[0] || null;
   }
 
-  if (
-    Array.isArray(data?.results)
-  ) {
+  if (Array.isArray(data?.results)) {
     return data.results[0] || null;
   }
 
@@ -185,11 +181,6 @@ export default function Login({
       let userEmail =
         cleanIdentifier.toLowerCase();
 
-      /*
-       * Firebase password login requires an email.
-       * When a username is entered, retrieve the
-       * account email from the backend first.
-       */
       if (!isEmail(cleanIdentifier)) {
         console.log(
           "[Login] Looking up username:",
@@ -261,10 +252,6 @@ export default function Login({
         user.uid
       );
 
-      /*
-       * Reset prevents the user from being sent
-       * back to Login or Error after signing in.
-       */
       navigation.reset({
         index: 0,
         routes: [
@@ -291,15 +278,25 @@ export default function Login({
 
   return (
     <KeyboardAvoidingView
-      style={
-        styles.container
-      }
+      style={styles.container}
       behavior={
         Platform.OS === "ios"
           ? "padding"
           : undefined
       }
     >
+      <View
+        style={
+          styles.backgroundGlowTop
+        }
+      />
+
+      <View
+        style={
+          styles.backgroundGlowBottom
+        }
+      />
+
       <ScrollView
         contentContainerStyle={
           styles.scrollContent
@@ -314,12 +311,40 @@ export default function Login({
             styles.loginCard
           }
         >
-          <Text
+          <View
             style={
-              styles.largeText
+              styles.cardAccent
+            }
+          />
+
+          <View
+            style={
+              styles.logoCircle
             }
           >
-            Login
+            <Text
+              style={
+                styles.musicNote
+              }
+            >
+              ♪
+            </Text>
+          </View>
+
+          <Text
+            style={
+              styles.brandText
+            }
+          >
+            Treble
+          </Text>
+
+          <Text
+            style={
+              styles.title
+            }
+          >
+            Welcome Back
           </Text>
 
           <Text
@@ -327,7 +352,8 @@ export default function Login({
               styles.subtitle
             }
           >
-            Welcome back to Treble
+            Sign in to continue discovering,
+            reviewing, and sharing music.
           </Text>
 
           {error ? (
@@ -346,54 +372,103 @@ export default function Login({
             </View>
           ) : null}
 
-          <TextInput
+          <View
             style={
-              styles.input
+              styles.formGroup
             }
-            placeholder="Username or Email"
-            placeholderTextColor={
-              colours.lightgrey ||
-              "#9b9b9b"
-            }
-            value={
-              identifier
-            }
-            onChangeText={
-              setIdentifier
-            }
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            textContentType="username"
-            autoComplete="username"
-            editable={!loading}
-            returnKeyType="next"
-          />
+          >
+            <Text
+              style={
+                styles.inputLabel
+              }
+            >
+              Username or Email
+            </Text>
 
-          <TextInput
+            <TextInput
+              style={
+                styles.input
+              }
+              placeholder="Enter your username or email"
+              placeholderTextColor={
+                colours.lightgrey ||
+                "#8c929c"
+              }
+              value={
+                identifier
+              }
+              onChangeText={
+                setIdentifier
+              }
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="username"
+              autoComplete="username"
+              editable={!loading}
+              returnKeyType="next"
+            />
+          </View>
+
+          <View
             style={
-              styles.input
+              styles.formGroup
             }
-            placeholder="Password"
-            placeholderTextColor={
-              colours.lightgrey ||
-              "#9b9b9b"
+          >
+            <Text
+              style={
+                styles.inputLabel
+              }
+            >
+              Password
+            </Text>
+
+            <TextInput
+              style={
+                styles.input
+              }
+              placeholder="Enter your password"
+              placeholderTextColor={
+                colours.lightgrey ||
+                "#8c929c"
+              }
+              value={password}
+              onChangeText={
+                setPassword
+              }
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="password"
+              autoComplete="current-password"
+              editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={
+                handleLogin
+              }
+            />
+          </View>
+
+          <TouchableOpacity
+            style={
+              styles.forgotButton
             }
-            value={password}
-            onChangeText={
-              setPassword
+            onPress={() =>
+              navigation.navigate(
+                "ForgotPassword"
+              )
             }
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            textContentType="password"
-            autoComplete="current-password"
-            editable={!loading}
-            returnKeyType="done"
-            onSubmitEditing={
-              handleLogin
-            }
-          />
+            disabled={loading}
+            activeOpacity={0.75}
+          >
+            <Text
+              style={
+                styles.forgotButtonText
+              }
+            >
+              Forgot Password?
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[
@@ -406,7 +481,7 @@ export default function Login({
               handleLogin
             }
             disabled={loading}
-            activeOpacity={0.8}
+            activeOpacity={0.82}
           >
             {loading ? (
               <ActivityIndicator
@@ -424,6 +499,20 @@ export default function Login({
             )}
           </TouchableOpacity>
 
+          <View
+            style={
+              styles.accountPrompt
+            }
+          >
+            <Text
+              style={
+                styles.accountPromptText
+              }
+            >
+              New to Treble?
+            </Text>
+          </View>
+
           <TouchableOpacity
             style={[
               styles.button,
@@ -435,7 +524,7 @@ export default function Login({
               )
             }
             disabled={loading}
-            activeOpacity={0.8}
+            activeOpacity={0.82}
           >
             <Text
               style={
@@ -448,21 +537,22 @@ export default function Login({
 
           <TouchableOpacity
             style={
-              styles.forgotButton
+              styles.backButton
             }
             onPress={() =>
               navigation.navigate(
-                "ForgotPassword"
+                "Home"
               )
             }
             disabled={loading}
+            activeOpacity={0.7}
           >
             <Text
               style={
-                styles.forgotButtonText
+                styles.backButtonText
               }
             >
-              Forgot Password?
+              Back to Home
             </Text>
           </TouchableOpacity>
         </View>
@@ -476,60 +566,184 @@ const styles =
     container: {
       flex: 1,
 
+      position: "relative",
+      overflow: "hidden",
+
       backgroundColor:
         colours.background ||
-        colours.bluegrey,
+        colours.bluegrey ||
+        "#101010",
+    },
+
+    backgroundGlowTop: {
+      position: "absolute",
+
+      top: -180,
+      right: -150,
+
+      width: 420,
+      height: 420,
+
+      borderRadius: 210,
+
+      backgroundColor:
+        "rgba(53,159,225,0.12)",
+    },
+
+    backgroundGlowBottom: {
+      position: "absolute",
+
+      bottom: -230,
+      left: -190,
+
+      width: 480,
+      height: 480,
+
+      borderRadius: 240,
+
+      backgroundColor:
+        "rgba(66,191,238,0.08)",
     },
 
     scrollContent: {
       flexGrow: 1,
 
       alignItems: "center",
-      justifyContent:
-        "center",
+      justifyContent: "center",
 
-      padding: 20,
+      paddingVertical: 35,
+      paddingHorizontal: 20,
     },
 
     loginCard: {
+      position: "relative",
+
       width: "100%",
-      maxWidth: 440,
+      maxWidth: 470,
 
       alignItems: "center",
 
-      paddingVertical: 36,
-      paddingHorizontal: 28,
+      paddingTop: 38,
+      paddingBottom: 31,
+      paddingHorizontal: 32,
 
       borderWidth: 1,
       borderColor:
-        "rgba(255,255,255,0.1)",
+        "rgba(255,255,255,0.12)",
 
-      borderRadius: 22,
+      borderRadius: 28,
 
       backgroundColor:
         colours.darkblue ||
-        "rgba(0,0,0,0.2)",
+        "#1b1f28",
+
+      shadowColor: "#000000",
+
+      shadowOffset: {
+        width: 0,
+        height: 14,
+      },
+
+      shadowOpacity: 0.36,
+      shadowRadius: 30,
+
+      elevation: 12,
+
+      overflow: "hidden",
     },
 
-    largeText: {
+    cardAccent: {
+      position: "absolute",
+
+      top: 0,
+      left: 0,
+      right: 0,
+
+      height: 5,
+
+      backgroundColor:
+        colours.lightblue ||
+        "#42bfee",
+    },
+
+    logoCircle: {
+      width: 64,
+      height: 64,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(66,191,238,0.48)",
+
+      borderRadius: 32,
+
+      backgroundColor:
+        "rgba(66,191,238,0.13)",
+
+      shadowColor:
+        colours.lightblue ||
+        "#42bfee",
+
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
+
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+
+      elevation: 5,
+    },
+
+    musicNote: {
+      color:
+        colours.lightblue ||
+        "#42bfee",
+
+      fontSize: 34,
+      lineHeight: 39,
+      fontWeight: "800",
+    },
+
+    brandText: {
       color: "#ffffff",
 
-      fontSize: 64,
-      lineHeight: 74,
+      fontSize: 52,
+      lineHeight: 62,
 
       fontFamily: "Lobster",
+
+      textAlign: "center",
+
+      marginTop: 6,
+    },
+
+    title: {
+      color: "#ffffff",
+
+      fontSize: 25,
+      lineHeight: 32,
+      fontWeight: "800",
+
+      marginTop: 4,
 
       textAlign: "center",
     },
 
     subtitle: {
+      width: "100%",
+      maxWidth: 340,
+
       color:
-        "rgba(255,255,255,0.65)",
+        "rgba(255,255,255,0.58)",
 
-      fontSize: 15,
+      fontSize: 14,
+      lineHeight: 21,
 
-      marginTop: 4,
-      marginBottom: 26,
+      marginTop: 8,
+      marginBottom: 23,
 
       textAlign: "center",
     },
@@ -544,7 +758,7 @@ const styles =
       borderColor:
         "rgba(255,75,75,0.45)",
 
-      borderRadius: 10,
+      borderRadius: 11,
 
       backgroundColor:
         "rgba(255,50,50,0.1)",
@@ -559,54 +773,106 @@ const styles =
       textAlign: "center",
     },
 
+    formGroup: {
+      width: "100%",
+
+      marginBottom: 15,
+    },
+
+    inputLabel: {
+      color:
+        "rgba(255,255,255,0.76)",
+
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: "700",
+
+      marginBottom: 7,
+      marginLeft: 3,
+    },
+
     input: {
       width: "100%",
       height: 52,
 
       color: "#ffffff",
-      backgroundColor:
-        "rgba(255,255,255,0.055)",
+
+      paddingHorizontal: 15,
 
       borderWidth: 1,
       borderColor:
-        colours.secondaryblue,
+        "rgba(66,191,238,0.48)",
 
-      borderRadius: 12,
+      borderRadius: 13,
 
-      marginBottom: 16,
-      paddingHorizontal: 15,
+      backgroundColor:
+        "rgba(255,255,255,0.05)",
 
       fontFamily: "Domine",
-      fontSize: 16,
+      fontSize: 15,
 
       outlineStyle: "none",
     },
 
+    forgotButton: {
+      alignSelf: "flex-end",
+
+      paddingVertical: 5,
+      paddingHorizontal: 3,
+
+      marginTop: -4,
+      marginBottom: 4,
+    },
+
+    forgotButtonText: {
+      color:
+        colours.lightblue ||
+        "#42bfee",
+
+      fontSize: 13,
+      fontWeight: "700",
+    },
+
     button: {
       width: "100%",
-      height: 50,
+      height: 52,
 
       alignItems: "center",
-      justifyContent:
-        "center",
+      justifyContent: "center",
 
-      borderRadius: 25,
+      borderRadius: 26,
 
-      marginTop: 10,
+      marginTop: 11,
     },
 
     primaryButton: {
       backgroundColor:
-        colours.primaryblue,
+        colours.primaryblue ||
+        "#359fe1",
+
+      shadowColor:
+        colours.primaryblue ||
+        "#359fe1",
+
+      shadowOffset: {
+        width: 0,
+        height: 5,
+      },
+
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+
+      elevation: 4,
     },
 
     registerButton: {
       borderWidth: 1,
       borderColor:
-        colours.primaryblue,
+        colours.primaryblue ||
+        "#359fe1",
 
       backgroundColor:
-        "rgba(55,160,225,0.2)",
+        "rgba(55,160,225,0.15)",
     },
 
     disabledButton: {
@@ -620,17 +886,35 @@ const styles =
       fontWeight: "800",
     },
 
-    forgotButton: {
-      marginTop: 22,
-      padding: 10,
+    accountPrompt: {
+      width: "100%",
+
+      alignItems: "center",
+
+      marginTop: 19,
+      marginBottom: -1,
     },
 
-    forgotButtonText: {
+    accountPromptText: {
       color:
-        colours.lightblue ||
-        "#42bfee",
+        "rgba(255,255,255,0.45)",
 
-      fontSize: 15,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+
+    backButton: {
+      marginTop: 17,
+
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+    },
+
+    backButtonText: {
+      color:
+        "rgba(255,255,255,0.42)",
+
+      fontSize: 13,
       fontWeight: "700",
     },
   });

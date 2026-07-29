@@ -1159,34 +1159,29 @@ export default function SongPage({ route, navigation }) {
                   </Text>
 
                   <TouchableOpacity
-                    style={
-                      styles.artistButton
-                    }
                     activeOpacity={0.7}
                     onPress={(event) => {
                       event?.stopPropagation?.();
-                      openArtistPage();
+
+                      navigation.navigate("ArtistPage", {
+                        artistId:
+                          track.artist?.id ||
+                          track.artistId,
+
+                        artistName:
+                          artistName,
+
+                        artist:
+                          track.artist,
+                      });
                     }}
                   >
                     <Text
-                      style={
-                        styles.artist
-                      }
+                      style={styles.artist}
                       numberOfLines={1}
-                      ellipsizeMode="tail"
                     >
-                      {artistName ||
-                        "Unknown Artist"}
+                      {artistName}
                     </Text>
-
-                    <Icon
-                      name="chevron-right"
-                      size={20}
-                      color={
-                        colours.lightblue ||
-                        "#42bfee"
-                      }
-                    />
                   </TouchableOpacity>
 
                   {albumName ? (
@@ -1726,22 +1721,14 @@ desktopBottomNavBar: {
 },
 
 artist: {
-  flexShrink: 1,
+  color: "rgba(255,255,255,0.72)",
 
-  color:
-    colours.lightblue ||
-    "#42bfee",
+  fontSize: 19,
+  fontWeight: "600",
 
-  fontSize: 17,
-  lineHeight: 23,
-  fontWeight: "700",
+  marginTop: 8,
 
-  textAlign: "center",
-
-  textDecorationLine:
-    Platform.OS === "web"
-      ? "underline"
-      : "none",
+  paddingVertical: 4,
 },
 
   album: {

@@ -26,9 +26,8 @@ const EMAIL_PATTERN =
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getResetError(error) {
-  const code = String(
-    error?.code || ""
-  );
+  const code =
+    String(error?.code || "");
 
   switch (code) {
     case "auth/invalid-email":
@@ -60,8 +59,10 @@ function getResetError(error) {
 export default function ForgotPassword({
   navigation,
 }) {
-  const [email, setEmail] =
-    useState("");
+  const [
+    email,
+    setEmail,
+  ] = useState("");
 
   const [
     errorMessage,
@@ -73,8 +74,10 @@ export default function ForgotPassword({
     setSuccessMessage,
   ] = useState("");
 
-  const [loading, setLoading] =
-    useState(false);
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
   const handleResetPassword =
     async () => {
@@ -83,7 +86,9 @@ export default function ForgotPassword({
       }
 
       const cleanEmail =
-        email.trim().toLowerCase();
+        email
+          .trim()
+          .toLowerCase();
 
       setErrorMessage("");
       setSuccessMessage("");
@@ -97,7 +102,9 @@ export default function ForgotPassword({
       }
 
       if (
-        !EMAIL_PATTERN.test(cleanEmail)
+        !EMAIL_PATTERN.test(
+          cleanEmail
+        )
       ) {
         setErrorMessage(
           "Please enter a valid email address."
@@ -119,18 +126,25 @@ export default function ForgotPassword({
         const message =
           "Password reset email sent. Check your inbox and spam folder.";
 
-        setSuccessMessage(message);
+        setSuccessMessage(
+          message
+        );
 
-        if (Platform.OS !== "web") {
+        if (
+          Platform.OS !== "web"
+        ) {
           Alert.alert(
             "Reset email sent",
             message,
             [
               {
-                text: "Back to Login",
+                text:
+                  "Back to Login",
+
                 onPress: () => {
                   navigation.reset({
                     index: 0,
+
                     routes: [
                       {
                         name: "Login",
@@ -145,13 +159,10 @@ export default function ForgotPassword({
           return;
         }
 
-        /*
-         * Keep the success message visible briefly
-         * before returning to Login on web.
-         */
         setTimeout(() => {
           navigation.reset({
             index: 0,
+
             routes: [
               {
                 name: "Login",
@@ -166,11 +177,17 @@ export default function ForgotPassword({
         );
 
         const finalMessage =
-          getResetError(resetError);
+          getResetError(
+            resetError
+          );
 
-        setErrorMessage(finalMessage);
+        setErrorMessage(
+          finalMessage
+        );
 
-        if (Platform.OS !== "web") {
+        if (
+          Platform.OS !== "web"
+        ) {
           Alert.alert(
             "Password reset failed",
             finalMessage
@@ -183,13 +200,27 @@ export default function ForgotPassword({
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={
+        styles.container
+      }
       behavior={
         Platform.OS === "ios"
           ? "padding"
           : undefined
       }
     >
+      <View
+        style={
+          styles.backgroundGlowTop
+        }
+      />
+
+      <View
+        style={
+          styles.backgroundGlowBottom
+        }
+      />
+
       <ScrollView
         contentContainerStyle={
           styles.scrollContent
@@ -199,14 +230,55 @@ export default function ForgotPassword({
           false
         }
       >
-        <View style={styles.card}>
-          <Text style={styles.largeText}>
-            Forgot Password?
+        <View
+          style={
+            styles.card
+          }
+        >
+          <View
+            style={
+              styles.cardAccent
+            }
+          />
+
+          <View
+            style={
+              styles.logoCircle
+            }
+          >
+            <Text
+              style={
+                styles.musicNote
+              }
+            >
+              ♪
+            </Text>
+          </View>
+
+          <Text
+            style={
+              styles.brandText
+            }
+          >
+            Treble
           </Text>
 
-          <Text style={styles.subtitle}>
-            Enter your email and we will send
-            you a password reset link.
+          <Text
+            style={
+              styles.title
+            }
+          >
+            Forgot Your Password?
+          </Text>
+
+          <Text
+            style={
+              styles.subtitle
+            }
+          >
+            Enter the email connected to your
+            Treble account and we will send you
+            a secure password reset link.
           </Text>
 
           {errorMessage ? (
@@ -215,7 +287,11 @@ export default function ForgotPassword({
                 styles.errorContainer
               }
             >
-              <Text style={styles.errorText}>
+              <Text
+                style={
+                  styles.errorText
+                }
+              >
                 {errorMessage}
               </Text>
             </View>
@@ -228,52 +304,75 @@ export default function ForgotPassword({
               }
             >
               <Text
-                style={styles.successText}
+                style={
+                  styles.successIcon
+                }
+              >
+                ✓
+              </Text>
+
+              <Text
+                style={
+                  styles.successText
+                }
               >
                 {successMessage}
               </Text>
             </View>
           ) : null}
 
-          <Text style={styles.label}>
-            Email
-          </Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Enter your email"
-            placeholderTextColor={
-              colours.lightgrey ||
-              "#9b9b9b"
+          <View
+            style={
+              styles.formGroup
             }
-            value={email}
-            onChangeText={(value) => {
-              setEmail(value);
-
-              if (errorMessage) {
-                setErrorMessage("");
+          >
+            <Text
+              style={
+                styles.label
               }
+            >
+              Email Address
+            </Text>
 
-              if (successMessage) {
-                setSuccessMessage("");
+            <TextInput
+              style={
+                styles.input
               }
-            }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            autoComplete="email"
-            textContentType="emailAddress"
-            editable={!loading}
-            returnKeyType="send"
-            onSubmitEditing={
-              handleResetPassword
-            }
-          />
+              placeholder="Enter your email"
+              placeholderTextColor={
+                colours.lightgrey ||
+                "#8c929c"
+              }
+              value={email}
+              onChangeText={(value) => {
+                setEmail(value);
+
+                if (errorMessage) {
+                  setErrorMessage("");
+                }
+
+                if (successMessage) {
+                  setSuccessMessage("");
+                }
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              autoComplete="email"
+              textContentType="emailAddress"
+              editable={!loading}
+              returnKeyType="send"
+              onSubmitEditing={
+                handleResetPassword
+              }
+            />
+          </View>
 
           <TouchableOpacity
             style={[
               styles.button,
               styles.primaryButton,
+
               loading &&
                 styles.disabledButton,
             ]}
@@ -281,7 +380,7 @@ export default function ForgotPassword({
               handleResetPassword
             }
             disabled={loading}
-            activeOpacity={0.8}
+            activeOpacity={0.82}
           >
             {loading ? (
               <ActivityIndicator
@@ -290,12 +389,28 @@ export default function ForgotPassword({
               />
             ) : (
               <Text
-                style={styles.buttonText}
+                style={
+                  styles.buttonText
+                }
               >
                 Send Reset Link
               </Text>
             )}
           </TouchableOpacity>
+
+          <View
+            style={
+              styles.loginPrompt
+            }
+          >
+            <Text
+              style={
+                styles.loginPromptText
+              }
+            >
+              Remembered your password?
+            </Text>
+          </View>
 
           <TouchableOpacity
             style={[
@@ -305,6 +420,7 @@ export default function ForgotPassword({
             onPress={() => {
               navigation.reset({
                 index: 0,
+
                 routes: [
                   {
                     name: "Login",
@@ -313,12 +429,35 @@ export default function ForgotPassword({
               });
             }}
             disabled={loading}
-            activeOpacity={0.8}
+            activeOpacity={0.82}
           >
             <Text
-              style={styles.buttonText}
+              style={
+                styles.buttonText
+              }
             >
               Back to Login
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={
+              styles.homeButton
+            }
+            onPress={() =>
+              navigation.navigate(
+                "Home"
+              )
+            }
+            disabled={loading}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={
+                styles.homeButtonText
+              }
+            >
+              Back to Home
             </Text>
           </TouchableOpacity>
         </View>
@@ -327,183 +466,379 @@ export default function ForgotPassword({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
 
-    backgroundColor:
-      colours.background ||
-      colours.bluegrey,
-  },
+      position: "relative",
+      overflow: "hidden",
 
-  scrollContent: {
-    flexGrow: 1,
+      backgroundColor:
+        colours.background ||
+        colours.bluegrey ||
+        "#101010",
+    },
 
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundGlowTop: {
+      position: "absolute",
 
-    padding: 20,
-  },
+      top: -180,
+      right: -150,
 
-  card: {
-    width: "100%",
-    maxWidth: 460,
+      width: 420,
+      height: 420,
 
-    paddingVertical: 34,
-    paddingHorizontal: 28,
+      borderRadius: 210,
 
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.1)",
+      backgroundColor:
+        "rgba(53,159,225,0.12)",
+    },
 
-    borderRadius: 22,
+    backgroundGlowBottom: {
+      position: "absolute",
 
-    backgroundColor:
-      colours.darkblue ||
-      "rgba(0,0,0,0.2)",
-  },
+      bottom: -230,
+      left: -190,
 
-  largeText: {
-    color: "#ffffff",
+      width: 480,
+      height: 480,
 
-    fontSize: 48,
-    lineHeight: 58,
+      borderRadius: 240,
 
-    fontFamily: "Lobster",
+      backgroundColor:
+        "rgba(66,191,238,0.08)",
+    },
 
-    textAlign: "center",
-  },
+    scrollContent: {
+      flexGrow: 1,
 
-  subtitle: {
-    color:
-      "rgba(255,255,255,0.65)",
+      alignItems: "center",
+      justifyContent: "center",
 
-    fontSize: 15,
-    lineHeight: 21,
+      paddingVertical: 35,
+      paddingHorizontal: 20,
+    },
 
-    marginTop: 8,
-    marginBottom: 24,
+    card: {
+      position: "relative",
 
-    textAlign: "center",
-  },
+      width: "100%",
+      maxWidth: 470,
 
-  label: {
-    color: "#ffffff",
+      alignItems: "center",
 
-    fontSize: 15,
-    fontWeight: "700",
+      paddingTop: 38,
+      paddingBottom: 31,
+      paddingHorizontal: 32,
 
-    marginBottom: 7,
-  },
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.12)",
 
-  input: {
-    width: "100%",
-    height: 52,
+      borderRadius: 28,
 
-    color: "#ffffff",
+      backgroundColor:
+        colours.darkblue ||
+        "#1b1f28",
 
-    borderWidth: 1,
-    borderColor:
-      colours.secondaryblue,
+      shadowColor: "#000000",
 
-    borderRadius: 12,
+      shadowOffset: {
+        width: 0,
+        height: 14,
+      },
 
-    marginBottom: 17,
-    paddingHorizontal: 15,
+      shadowOpacity: 0.36,
+      shadowRadius: 30,
 
-    fontFamily: "Domine",
-    fontSize: 16,
+      elevation: 12,
 
-    backgroundColor:
-      "rgba(255,255,255,0.055)",
+      overflow: "hidden",
+    },
 
-    outlineStyle: "none",
-  },
+    cardAccent: {
+      position: "absolute",
 
-  errorContainer: {
-    width: "100%",
+      top: 0,
+      left: 0,
+      right: 0,
 
-    padding: 12,
-    marginBottom: 16,
+      height: 5,
 
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,75,75,0.45)",
+      backgroundColor:
+        colours.lightblue ||
+        "#42bfee",
+    },
 
-    borderRadius: 10,
+    logoCircle: {
+      width: 64,
+      height: 64,
 
-    backgroundColor:
-      "rgba(255,50,50,0.1)",
-  },
+      alignItems: "center",
+      justifyContent: "center",
 
-  errorText: {
-    color: "#ff7777",
+      borderWidth: 1,
+      borderColor:
+        "rgba(66,191,238,0.48)",
 
-    fontSize: 14,
-    lineHeight: 20,
+      borderRadius: 32,
 
-    textAlign: "center",
-  },
+      backgroundColor:
+        "rgba(66,191,238,0.13)",
 
-  successContainer: {
-    width: "100%",
+      shadowColor:
+        colours.lightblue ||
+        "#42bfee",
 
-    padding: 12,
-    marginBottom: 16,
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
 
-    borderWidth: 1,
-    borderColor:
-      "rgba(80,220,130,0.5)",
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
 
-    borderRadius: 10,
+      elevation: 5,
+    },
 
-    backgroundColor:
-      "rgba(70,200,120,0.12)",
-  },
+    musicNote: {
+      color:
+        colours.lightblue ||
+        "#42bfee",
 
-  successText: {
-    color: "#7ee2a8",
+      fontSize: 34,
+      lineHeight: 39,
+      fontWeight: "800",
+    },
 
-    fontSize: 14,
-    lineHeight: 20,
+    brandText: {
+      color: "#ffffff",
 
-    textAlign: "center",
-  },
+      fontSize: 52,
+      lineHeight: 62,
 
-  button: {
-    width: "100%",
-    height: 50,
+      fontFamily: "Lobster",
 
-    alignItems: "center",
-    justifyContent: "center",
+      textAlign: "center",
 
-    borderRadius: 25,
+      marginTop: 6,
+    },
 
-    marginTop: 10,
-  },
+    title: {
+      color: "#ffffff",
 
-  primaryButton: {
-    backgroundColor:
-      colours.primaryblue,
-  },
+      fontSize: 25,
+      lineHeight: 32,
+      fontWeight: "800",
 
-  backButton: {
-    borderWidth: 1,
-    borderColor:
-      colours.secondaryblue,
+      marginTop: 4,
 
-    backgroundColor:
-      "rgba(55,160,225,0.15)",
-  },
+      textAlign: "center",
+    },
 
-  disabledButton: {
-    opacity: 0.55,
-  },
+    subtitle: {
+      width: "100%",
+      maxWidth: 350,
 
-  buttonText: {
-    color: "#ffffff",
+      color:
+        "rgba(255,255,255,0.58)",
 
-    fontSize: 16,
-    fontWeight: "800",
-  },
-});
+      fontSize: 14,
+      lineHeight: 21,
+
+      marginTop: 8,
+      marginBottom: 23,
+
+      textAlign: "center",
+    },
+
+    formGroup: {
+      width: "100%",
+
+      marginBottom: 5,
+    },
+
+    label: {
+      color:
+        "rgba(255,255,255,0.76)",
+
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: "700",
+
+      marginBottom: 7,
+      marginLeft: 3,
+    },
+
+    input: {
+      width: "100%",
+      height: 52,
+
+      color: "#ffffff",
+
+      paddingHorizontal: 15,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(66,191,238,0.48)",
+
+      borderRadius: 13,
+
+      backgroundColor:
+        "rgba(255,255,255,0.05)",
+
+      fontFamily: "Domine",
+      fontSize: 15,
+
+      outlineStyle: "none",
+    },
+
+    errorContainer: {
+      width: "100%",
+
+      padding: 12,
+      marginBottom: 16,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,75,75,0.45)",
+
+      borderRadius: 11,
+
+      backgroundColor:
+        "rgba(255,50,50,0.1)",
+    },
+
+    errorText: {
+      color: "#ff7777",
+
+      fontSize: 14,
+      lineHeight: 20,
+
+      textAlign: "center",
+    },
+
+    successContainer: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "center",
+
+      padding: 12,
+      marginBottom: 16,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(80,220,130,0.5)",
+
+      borderRadius: 11,
+
+      backgroundColor:
+        "rgba(70,200,120,0.12)",
+    },
+
+    successIcon: {
+      color: "#7ee2a8",
+
+      fontSize: 20,
+      lineHeight: 24,
+      fontWeight: "900",
+
+      marginRight: 9,
+    },
+
+    successText: {
+      flex: 1,
+
+      color: "#7ee2a8",
+
+      fontSize: 14,
+      lineHeight: 20,
+    },
+
+    button: {
+      width: "100%",
+      height: 52,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderRadius: 26,
+
+      marginTop: 11,
+    },
+
+    primaryButton: {
+      backgroundColor:
+        colours.primaryblue ||
+        "#359fe1",
+
+      shadowColor:
+        colours.primaryblue ||
+        "#359fe1",
+
+      shadowOffset: {
+        width: 0,
+        height: 5,
+      },
+
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+
+      elevation: 4,
+    },
+
+    backButton: {
+      borderWidth: 1,
+      borderColor:
+        colours.primaryblue ||
+        "#359fe1",
+
+      backgroundColor:
+        "rgba(55,160,225,0.15)",
+    },
+
+    disabledButton: {
+      opacity: 0.55,
+    },
+
+    buttonText: {
+      color: "#ffffff",
+
+      fontSize: 16,
+      fontWeight: "800",
+    },
+
+    loginPrompt: {
+      width: "100%",
+
+      alignItems: "center",
+
+      marginTop: 19,
+      marginBottom: -1,
+    },
+
+    loginPromptText: {
+      color:
+        "rgba(255,255,255,0.45)",
+
+      fontSize: 13,
+      lineHeight: 18,
+    },
+
+    homeButton: {
+      marginTop: 17,
+
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+    },
+
+    homeButtonText: {
+      color:
+        "rgba(255,255,255,0.42)",
+
+      fontSize: 13,
+      fontWeight: "700",
+    },
+  });
