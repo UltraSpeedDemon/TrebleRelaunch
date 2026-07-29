@@ -55,15 +55,16 @@ const MAX_CONTENT_WIDTH = 1120;
 function DraggableSongRow({
   children,
   isWeb,
+  onDragChange,
 }) {
-  const scrollReference =
+  const webScrollRef =
     useRef(null);
 
   const dragState =
     useRef({
-      dragging: false,
+      isDragging: false,
       startX: 0,
-      startOffset: 0,
+      startScrollLeft: 0,
       moved: false,
     });
 
@@ -72,262 +73,239 @@ function DraggableSongRow({
     setDragging,
   ] = useState(false);
 
-  const getScrollNode =
-    useCallback(() => {
-      const reference =
-        scrollReference.current;
+  /*
+   * Native and mobile use the normal React Native
+   * horizontal ScrollView.
+   */
+  if (!isWeb) {
+    return (
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={
+          false
+        }
+        directionalLockEnabled
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={
+          styles.horizontalListContent
+        }
+      >
+        {children}
+      </ScrollView>
+    );
+  }
 
-      if (!reference) {
-        return null;
+  /*
+   * Web uses a real DOM div so scrollLeft and
+   * pointer dragging work properly in browsers.
+   */
+  const handlePointerDown =
+    (event) => {
+      const node =
+        webScrollRef.current;
+
+      if (!node) {
+        return;
       }
 
+      dragState.current = {
+        isDragging: true,
+
+        startX:
+          event.clientX,
+
+        startScrollLeft:
+          node.scrollLeft,
+
+        moved: false,
+      };
+
+      setDragging(true);
+
+      onDragChange?.(
+        false
+      );
+
+      node.setPointerCapture?.(
+        event.pointerId
+      );
+
+      event.preventDefault();
+    };
+
+  const handlePointerMove =
+    (event) => {
+      const node =
+        webScrollRef.current;
+
       if (
-        typeof reference
-          .getScrollableNode ===
-        "function"
-      ) {
-        return reference
-          .getScrollableNode();
-      }
-
-      return reference;
-    }, []);
-
-  const handleMouseDown =
-    useCallback(
-      (event) => {
-        if (!isWeb) {
-          return;
-        }
-
-        const node =
-          getScrollNode();
-
-        const pageX =
-          event?.nativeEvent?.pageX ??
-          event?.pageX ??
-          0;
-
-        dragState.current = {
-          dragging: true,
-          startX: pageX,
-          startOffset:
-            Number(
-              node?.scrollLeft
-            ) || 0,
-          moved: false,
-        };
-
-        setDragging(true);
-
-        event?.preventDefault?.();
-      },
-      [
-        getScrollNode,
-        isWeb,
-      ]
-    );
-
-  const handleMouseMove =
-    useCallback(
-      (event) => {
-        if (
-          !isWeb ||
-          !dragState.current
-            .dragging
-        ) {
-          return;
-        }
-
-        const node =
-          getScrollNode();
-
-        if (!node) {
-          return;
-        }
-
-        const pageX =
-          event?.nativeEvent?.pageX ??
-          event?.pageX ??
-          0;
-
-        const difference =
-          pageX -
-          dragState.current
-            .startX;
-
-        if (
-          Math.abs(difference) >
-          4
-        ) {
-          dragState.current.moved =
-            true;
-        }
-
-        const nextOffset =
-          dragState.current
-            .startOffset -
-          difference;
-
-        if (
-          typeof node.scrollTo ===
-          "function"
-        ) {
-          node.scrollTo({
-            left:
-              nextOffset,
-            behavior:
-              "auto",
-          });
-        } else {
-          node.scrollLeft =
-            nextOffset;
-        }
-
-        event?.preventDefault?.();
-      },
-      [
-        getScrollNode,
-        isWeb,
-      ]
-    );
-
-  const stopDragging =
-    useCallback(() => {
-      if (
+        !node ||
         !dragState.current
-          .dragging
+          .isDragging
       ) {
         return;
       }
 
-      dragState.current.dragging =
+      const movement =
+        event.clientX -
+        dragState.current
+          .startX;
+
+      if (
+        Math.abs(movement) >
+        4
+      ) {
+        dragState.current.moved =
+          true;
+
+        onDragChange?.(
+          true
+        );
+      }
+
+      node.scrollLeft =
+        dragState.current
+          .startScrollLeft -
+        movement;
+
+      event.preventDefault();
+    };
+
+  const stopPointerDrag =
+    (event) => {
+      const node =
+        webScrollRef.current;
+
+      if (
+        !dragState.current
+          .isDragging
+      ) {
+        return;
+      }
+
+      dragState.current.isDragging =
         false;
 
       setDragging(false);
 
-      /*
-       * Reset this shortly afterward so a normal
-       * click still works when the user did not drag.
-       */
+      node?.releasePointerCapture?.(
+        event?.pointerId
+      );
+
       setTimeout(() => {
         dragState.current.moved =
           false;
-      }, 80);
-    }, []);
+
+        onDragChange?.(
+          false
+        );
+      }, 150);
+    };
 
   const handleWheel =
-    useCallback(
-      (event) => {
-        if (!isWeb) {
-          return;
-        }
+    (event) => {
+      const node =
+        webScrollRef.current;
 
-        const nativeEvent =
-          event?.nativeEvent ||
-          event;
+      if (!node) {
+        return;
+      }
 
-        const horizontalAmount =
-          Number(
-            nativeEvent?.deltaX
-          ) || 0;
+      /*
+       * A trackpad usually supplies deltaX.
+       * A normal mouse wheel supplies deltaY.
+       * Both are converted into horizontal movement.
+       */
+      const horizontalMovement =
+        Math.abs(event.deltaX) >
+        Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY;
 
-        const verticalAmount =
-          Number(
-            nativeEvent?.deltaY
-          ) || 0;
+      node.scrollLeft +=
+        horizontalMovement;
 
-        /*
-         * Let trackpad horizontal scrolling work normally.
-         * Convert Shift + vertical wheel into horizontal movement.
-         */
-        const movement =
-          Math.abs(
-            horizontalAmount
-          ) >
-          Math.abs(
-            verticalAmount
-          )
-            ? horizontalAmount
-            : nativeEvent?.shiftKey
-              ? verticalAmount
-              : 0;
+      event.preventDefault();
+    };
 
-        if (!movement) {
-          return;
-        }
+  return React.createElement(
+    "div",
+    {
+      ref:
+        webScrollRef,
 
-        const node =
-          getScrollNode();
+      className:
+        dragging
+          ? "treble-horizontal-row treble-horizontal-row-dragging"
+          : "treble-horizontal-row",
 
-        if (!node) {
-          return;
-        }
+      onPointerDown:
+        handlePointerDown,
 
-        node.scrollLeft +=
-          movement;
+      onPointerMove:
+        handlePointerMove,
 
-        event?.preventDefault?.();
+      onPointerUp:
+        stopPointerDrag,
+
+      onPointerCancel:
+        stopPointerDrag,
+
+      onPointerLeave:
+        stopPointerDrag,
+
+      onWheel:
+        handleWheel,
+
+      style: {
+        width:
+          "100%",
+
+        display:
+          "flex",
+
+        flexDirection:
+          "row",
+
+        alignItems:
+          "flex-start",
+
+        overflowX:
+          "auto",
+
+        overflowY:
+          "hidden",
+
+        cursor:
+          dragging
+            ? "grabbing"
+            : "grab",
+
+        userSelect:
+          "none",
+
+        WebkitUserSelect:
+          "none",
+
+        touchAction:
+        "none",
+
+        scrollbarWidth:
+          "none",
+
+        msOverflowStyle:
+          "none",
+
+        paddingRight:
+          24,
+
+        boxSizing:
+          "border-box",
       },
-      [
-        getScrollNode,
-        isWeb,
-      ]
-    );
+    },
 
-  return (
-    <ScrollView
-      ref={
-        scrollReference
-      }
-      horizontal
-      nestedScrollEnabled
-      showsHorizontalScrollIndicator={
-        false
-      }
-      directionalLockEnabled
-      keyboardShouldPersistTaps="handled"
-      scrollEventThrottle={16}
-      style={[
-        styles.horizontalScroll,
-
-        isWeb &&
-          styles.webHorizontalScroll,
-
-        dragging &&
-          styles.draggingHorizontalScroll,
-      ]}
-      contentContainerStyle={
-        styles.horizontalListContent
-      }
-      onMouseDown={
-        isWeb
-          ? handleMouseDown
-          : undefined
-      }
-      onMouseMove={
-        isWeb
-          ? handleMouseMove
-          : undefined
-      }
-      onMouseUp={
-        isWeb
-          ? stopDragging
-          : undefined
-      }
-      onMouseLeave={
-        isWeb
-          ? stopDragging
-          : undefined
-      }
-      onWheel={
-        isWeb
-          ? handleWheel
-          : undefined
-      }
-    >
-      {children}
-    </ScrollView>
+    children
   );
 }
 
@@ -336,6 +314,9 @@ export default function Explore({
 }) {
   const { width } =
     useWindowDimensions();
+
+    const dragBlockedPress =
+  useRef(false);
 
   const isWeb =
     Platform.OS === "web";
@@ -1002,9 +983,15 @@ export default function Explore({
             activeOpacity={
               0.82
             }
-            onPress={() =>
-              openTrack(item)
-            }
+            onPress={() => {
+              if (
+                dragBlockedPress.current
+              ) {
+                return;
+              }
+
+              openTrack(item);
+            }}
           >
             <View
               style={
@@ -1182,6 +1169,10 @@ export default function Explore({
                 isWeb={
                   isWeb
                 }
+                onDragChange={(wasDragged) => {
+                  dragBlockedPress.current =
+                    wasDragged;
+                }}
               >
                 {data.map(
                   (item) =>
@@ -1895,37 +1886,6 @@ const styles =
 
       fontSize: 12,
       fontWeight: "800",
-    },
-
-    horizontalScroll: {
-      width: "100%",
-
-      flexGrow: 0,
-    },
-
-    webHorizontalScroll: {
-      overflowX: "auto",
-      overflowY: "hidden",
-
-      cursor: "grab",
-
-      userSelect: "none",
-
-      WebkitUserSelect:
-        "none",
-
-      scrollbarWidth:
-        "none",
-
-      msOverflowStyle:
-        "none",
-
-      WebkitOverflowScrolling:
-        "touch",
-    },
-
-    draggingHorizontalScroll: {
-      cursor: "grabbing",
     },
 
     horizontalListContent: {
