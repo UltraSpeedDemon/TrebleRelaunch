@@ -1227,7 +1227,7 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
 
-      marginTop: 14,
+      marginTop: 10,
       paddingBottom: 8,
     },
 

@@ -2372,7 +2372,7 @@ desktopBottomNavBar: {
     minHeight: 0,
 
     paddingHorizontal: 16,
-    paddingTop: 92,
+    paddingTop: 80,
     paddingBottom: 80,
   },
 
@@ -2410,7 +2410,7 @@ desktopBottomNavBar: {
 
     minHeight: 0,
 
-    paddingTop: 92,
+    paddingTop: 80,
     paddingBottom: 75,
     paddingHorizontal: 14,
 
@@ -2432,7 +2432,7 @@ desktopBottomNavBar: {
     width: "100%",
     maxWidth: 760,
     alignSelf: "center",
-    marginBottom: 7,
+    marginBottom: 5,
   },
 
   mobileTitleRow: {
@@ -2451,7 +2451,7 @@ desktopBottomNavBar: {
 
   mobileTopSearchRow: {
     position: "absolute",
-    top: 28,
+    top: 16,
     left: 12,
     right: 12,
 
