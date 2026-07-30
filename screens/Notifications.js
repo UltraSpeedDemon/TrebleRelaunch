@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -26,6 +27,9 @@ import { auth } from "../utils/firebase";
 
 import {
   getFollowRequests,
+  getNotifications,
+  getUser,
+  markNotificationsRead,
   respondFollowRequest,
 } from "../providers/rest";
 
@@ -42,10 +46,27 @@ const MAX_CONTENT_WIDTH = 820;
 const FALLBACK_AVATAR =
   require("../images/avatarIcon.png");
 
+const NOTIFICATIONS_ICON =
+  require("../images/notificationsIcon2.png");
+
+const NOTIFICATION_TYPES = {
+  FOLLOW: "follow",
+
+  FOLLOW_REQUEST:
+    "follow_request",
+
+  FOLLOW_ACCEPTED:
+    "follow_accepted",
+
+  SONG_SHARED:
+    "song_shared",
+};
+
 export default function Notifications({
   navigation,
 }) {
-  const { width } = useWindowDimensions();
+  const { width } =
+    useWindowDimensions();
 
   const isWeb =
     Platform.OS === "web";
@@ -62,26 +83,43 @@ export default function Notifications({
     width < 600;
 
   const [
-    followRequests,
-    setFollowRequests,
+    notifications,
+    setNotifications,
   ] = useState([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-  const [refreshing, setRefreshing] =
-    useState(false);
+  const [
+    refreshing,
+    setRefreshing,
+  ] = useState(false);
 
-  const [menuOpen, setMenuOpen] =
-    useState(false);
+  const [
+    menuOpen,
+    setMenuOpen,
+  ] = useState(false);
 
   const [
     responseLoading,
     setResponseLoading,
   ] = useState({});
 
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
+
+  const currentUserId =
+    String(
+      auth.currentUser?.uid ||
+      ""
+    );
+
   /*
-   * Keep the desktop sidebar open.
+   * Keep desktop sidebar open.
    */
   useEffect(() => {
     if (isDesktopWeb) {
@@ -92,95 +130,405 @@ export default function Notifications({
   }, [isDesktopWeb]);
 
   /*
-   * Safely read a backend response.
+   * Safely parse backend responses.
    */
-  const parseResponse = useCallback(
-    async (
-      response,
-      fallbackMessage
-    ) => {
-      if (!response) {
-        throw new Error(
-          "The backend returned no response."
-        );
-      }
+  const parseResponse =
+    useCallback(
+      async (
+        response,
+        fallbackMessage
+      ) => {
+        if (!response) {
+          throw new Error(
+            "The backend returned no response."
+          );
+        }
 
-      const responseText =
-        await response.text();
+        const responseText =
+          await response.text();
 
-      let data = {};
+        let data = {};
 
-      try {
-        data = responseText
-          ? JSON.parse(responseText)
-          : {};
-      } catch {
-        throw new Error(
-          responseText ||
-            "The backend returned an invalid response."
-        );
-      }
+        try {
+          data = responseText
+            ? JSON.parse(responseText)
+            : {};
+        } catch {
+          throw new Error(
+            responseText ||
+            "The backend returned invalid data."
+          );
+        }
 
-      if (!response.ok) {
-        throw new Error(
-          data?.error ||
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+            data?.message ||
             `${fallbackMessage} HTTP ${response.status}`
-        );
-      }
+          );
+        }
 
-      return data;
-    },
-    []
-  );
+        return data;
+      },
+      []
+    );
 
   /*
-   * Normalize follow-request objects.
+   * Extract arrays from different
+   * possible backend response shapes.
    */
-  const normalizeRequest =
+  const normalizeArray =
+    useCallback(
+      (
+        data,
+        possibleKeys = []
+      ) => {
+        if (Array.isArray(data)) {
+          return data;
+        }
+
+        for (
+          const key of possibleKeys
+        ) {
+          if (
+            Array.isArray(
+              data?.[key]
+            )
+          ) {
+            return data[key];
+          }
+        }
+
+        return [];
+      },
+      []
+    );
+
+  /*
+   * Extract the user responsible
+   * for the notification.
+   */
+  const getNotificationUserId =
     useCallback((item) => {
-      const userId =
+      return String(
+        item?.fromUserId ||
+        item?.from_user_id ||
+        item?.requesterId ||
+        item?.requester_id ||
+        item?.followerId ||
+        item?.follower_id ||
         item?.userId ||
         item?.uid ||
-        item?.requesterId ||
-        item?.fromUserId ||
-        item?.id ||
-        "";
-
-      return {
-        ...item,
-
-        userId:
-          String(userId),
-
-        username:
-          item?.username ||
-          item?.displayName ||
-          item?.name ||
-          "Treble User",
-
-        avatar:
-          item?.avatar ||
-          item?.image ||
-          item?.profilePicture ||
-          "",
-      };
+        ""
+      );
     }, []);
 
   /*
-   * Load pending follow requests.
+   * Normalize notification types.
    */
-  const fetchFollowRequests =
-    useCallback(
-      async (isRefresh = false) => {
-        const currentUser =
-          auth.currentUser;
+  const normalizeNotificationType =
+    useCallback((type) => {
+      const cleanType =
+        String(type || "")
+          .trim()
+          .toLowerCase()
+          .replaceAll("-", "_")
+          .replaceAll(" ", "_");
 
-        if (!currentUser?.uid) {
-          setFollowRequests([]);
+      if (
+        cleanType ===
+          "follow_request" ||
+        cleanType ===
+          "request_follow" ||
+        cleanType ===
+          "followrequest"
+      ) {
+        return NOTIFICATION_TYPES
+          .FOLLOW_REQUEST;
+      }
+
+      if (
+        cleanType ===
+          "follow_accepted" ||
+        cleanType ===
+          "request_accepted" ||
+        cleanType ===
+          "followaccepted"
+      ) {
+        return NOTIFICATION_TYPES
+          .FOLLOW_ACCEPTED;
+      }
+
+      if (
+        cleanType ===
+          "song_shared" ||
+        cleanType ===
+          "shared_song" ||
+        cleanType ===
+          "songshare"
+      ) {
+        return NOTIFICATION_TYPES
+          .SONG_SHARED;
+      }
+
+      return NOTIFICATION_TYPES
+        .FOLLOW;
+    }, []);
+
+  /*
+   * Normalize notification data.
+   */
+  const normalizeNotification =
+    useCallback(
+      (
+        item,
+        forcedType = null
+      ) => {
+        const userId =
+          getNotificationUserId(
+            item
+          );
+
+        const type =
+          normalizeNotificationType(
+            forcedType ||
+            item?.type ||
+            item?.notificationType ||
+            item?.notification_type
+          );
+
+        return {
+          ...item,
+
+          id:
+            String(
+              item?.notificationId ||
+              item?.notification_id ||
+              item?.requestId ||
+              item?.request_id ||
+              item?.id ||
+              `${type}-${userId}`
+            ),
+
+          type,
+
+          userId,
+
+          username:
+            String(
+              item?.username ||
+              item?.displayName ||
+              item?.display_name ||
+              item?.name ||
+              "Treble User"
+            ).trim(),
+
+          avatar:
+            typeof item?.avatar ===
+              "string" &&
+            item.avatar !== "None"
+              ? item.avatar
+              : typeof item
+                    ?.profilePicture ===
+                  "string"
+                ? item.profilePicture
+                : typeof item
+                      ?.profile_picture ===
+                    "string"
+                  ? item.profile_picture
+                  : "",
+
+          read:
+            item?.read === true ||
+            item?.read === "true" ||
+            item?.read === 1 ||
+            item?.isRead === true ||
+            item?.is_read === true,
+
+          createdAt:
+            item?.createdAt ||
+            item?.created_at ||
+            item?.timestamp ||
+            item?.date ||
+            null,
+
+          targetId:
+            String(
+              item?.targetId ||
+              item?.target_id ||
+              item?.songId ||
+              item?.song_id ||
+              ""
+            ),
+
+          songTitle:
+            String(
+              item?.songTitle ||
+              item?.song_title ||
+              item?.targetTitle ||
+              item?.target_title ||
+              ""
+            ),
+        };
+      },
+      [
+        getNotificationUserId,
+        normalizeNotificationType,
+      ]
+    );
+
+  /*
+   * Fetch missing account details.
+   */
+  const enrichNotification =
+    useCallback(
+      async (notification) => {
+        if (!notification?.userId) {
+          return notification;
+        }
+
+        const needsUsername =
+          !notification.username ||
+          notification.username ===
+            "Treble User";
+
+        const needsAvatar =
+          !notification.avatar;
+
+        if (
+          !needsUsername &&
+          !needsAvatar
+        ) {
+          return notification;
+        }
+
+        try {
+          const response =
+            await getUser(
+              notification.userId
+            );
+
+          if (!response?.ok) {
+            return notification;
+          }
+
+          const userData =
+            await response.json();
+
+          return {
+            ...notification,
+
+            username:
+              String(
+                userData?.username ||
+                userData?.displayName ||
+                userData?.display_name ||
+                userData?.name ||
+                notification.username ||
+                "Treble User"
+              ).trim(),
+
+            avatar:
+              typeof userData?.avatar ===
+                "string" &&
+              userData.avatar !== "None"
+                ? userData.avatar
+                : notification.avatar,
+          };
+        } catch (error) {
+          console.warn(
+            `[Notifications] Unable to enrich ${notification.userId}:`,
+            error
+          );
+
+          return notification;
+        }
+      },
+      []
+    );
+
+  /*
+   * Sort newest notifications first.
+   */
+  const sortNotifications =
+    useCallback((items) => {
+      return [...items].sort(
+        (
+          first,
+          second
+        ) => {
+          const firstTime =
+            new Date(
+              first?.createdAt || 0
+            ).getTime();
+
+          const secondTime =
+            new Date(
+              second?.createdAt || 0
+            ).getTime();
+
+          return (
+            secondTime -
+            firstTime
+          );
+        }
+      );
+    }, []);
+
+  /*
+   * Remove duplicate notifications.
+   *
+   * Follow requests might be returned by
+   * both the notification endpoint and
+   * the old follow-request endpoint.
+   */
+  const removeDuplicates =
+    useCallback((items) => {
+      const seen =
+        new Set();
+
+      return items.filter(
+        (item) => {
+          const duplicateKey =
+            item.type ===
+            NOTIFICATION_TYPES
+              .FOLLOW_REQUEST
+              ? `${item.type}-${item.userId}`
+              : item.id;
+
+          if (
+            seen.has(
+              duplicateKey
+            )
+          ) {
+            return false;
+          }
+
+          seen.add(
+            duplicateKey
+          );
+
+          return true;
+        }
+      );
+    }, []);
+
+  /*
+   * Load all notifications.
+   */
+  const fetchNotifications =
+    useCallback(
+      async (
+        isRefresh = false
+      ) => {
+        if (!currentUserId) {
+          setNotifications([]);
           setLoading(false);
           setRefreshing(false);
 
-          navigation.navigate("Home");
+          navigation.navigate(
+            "Home"
+          );
 
           return;
         }
@@ -192,50 +540,167 @@ export default function Notifications({
             setLoading(true);
           }
 
-          const response =
-            await getFollowRequests(
-              currentUser.uid
-            );
+          setErrorMessage("");
 
-          const data =
-            await parseResponse(
-              response,
-              "Unable to load notifications."
-            );
+          /*
+           * Load the full notification feed
+           * and pending private requests.
+           */
+          const [
+            notificationResponse,
+            requestResponse,
+          ] = await Promise.all([
+            getNotifications(
+              currentUserId
+            ),
 
-          const rawRequests =
-            Array.isArray(data)
-              ? data
-              : Array.isArray(
-                    data?.requests
-                )
-                ? data.requests
-                : Array.isArray(
-                      data?.followRequests
-                  )
-                  ? data.followRequests
-                  : [];
+            getFollowRequests(
+              currentUserId
+            ),
+          ]);
 
-          setFollowRequests(
-            rawRequests
-              .map(normalizeRequest)
-              .filter(
+          let notificationItems =
+            [];
+
+          let requestItems =
+            [];
+
+          /*
+           * Normal notifications:
+           * follow, accepted and song shared.
+           */
+          if (
+            notificationResponse?.ok
+          ) {
+            const data =
+              await parseResponse(
+                notificationResponse,
+                "Unable to load notifications."
+              );
+
+            notificationItems =
+              normalizeArray(
+                data,
+                [
+                  "notifications",
+                  "results",
+                  "items",
+                ]
+              ).map(
                 (item) =>
-                  Boolean(item?.userId)
+                  normalizeNotification(
+                    item
+                  )
+              );
+          }
+
+          /*
+           * Pending private follow requests.
+           */
+          if (
+            requestResponse?.ok
+          ) {
+            const requestData =
+              await parseResponse(
+                requestResponse,
+                "Unable to load follow requests."
+              );
+
+            requestItems =
+              normalizeArray(
+                requestData,
+                [
+                  "requests",
+                  "followRequests",
+                  "follow_requests",
+                ]
+              ).map(
+                (item) =>
+                  normalizeNotification(
+                    item,
+                    NOTIFICATION_TYPES
+                      .FOLLOW_REQUEST
+                  )
+              );
+          }
+
+          const mergedItems =
+            removeDuplicates([
+              ...notificationItems,
+              ...requestItems,
+            ]);
+
+          const enrichedItems =
+            await Promise.all(
+              mergedItems.map(
+                enrichNotification
               )
+            );
+
+          setNotifications(
+            sortNotifications(
+              enrichedItems
+            )
           );
+
+          /*
+           * Mark normal notifications read
+           * after the feed has loaded.
+           */
+          try {
+            const unreadNormalIds =
+              notificationItems
+                .filter(
+                  (item) =>
+                    !item.read &&
+                    item.id
+                )
+                .map(
+                  (item) =>
+                    item.id
+                );
+
+            if (
+              unreadNormalIds.length >
+              0
+            ) {
+              await markNotificationsRead(
+                currentUserId,
+                unreadNormalIds
+              );
+
+              setNotifications(
+                (current) =>
+                  current.map(
+                    (item) => ({
+                      ...item,
+                      read:
+                        item.type ===
+                        NOTIFICATION_TYPES
+                          .FOLLOW_REQUEST
+                          ? item.read
+                          : true,
+                    })
+                  )
+              );
+            }
+          } catch (readError) {
+            console.warn(
+              "[Notifications] Unable to mark notifications read:",
+              readError
+            );
+          }
         } catch (error) {
           console.error(
             "[Notifications] Load error:",
             error
           );
 
-          setFollowRequests([]);
+          setNotifications([]);
 
-          Alert.alert(
-            "Unable to load notifications",
+          setErrorMessage(
             error?.message ||
-              "Please try again."
+            "Unable to load notifications."
           );
         } finally {
           setLoading(false);
@@ -243,19 +708,26 @@ export default function Notifications({
         }
       },
       [
+        currentUserId,
+        enrichNotification,
         navigation,
-        normalizeRequest,
+        normalizeArray,
+        normalizeNotification,
         parseResponse,
+        removeDuplicates,
+        sortNotifications,
       ]
     );
 
   /*
-   * Reload whenever the page is focused.
+   * Reload when page is opened.
    */
   useFocusEffect(
     useCallback(() => {
-      fetchFollowRequests(false);
-    }, [fetchFollowRequests])
+      fetchNotifications(false);
+    }, [
+      fetchNotifications,
+    ])
   );
 
   /*
@@ -263,28 +735,28 @@ export default function Notifications({
    */
   const handleRefresh =
     useCallback(() => {
-      fetchFollowRequests(true);
-    }, [fetchFollowRequests]);
+      fetchNotifications(true);
+    }, [
+      fetchNotifications,
+    ]);
 
   /*
-   * Accept or deny a request.
+   * Accept or deny a private request.
    */
   const handleResponse =
     useCallback(
       async (
-        followerId,
+        notification,
         accept
       ) => {
-        const currentUser =
-          auth.currentUser;
-
         const cleanFollowerId =
           String(
-            followerId || ""
+            notification?.userId ||
+            ""
           );
 
         if (
-          !currentUser?.uid ||
+          !currentUserId ||
           !cleanFollowerId ||
           responseLoading[
             cleanFollowerId
@@ -296,30 +768,37 @@ export default function Notifications({
         setResponseLoading(
           (current) => ({
             ...current,
+
             [cleanFollowerId]:
               true,
           })
         );
 
-        /*
-         * Remove it immediately for a faster UI.
-         */
-        const existingRequests =
-          followRequests;
+        const existingNotifications =
+          notifications;
 
-        setFollowRequests(
+        /*
+         * Remove immediately for a
+         * responsive interface.
+         */
+        setNotifications(
           (current) =>
             current.filter(
-              (request) =>
-                request.userId !==
-                cleanFollowerId
+              (item) =>
+                !(
+                  item.type ===
+                    NOTIFICATION_TYPES
+                      .FOLLOW_REQUEST &&
+                  item.userId ===
+                    cleanFollowerId
+                )
             )
         );
 
         try {
           const response =
             await respondFollowRequest(
-              currentUser.uid,
+              currentUserId,
               cleanFollowerId,
               accept
             );
@@ -329,29 +808,54 @@ export default function Notifications({
             "Unable to process the follow request."
           );
 
-          Alert.alert(
+          const title =
             accept
               ? "Request accepted"
-              : "Request denied",
+              : "Request denied";
+
+          const message =
             accept
               ? "This user can now follow you."
-              : "The follow request was denied."
-          );
+              : "The follow request was denied.";
+
+          if (
+            Platform.OS === "web"
+          ) {
+            window.alert(
+              `${title}\n\n${message}`
+            );
+          } else {
+            Alert.alert(
+              title,
+              message
+            );
+          }
         } catch (error) {
           console.error(
             "[Notifications] Response error:",
             error
           );
 
-          setFollowRequests(
-            existingRequests
+          setNotifications(
+            existingNotifications
           );
 
-          Alert.alert(
-            "Unable to process request",
+          const message =
             error?.message ||
-              "Please try again."
-          );
+            "Please try again.";
+
+          if (
+            Platform.OS === "web"
+          ) {
+            window.alert(
+              message
+            );
+          } else {
+            Alert.alert(
+              "Unable to process request",
+              message
+            );
+          }
         } finally {
           setResponseLoading(
             (current) => {
@@ -369,19 +873,21 @@ export default function Notifications({
         }
       },
       [
-        followRequests,
+        currentUserId,
+        notifications,
         parseResponse,
         responseLoading,
       ]
     );
 
   /*
-   * Format names.
+   * Format usernames.
    */
   const formatUsername =
     useCallback((name) => {
       const cleanName =
-        String(name || "").trim();
+        String(name || "")
+          .trim();
 
       if (!cleanName) {
         return "Treble User";
@@ -396,7 +902,7 @@ export default function Notifications({
     }, []);
 
   /*
-   * Validate avatar sources.
+   * Validate avatar.
    */
   const getAvatarSource =
     useCallback((avatar) => {
@@ -426,11 +932,178 @@ export default function Notifications({
     }, []);
 
   /*
+   * Format notification time.
+   */
+  const formatNotificationTime =
+    useCallback((value) => {
+      if (!value) {
+        return "";
+      }
+
+      const date =
+        new Date(value);
+
+      if (
+        Number.isNaN(
+          date.getTime()
+        )
+      ) {
+        return "";
+      }
+
+      const now =
+        new Date();
+
+      const difference =
+        Math.max(
+          0,
+          now.getTime() -
+            date.getTime()
+        );
+
+      const seconds =
+        Math.floor(
+          difference / 1000
+        );
+
+      const minutes =
+        Math.floor(
+          seconds / 60
+        );
+
+      const hours =
+        Math.floor(
+          minutes / 60
+        );
+
+      const days =
+        Math.floor(
+          hours / 24
+        );
+
+      if (seconds < 60) {
+        return "Just now";
+      }
+
+      if (minutes < 60) {
+        return `${minutes} ${
+          minutes === 1
+            ? "minute"
+            : "minutes"
+        } ago`;
+      }
+
+      if (hours < 24) {
+        return `${hours} ${
+          hours === 1
+            ? "hour"
+            : "hours"
+        } ago`;
+      }
+
+      if (days < 7) {
+        return `${days} ${
+          days === 1
+            ? "day"
+            : "days"
+        } ago`;
+      }
+
+      return date.toLocaleDateString(
+        undefined,
+        {
+          month: "short",
+          day: "numeric",
+
+          year:
+            date.getFullYear() !==
+            now.getFullYear()
+              ? "numeric"
+              : undefined,
+        }
+      );
+    }, []);
+
+  /*
+   * Notification message.
+   */
+  const getNotificationText =
+    useCallback((item) => {
+      switch (item.type) {
+        case NOTIFICATION_TYPES
+          .FOLLOW_REQUEST:
+          return "requested to follow you.";
+
+        case NOTIFICATION_TYPES
+          .FOLLOW_ACCEPTED:
+          return "accepted your follow request.";
+
+        case NOTIFICATION_TYPES
+          .SONG_SHARED:
+          return item.songTitle
+            ? `shared “${item.songTitle}” with you.`
+            : "shared a song with you.";
+
+        case NOTIFICATION_TYPES
+          .FOLLOW:
+
+        default:
+          return "started following you.";
+      }
+    }, []);
+
+  /*
+   * Open notification destination.
+   */
+  const handleNotificationPress =
+    useCallback(
+      (item) => {
+        if (
+          item.type ===
+            NOTIFICATION_TYPES
+              .SONG_SHARED &&
+          item.targetId
+        ) {
+          /*
+           * Change this screen name later
+           * if your song screen is named
+           * something different.
+           */
+          navigation.navigate(
+            "ArtistListenables",
+            {
+              songId:
+                item.targetId,
+            }
+          );
+
+          return;
+        }
+
+        if (item.userId) {
+          navigation.navigate(
+            "UserProfiles",
+            {
+              userId:
+                item.userId,
+            }
+          );
+        }
+      },
+      [navigation]
+    );
+
+  /*
    * Render one notification.
    */
-  const renderRequest =
+  const renderNotification =
     useCallback(
       ({ item }) => {
+        const isRequest =
+          item.type ===
+          NOTIFICATION_TYPES
+            .FOLLOW_REQUEST;
+
         const isProcessing =
           Boolean(
             responseLoading[
@@ -441,145 +1114,213 @@ export default function Notifications({
         return (
           <View
             style={[
-              styles.requestCard,
+              styles.notificationCard,
+
+              !item.read &&
+                styles.unreadCard,
+
               isCompact &&
-                styles.compactRequestCard,
+                styles.compactNotificationCard,
             ]}
           >
+            {!item.read ? (
+              <View
+                style={
+                  styles.unreadDot
+                }
+              />
+            ) : null}
+
             <TouchableOpacity
               style={
-                styles.userInfoTouchable
-              }
-              onPress={() =>
-                navigation.navigate(
-                  "UserProfiles",
-                  {
-                    userId:
-                      item.userId,
-                  }
-                )
+                styles.notificationMain
               }
               activeOpacity={0.8}
+              onPress={() =>
+                handleNotificationPress(
+                  item
+                )
+              }
             >
               <Image
-                source={getAvatarSource(
-                  item.avatar
-                )}
-                style={styles.avatar}
+                source={
+                  getAvatarSource(
+                    item.avatar
+                  )
+                }
+                style={
+                  styles.avatar
+                }
               />
 
               <View
                 style={
-                  styles.requestInfo
+                  styles.notificationInfo
                 }
               >
                 <Text
                   style={
-                    styles.username
+                    styles.notificationMessage
                   }
-                  numberOfLines={1}
                 >
-                  {formatUsername(
-                    item.username
+                  <Text
+                    style={
+                      styles.username
+                    }
+                  >
+                    {formatUsername(
+                      item.username
+                    )}{" "}
+                  </Text>
+
+                  {getNotificationText(
+                    item
                   )}
                 </Text>
 
-                <Text
-                  style={
-                    styles.requestText
-                  }
-                >
-                  wants to follow you.
-                </Text>
+                {item.createdAt ? (
+                  <Text
+                    style={
+                      styles.timeText
+                    }
+                  >
+                    {formatNotificationTime(
+                      item.createdAt
+                    )}
+                  </Text>
+                ) : null}
               </View>
             </TouchableOpacity>
 
-            <View
-              style={[
-                styles.buttonContainer,
-                isCompact &&
-                  styles.compactButtonContainer,
-              ]}
-            >
-              <TouchableOpacity
+            {isRequest ? (
+              <View
                 style={[
-                  styles.actionButton,
-                  styles.acceptButton,
-                  isProcessing &&
-                    styles.disabledButton,
+                  styles.buttonContainer,
+
+                  isCompact &&
+                    styles.compactButtonContainer,
                 ]}
-                onPress={() =>
-                  handleResponse(
-                    item.userId,
-                    true
-                  )
-                }
-                disabled={isProcessing}
               >
-                {isProcessing ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#ffffff"
-                  />
-                ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    styles.acceptButton,
+
+                    isProcessing &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={
+                    isProcessing
+                  }
+                  onPress={() =>
+                    handleResponse(
+                      item,
+                      true
+                    )
+                  }
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#ffffff"
+                    />
+                  ) : (
+                    <Text
+                      style={
+                        styles.buttonText
+                      }
+                    >
+                      Accept
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    styles.denyButton,
+
+                    isProcessing &&
+                      styles.disabledButton,
+                  ]}
+                  disabled={
+                    isProcessing
+                  }
+                  onPress={() =>
+                    handleResponse(
+                      item,
+                      false
+                    )
+                  }
+                >
                   <Text
                     style={
                       styles.buttonText
                     }
                   >
-                    Accept
+                    Deny
                   </Text>
-                )}
-              </TouchableOpacity>
-
+                </TouchableOpacity>
+              </View>
+            ) : (
               <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.denyButton,
-                  isProcessing &&
-                    styles.disabledButton,
-                ]}
+                style={
+                  styles.viewButton
+                }
                 onPress={() =>
-                  handleResponse(
-                    item.userId,
-                    false
+                  handleNotificationPress(
+                    item
                   )
                 }
-                disabled={isProcessing}
               >
                 <Text
                   style={
-                    styles.buttonText
+                    styles.viewButtonText
                   }
                 >
-                  Deny
+                  {item.type ===
+                  NOTIFICATION_TYPES
+                    .SONG_SHARED
+                    ? "View Song"
+                    : "View Profile"}
                 </Text>
               </TouchableOpacity>
-            </View>
+            )}
           </View>
         );
       },
       [
+        formatNotificationTime,
         formatUsername,
         getAvatarSource,
+        getNotificationText,
+        handleNotificationPress,
         handleResponse,
         isCompact,
-        navigation,
         responseLoading,
       ]
     );
 
+  /*
+   * Unique list keys.
+   */
   const keyExtractor =
     useCallback(
-      (item, index) =>
-        String(
-          item?.userId ||
+      (
+        item,
+        index
+      ) => {
+        return String(
           item?.id ||
-          index
-        ),
+          `${item?.type}-${item?.userId}-${index}`
+        );
+      },
       []
     );
 
+  /*
+   * Empty state.
+   */
   const renderEmpty =
     useCallback(() => {
       return (
@@ -589,9 +1330,9 @@ export default function Notifications({
           }
         >
           <Image
-            source={require(
-              "../images/notificationsIcon2.png"
-            )}
+            source={
+              NOTIFICATIONS_ICON
+            }
             style={
               styles.emptyIcon
             }
@@ -602,7 +1343,9 @@ export default function Notifications({
               styles.emptyTitle
             }
           >
-            No new notifications
+            {errorMessage
+              ? "Unable to load notifications"
+              : "No new notifications"}
           </Text>
 
           <Text
@@ -610,28 +1353,46 @@ export default function Notifications({
               styles.emptyDescription
             }
           >
-            New follow requests will appear here.
+            {errorMessage ||
+              "New followers, follow requests, and shared songs will appear here."}
           </Text>
         </View>
       );
-    }, []);
+    }, [
+      errorMessage,
+    ]);
+
+  const notificationCountText =
+    useMemo(() => {
+      const count =
+        notifications.length;
+
+      return `${count} ${
+        count === 1
+          ? "notification"
+          : "notifications"
+      }`;
+    }, [
+      notifications.length,
+    ]);
 
   return (
     <View
       style={[
         styles.container,
+
         isWeb &&
           styles.webContainer,
       ]}
     >
-      {/* =====================================================
-          SIDEBAR
-      ===================================================== */}
+      {/* SIDEBAR */}
       <View
         style={[
           styles.sideMenu,
+
           isDesktopWeb &&
             styles.desktopSideMenu,
+
           isMobileWeb &&
             styles.mobileSideMenu,
         ]}
@@ -654,14 +1415,14 @@ export default function Notifications({
         />
       </View>
 
-      {/* =====================================================
-          PAGE CONTENT
-      ===================================================== */}
+      {/* CONTENT */}
       <View
         style={[
           styles.pageContent,
+
           isDesktopWeb &&
             styles.desktopPageContent,
+
           isMobileWeb &&
             styles.mobilePageContent,
         ]}
@@ -669,6 +1430,7 @@ export default function Notifications({
         <View
           style={[
             styles.contentInner,
+
             isDesktopWeb &&
               styles.desktopContentInner,
           ]}
@@ -691,7 +1453,7 @@ export default function Notifications({
                 styles.subHeader
               }
             >
-              Review and respond to follow requests.
+              Followers, requests, shared music, and account activity.
             </Text>
 
             {!loading ? (
@@ -700,11 +1462,7 @@ export default function Notifications({
                   styles.notificationCount
                 }
               >
-                {followRequests.length}{" "}
-                {followRequests.length ===
-                1
-                  ? "request"
-                  : "requests"}
+                {notificationCountText}
               </Text>
             ) : null}
           </View>
@@ -733,25 +1491,27 @@ export default function Notifications({
           ) : (
             <FlatList
               data={
-                followRequests
+                notifications
               }
               keyExtractor={
                 keyExtractor
               }
               renderItem={
-                renderRequest
+                renderNotification
               }
               ListEmptyComponent={
                 renderEmpty
               }
               style={[
                 styles.notificationsList,
+
                 isWeb &&
                   styles.webNotificationsList,
               ]}
               contentContainerStyle={[
                 styles.listContent,
-                followRequests.length ===
+
+                notifications.length ===
                   0 &&
                   styles.emptyListContent,
               ]}
@@ -783,12 +1543,11 @@ export default function Notifications({
         </View>
       </View>
 
-      {/* =====================================================
-          BOTTOM NAVIGATION
-      ===================================================== */}
+      {/* BOTTOM NAVIGATION */}
       <View
         style={[
           styles.bottomNavBar,
+
           isDesktopWeb &&
             styles.desktopBottomNavBar,
         ]}
@@ -799,434 +1558,477 @@ export default function Notifications({
   );
 }
 
-const styles = StyleSheet.create({
-  /* =====================================================
-     PAGE
-  ===================================================== */
-
-  container: {
-    flex: 1,
-    minHeight: 0,
-
-    backgroundColor:
-      colours.background,
-  },
-
-  webContainer: {
-    width: "100%",
-    height: "100vh",
-
-    minHeight: 0,
-
-    overflow: "hidden",
-  },
-
-  /* =====================================================
-     SIDEBAR
-  ===================================================== */
-
-  sideMenu: {
-    position: "absolute",
-
-    top: 40,
-    left: 0,
-    bottom: 0,
-
-    zIndex: 100,
-    elevation: 20,
-  },
-
-  desktopSideMenu: {
-    position: "fixed",
-
-    top: 0,
-    left: 0,
-    right: undefined,
-    bottom: 0,
-
-    width:
-      DESKTOP_SIDEBAR_WIDTH,
-
-    height: "100vh",
-
-    overflow: "hidden",
-
-    zIndex: 100,
-    elevation: 20,
-  },
-
-  mobileSideMenu: {
-    position: "absolute",
-
-    top: 40,
-    left: 0,
-    right: undefined,
-    bottom: 0,
-
-    zIndex: 100,
-  },
-
-  /* =====================================================
-     CONTENT
-  ===================================================== */
-
-  pageContent: {
-    flex: 1,
-    minHeight: 0,
-
-    overflow: "hidden",
-  },
-
-  desktopPageContent: {
-    position: "absolute",
-
-    top: 0,
-    left:
-      DESKTOP_SIDEBAR_WIDTH,
-    right: 0,
-    bottom:
-      BOTTOM_NAV_HEIGHT,
-
-    minHeight: 0,
-
-    paddingTop: 26,
-    paddingLeft: 28,
-    paddingRight: 28,
-
-    overflow: "hidden",
-  },
-
-  mobilePageContent: {
-    position: "absolute",
-
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom:
-      BOTTOM_NAV_HEIGHT,
-
-    minHeight: 0,
-
-    paddingTop: 75,
-    paddingHorizontal: 12,
-
-    overflow: "hidden",
-  },
-
-  contentInner: {
-    flex: 1,
-    minHeight: 0,
-
-    width: "100%",
-  },
-
-  desktopContentInner: {
-    width: "100%",
-    maxWidth:
-      MAX_CONTENT_WIDTH,
-
-    alignSelf: "center",
-  },
-
-  /* =====================================================
-     HEADER
-  ===================================================== */
-
-  headerContainer: {
-    width: "100%",
-
-    marginBottom: 18,
-  },
-
-  header: {
-    color:
-      colours.lightblue,
-
-    fontSize: 32,
-    lineHeight: 39,
-    fontWeight: "800",
-  },
-
-  subHeader: {
-    color:
-      "rgba(255,255,255,0.58)",
-
-    fontSize: 14,
-    lineHeight: 20,
-
-    marginTop: 3,
-  },
-
-  notificationCount: {
-    color:
-      colours.lightblue,
-
-    fontSize: 13,
-    fontWeight: "700",
-
-    marginTop: 7,
-  },
-
-  /* =====================================================
-     LOADING
-  ===================================================== */
-
-  loadingContainer: {
-    flex: 1,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    paddingBottom: 80,
-  },
-
-  loadingText: {
-    color:
-      "rgba(255,255,255,0.65)",
-
-    fontSize: 14,
-
-    marginTop: 12,
-  },
-
-  /* =====================================================
-     LIST
-  ===================================================== */
-
-  notificationsList: {
-    flex: 1,
-    minHeight: 0,
-
-    width: "100%",
-  },
-
-  webNotificationsList: {
-    height: "100%",
-
-    overflowY: "auto",
-    overflowX: "hidden",
-
-    WebkitOverflowScrolling:
-      "touch",
-
-    overscrollBehaviorY:
-      "contain",
-
-    scrollbarWidth: "none",
-    msOverflowStyle: "none",
-  },
-
-  listContent: {
-    width: "100%",
-
-    paddingBottom: 45,
-  },
-
-  emptyListContent: {
-    flexGrow: 1,
-
-    justifyContent: "center",
-  },
-
-  /* =====================================================
-     REQUEST CARDS
-  ===================================================== */
-
-  requestCard: {
-    width: "100%",
-
-    flexDirection: "row",
-    alignItems: "center",
-
-    padding: 17,
-    marginBottom: 13,
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.08)",
-
-    borderRadius: 16,
-
-    backgroundColor:
-      colours.darkblue,
-
-    shadowColor: "#000000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      minHeight: 0,
+
+      backgroundColor:
+        colours.background,
     },
-    shadowOpacity: 0.14,
-    shadowRadius: 9,
 
-    elevation: 3,
-  },
+    webContainer: {
+      width: "100%",
+      height: "100vh",
 
-  compactRequestCard: {
-    flexDirection: "column",
-    alignItems: "stretch",
-  },
+      minHeight: 0,
 
-  userInfoTouchable: {
-    flex: 1,
-    minWidth: 0,
+      overflow: "hidden",
+    },
 
-    flexDirection: "row",
-    alignItems: "center",
-  },
+    sideMenu: {
+      position: "absolute",
 
-  avatar: {
-    width: 56,
-    height: 56,
+      top: 40,
+      left: 0,
+      bottom: 0,
 
-    borderRadius: 28,
+      zIndex: 100,
+      elevation: 20,
+    },
 
-    marginRight: 13,
+    desktopSideMenu: {
+      position: "fixed",
 
-    backgroundColor:
-      "rgba(255,255,255,0.08)",
-  },
+      top: 0,
+      left: 0,
+      right: undefined,
+      bottom: 0,
 
-  requestInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
+      width:
+        DESKTOP_SIDEBAR_WIDTH,
 
-  username: {
-    color: "#ffffff",
+      height: "100vh",
 
-    fontSize: 17,
-    lineHeight: 23,
-    fontWeight: "800",
-  },
+      overflow: "hidden",
 
-  requestText: {
-    color:
-      "rgba(255,255,255,0.55)",
+      zIndex: 100,
+      elevation: 20,
+    },
 
-    fontSize: 13,
-    lineHeight: 19,
+    mobileSideMenu: {
+      position: "absolute",
 
-    marginTop: 2,
-  },
+      top: 40,
+      left: 0,
+      right: undefined,
+      bottom: 0,
 
-  /* =====================================================
-     BUTTONS
-  ===================================================== */
+      zIndex: 100,
+    },
 
-  buttonContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    pageContent: {
+      flex: 1,
+      minHeight: 0,
 
-    marginLeft: 14,
-  },
+      overflow: "hidden",
+    },
 
-  compactButtonContainer: {
-    width: "100%",
+    desktopPageContent: {
+      position: "absolute",
 
-    marginLeft: 0,
-    marginTop: 15,
-  },
+      top: 0,
 
-  actionButton: {
-    minWidth: 92,
-    minHeight: 42,
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
 
-    alignItems: "center",
-    justifyContent: "center",
+      right: 0,
 
-    paddingHorizontal: 16,
+      bottom:
+        BOTTOM_NAV_HEIGHT,
 
-    borderRadius: 21,
-  },
+      minHeight: 0,
 
-  acceptButton: {
-    backgroundColor:
-      colours.lightblue,
+      paddingTop: 26,
+      paddingLeft: 28,
+      paddingRight: 28,
 
-    marginRight: 8,
-  },
+      overflow: "hidden",
+    },
 
-  denyButton: {
-    backgroundColor:
-      "#d94343",
-  },
+    mobilePageContent: {
+      position: "absolute",
 
-  disabledButton: {
-    opacity: 0.5,
-  },
+      top: 0,
+      left: 0,
+      right: 0,
 
-  buttonText: {
-    color: "#ffffff",
+      bottom:
+        BOTTOM_NAV_HEIGHT,
 
-    fontSize: 14,
-    fontWeight: "800",
-  },
+      minHeight: 0,
 
-  /* =====================================================
-     EMPTY STATE
-  ===================================================== */
+      paddingTop: 75,
+      paddingHorizontal: 12,
 
-  emptyContainer: {
-    width: "100%",
+      overflow: "hidden",
+    },
 
-    alignItems: "center",
-    justifyContent: "center",
+    contentInner: {
+      flex: 1,
+      minHeight: 0,
 
-    paddingHorizontal: 24,
-    paddingBottom: 80,
-  },
+      width: "100%",
+    },
 
-  emptyIcon: {
-    width: 70,
-    height: 70,
+    desktopContentInner: {
+      width: "100%",
 
-    resizeMode: "contain",
+      maxWidth:
+        MAX_CONTENT_WIDTH,
 
-    opacity: 0.42,
+      alignSelf: "center",
+    },
 
-    marginBottom: 16,
-  },
+    headerContainer: {
+      width: "100%",
 
-  emptyTitle: {
-    color: "#ffffff",
+      marginBottom: 18,
+    },
 
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: "800",
+    header: {
+      color:
+        colours.lightblue,
 
-    textAlign: "center",
-  },
+      fontSize: 32,
+      lineHeight: 39,
+      fontWeight: "800",
+    },
 
-  emptyDescription: {
-    color:
-      "rgba(255,255,255,0.52)",
+    subHeader: {
+      color:
+        "rgba(255,255,255,0.58)",
 
-    fontSize: 14,
-    lineHeight: 20,
+      fontSize: 14,
+      lineHeight: 20,
 
-    textAlign: "center",
+      marginTop: 3,
+    },
 
-    marginTop: 6,
-  },
+    notificationCount: {
+      color:
+        colours.lightblue,
 
-  /* =====================================================
-     BOTTOM NAVIGATION
-  ===================================================== */
+      fontSize: 13,
+      fontWeight: "700",
 
-  bottomNavBar: {
-    position: "absolute",
+      marginTop: 7,
+    },
 
-    left: 0,
-    right: 0,
-    bottom: 0,
+    loadingContainer: {
+      flex: 1,
 
-    zIndex: 90,
-  },
+      alignItems: "center",
+      justifyContent: "center",
 
-  desktopBottomNavBar: {
-    left:
-      DESKTOP_SIDEBAR_WIDTH,
+      paddingBottom: 80,
+    },
 
-    right: 0,
-  },
-});
+    loadingText: {
+      color:
+        "rgba(255,255,255,0.65)",
+
+      fontSize: 14,
+
+      marginTop: 12,
+    },
+
+    notificationsList: {
+      flex: 1,
+      minHeight: 0,
+
+      width: "100%",
+    },
+
+    webNotificationsList: {
+      height: "100%",
+
+      overflowY: "auto",
+      overflowX: "hidden",
+
+      WebkitOverflowScrolling:
+        "touch",
+
+      overscrollBehaviorY:
+        "contain",
+
+      scrollbarWidth: "none",
+      msOverflowStyle: "none",
+    },
+
+    listContent: {
+      width: "100%",
+
+      paddingBottom: 45,
+    },
+
+    emptyListContent: {
+      flexGrow: 1,
+
+      justifyContent: "center",
+    },
+
+    notificationCard: {
+      position: "relative",
+
+      width: "100%",
+      minHeight: 92,
+
+      flexDirection: "row",
+      alignItems: "center",
+
+      padding: 16,
+      marginBottom: 13,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.08)",
+
+      borderRadius: 16,
+
+      backgroundColor:
+        colours.darkblue,
+
+      shadowColor: "#000000",
+
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
+
+      shadowOpacity: 0.14,
+      shadowRadius: 9,
+
+      elevation: 3,
+    },
+
+    unreadCard: {
+      borderColor:
+        "rgba(53,175,229,0.52)",
+
+      backgroundColor:
+        "rgba(24,62,82,0.98)",
+    },
+
+    compactNotificationCard: {
+      flexDirection: "column",
+      alignItems: "stretch",
+    },
+
+    unreadDot: {
+      position: "absolute",
+
+      top: 12,
+      left: 12,
+
+      width: 8,
+      height: 8,
+
+      borderRadius: 4,
+
+      backgroundColor:
+        colours.lightblue,
+
+      zIndex: 5,
+    },
+
+    notificationMain: {
+      flex: 1,
+      minWidth: 0,
+
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    avatar: {
+      width: 56,
+      height: 56,
+
+      flexShrink: 0,
+
+      borderRadius: 28,
+
+      marginRight: 13,
+
+      backgroundColor:
+        "rgba(255,255,255,0.08)",
+    },
+
+    notificationInfo: {
+      flex: 1,
+      minWidth: 0,
+
+      paddingRight: 10,
+    },
+
+    notificationMessage: {
+      color:
+        "rgba(255,255,255,0.72)",
+
+      fontSize: 14,
+      lineHeight: 20,
+    },
+
+    username: {
+      color: "#ffffff",
+
+      fontSize: 16,
+      lineHeight: 22,
+      fontWeight: "800",
+    },
+
+    timeText: {
+      color:
+        "rgba(255,255,255,0.42)",
+
+      fontSize: 12,
+      lineHeight: 17,
+
+      marginTop: 4,
+    },
+
+    buttonContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+
+      marginLeft: 14,
+    },
+
+    compactButtonContainer: {
+      width: "100%",
+
+      marginLeft: 0,
+      marginTop: 15,
+    },
+
+    actionButton: {
+      minWidth: 92,
+      minHeight: 42,
+
+      flex: 1,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 16,
+
+      borderRadius: 21,
+    },
+
+    acceptButton: {
+      backgroundColor:
+        colours.lightblue,
+
+      marginRight: 8,
+    },
+
+    denyButton: {
+      backgroundColor:
+        "#d94343",
+    },
+
+    disabledButton: {
+      opacity: 0.5,
+    },
+
+    buttonText: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      fontWeight: "800",
+    },
+
+    viewButton: {
+      minWidth: 112,
+      minHeight: 42,
+
+      flexShrink: 0,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 16,
+
+      marginLeft: 14,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(53,175,229,0.65)",
+
+      borderRadius: 21,
+
+      backgroundColor:
+        "rgba(53,175,229,0.12)",
+    },
+
+    viewButtonText: {
+      color:
+        colours.lightblue,
+
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    emptyContainer: {
+      width: "100%",
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 24,
+      paddingBottom: 80,
+    },
+
+    emptyIcon: {
+      width: 70,
+      height: 70,
+
+      resizeMode: "contain",
+
+      opacity: 0.42,
+
+      marginBottom: 16,
+    },
+
+    emptyTitle: {
+      color: "#ffffff",
+
+      fontSize: 20,
+      lineHeight: 26,
+      fontWeight: "800",
+
+      textAlign: "center",
+    },
+
+    emptyDescription: {
+      maxWidth: 430,
+
+      color:
+        "rgba(255,255,255,0.52)",
+
+      fontSize: 14,
+      lineHeight: 20,
+
+      textAlign: "center",
+
+      marginTop: 6,
+    },
+
+    bottomNavBar: {
+      position: "absolute",
+
+      left: 0,
+      right: 0,
+      bottom: 0,
+
+      zIndex: 90,
+    },
+
+    desktopBottomNavBar: {
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
+
+      right: 0,
+    },
+  });

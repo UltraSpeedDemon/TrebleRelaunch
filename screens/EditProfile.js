@@ -1256,92 +1256,95 @@ export default function EditProfile({
             </View>
           </View>
 
-          <View
-            style={
-              styles.privacyCard
-            }
-          >
-            <View
-              style={
-                styles.privacyTextContainer
-              }
-            >
-              <Text
-                style={
-                  styles.privacyTitle
-                }
-              >
-                Profile Privacy
-              </Text>
+          <View style={styles.privacyCard}>
+  <View style={styles.privacyTextContainer}>
+    <Text style={styles.privacyTitle}>
+      Profile Privacy
+    </Text>
 
-              <Text
-                style={
-                  styles.privacySubtitle
-                }
-              >
-                Public profiles can be followed immediately. Private profiles require approval.
-              </Text>
-            </View>
+    <Text style={styles.privacySubtitle}>
+      Control whether people can follow you immediately or must send a request.
+    </Text>
+  </View>
 
-            <View
-              style={
-                styles.privacyRow
-              }
-            >
-              <View
-                style={
-                  styles.privacyStatusContainer
-                }
-              >
-                <Text
-                  style={
-                    styles.privacyLabel
-                  }
-                >
-                  {isPublic
-                    ? "Public Profile"
-                    : "Private Profile"}
-                </Text>
+  <View style={styles.privacyRow}>
+    <View style={styles.privacyStatusContainer}>
+      <Text style={styles.privacyLabel}>
+        {isPublic
+          ? "Public Profile"
+          : "Private Profile"}
+      </Text>
 
-                <Text
-                  style={
-                    styles.privacyStatusDescription
-                  }
-                >
-                  {isPublic
-                    ? "Anyone can follow your account."
-                    : "You approve each follow request."}
-                </Text>
-              </View>
+      <Text style={styles.privacyStatusDescription}>
+        {isPublic
+          ? "Anyone can follow you immediately."
+          : "People must send a follow request that you approve or deny."}
+      </Text>
+    </View>
 
-              <Switch
-                value={
-                  isPublic
-                }
-                onValueChange={(value) => {
-                  setIsPublic(
-                    value
-                  );
+    <Switch
+      value={isPublic}
+      onValueChange={(value) => {
+        setIsPublic(value);
+        setSuccessMessage("");
+        setErrorMessage("");
+      }}
+      disabled={pageBusy}
+      trackColor={{
+        false:
+          "rgba(255,255,255,0.18)",
+        true:
+          colours.lightblue ||
+          "#54b7ee",
+      }}
+      thumbColor="#ffffff"
+      ios_backgroundColor="rgba(255,255,255,0.18)"
+    />
+  </View>
 
-                  setSuccessMessage("");
-                  setErrorMessage("");
-                }}
-                disabled={
-                  pageBusy
-                }
-                trackColor={{
-                  false:
-                    "rgba(255,255,255,0.18)",
+  <View style={styles.privacyNotice}>
+    <Text style={styles.privacyNoticeIcon}>
+      {isPublic ? "🌎" : "🔒"}
+    </Text>
 
-                  true:
-                    colours.lightblue ||
-                    "#54b7ee",
-                }}
-                thumbColor="#ffffff"
-                ios_backgroundColor="rgba(255,255,255,0.18)"
-              />
-            </View>
-          </View>
+    <View style={styles.privacyNoticeTextContainer}>
+      <Text style={styles.privacyNoticeTitle}>
+        {isPublic
+          ? "Public account"
+          : "Private account"}
+      </Text>
+
+      <Text style={styles.privacyNoticeText}>
+        {isPublic
+          ? "New followers will be added immediately. You will receive a notification when someone follows you."
+          : "New followers will remain pending until you accept their request from the Notifications page."}
+      </Text>
+    </View>
+  </View>
+
+  {!isPublic ? (
+    <TouchableOpacity
+      style={styles.reviewRequestsButton}
+      onPress={() =>
+        navigation.navigate(
+          "Notifications"
+        )
+      }
+      disabled={pageBusy}
+      activeOpacity={0.8}
+    >
+      <Text style={styles.reviewRequestsButtonText}>
+        Review Follow Requests
+      </Text>
+    </TouchableOpacity>
+  ) : null}
+
+  {hasPrivacyChanges ? (
+    <Text style={styles.privacyUnsavedText}>
+      Press Save Changes to apply this privacy setting.
+    </Text>
+  ) : null}
+</View>
 
           <TouchableOpacity
             style={[
@@ -1415,6 +1418,97 @@ export default function EditProfile({
 
 const styles =
   StyleSheet.create({
+
+    privacyNotice: {
+  width: "100%",
+
+  flexDirection: "row",
+  alignItems: "flex-start",
+
+  padding: 14,
+  marginTop: 17,
+
+  borderWidth: 1,
+  borderColor:
+    "rgba(255,255,255,0.09)",
+
+  borderRadius: 13,
+
+  backgroundColor:
+    "rgba(255,255,255,0.035)",
+},
+
+privacyNoticeIcon: {
+  fontSize: 22,
+  lineHeight: 27,
+
+  marginRight: 11,
+},
+
+privacyNoticeTextContainer: {
+  flex: 1,
+  minWidth: 0,
+},
+
+privacyNoticeTitle: {
+  color: "#ffffff",
+
+  fontSize: 14,
+  lineHeight: 19,
+  fontWeight: "800",
+},
+
+privacyNoticeText: {
+  color:
+    "rgba(255,255,255,0.52)",
+
+  fontSize: 12,
+  lineHeight: 18,
+
+  marginTop: 3,
+},
+
+reviewRequestsButton: {
+  width: "100%",
+  minHeight: 44,
+
+  alignItems: "center",
+  justifyContent: "center",
+
+  paddingHorizontal: 18,
+  marginTop: 14,
+
+  borderWidth: 1,
+  borderColor:
+    colours.lightblue ||
+    "#54b7ee",
+
+  borderRadius: 22,
+
+  backgroundColor:
+    "rgba(60,170,230,0.13)",
+},
+
+reviewRequestsButtonText: {
+  color:
+    colours.lightblue ||
+    "#54b7ee",
+
+  fontSize: 14,
+  fontWeight: "800",
+},
+
+privacyUnsavedText: {
+  color:
+    "rgba(255,215,100,0.85)",
+
+  fontSize: 12,
+  lineHeight: 18,
+
+  textAlign: "center",
+
+  marginTop: 12,
+},
     container: {
       flex: 1,
       minHeight: 0,

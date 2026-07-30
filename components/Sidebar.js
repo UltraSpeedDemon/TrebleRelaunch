@@ -28,6 +28,7 @@ import {
 
 import {
   getFollowRequests,
+  getNotifications,
   getUser,
 } from "../providers/rest";
 
@@ -106,6 +107,24 @@ export default function Sidebar({
       translateX,
     ]
   );
+
+
+  /*
+ * Keep the animated sidebar synchronized
+ * with the menuOpen state.
+ *
+ * Without this effect, the overlay appears,
+ * but the sidebar stays translated off-screen.
+ */
+useEffect(() => {
+  animateMenu(
+    isDesktop ? true : menuOpen
+  );
+}, [
+  animateMenu,
+  isDesktop,
+  menuOpen,
+]);
 
 const loadProfile = useCallback(async () => {
   const currentUser = auth.currentUser;
@@ -273,56 +292,193 @@ useFocusEffect(
     ]
   );
 
-  useEffect(() => {
-    let mounted = true;
+ /*
+ * Load the notification badge.
+ *
+ * Normal notifications count while unread.
+ * Pending follow requests remain counted until
+ * they are accepted or denied.
+ */
+const loadNotificationsCount =
+  useCallback(async () => {
+    const currentUser =
+      auth.currentUser;
 
-    const fetchNotificationsCount =
-      async () => {
-        try {
-          const currentUser =
-            auth.currentUser;
+    if (!currentUser?.uid) {
+      setNotificationsCount(0);
+      return;
+    }
 
-          if (!currentUser?.uid) {
-            if (mounted) {
-              setNotificationsCount(0);
-            }
+    try {
+      const [
+        notificationsResponse,
+        requestsResponse,
+      ] = await Promise.all([
+        getNotifications(
+          currentUser.uid
+        ),
 
-            return;
-          }
+        getFollowRequests(
+          currentUser.uid
+        ),
+      ]);
 
-          const response =
-            await getFollowRequests(
-              currentUser.uid
+      let notificationsData = {};
+      let requestsData = {};
+
+      if (
+        notificationsResponse?.ok
+      ) {
+        notificationsData =
+          await notificationsResponse.json();
+      }
+
+      if (requestsResponse?.ok) {
+        requestsData =
+          await requestsResponse.json();
+      }
+
+      /*
+       * Support either a direct array or:
+       *
+       * {
+       *   notifications: [...]
+       * }
+       */
+      const notifications =
+        Array.isArray(
+          notificationsData
+        )
+          ? notificationsData
+          : Array.isArray(
+                notificationsData
+                  ?.notifications
+            )
+            ? notificationsData
+                .notifications
+            : [];
+
+      /*
+       * Support either a direct array or:
+       *
+       * {
+       *   requests: [...]
+       * }
+       *
+       * or:
+       *
+       * {
+       *   followRequests: [...]
+       * }
+       */
+      const requests =
+        Array.isArray(
+          requestsData
+        )
+          ? requestsData
+          : Array.isArray(
+                requestsData?.requests
+            )
+            ? requestsData.requests
+            : Array.isArray(
+                  requestsData
+                    ?.followRequests
+              )
+              ? requestsData
+                  .followRequests
+              : [];
+
+      /*
+       * Follow requests exist in both:
+       *
+       * notifications
+       * followRequests
+       *
+       * Exclude follow_request notifications here
+       * so they are not counted twice.
+       */
+      const unreadNormalCount =
+        notifications.filter(
+          (notification) => {
+            const type = String(
+              notification?.type ||
+              notification
+                ?.notificationType ||
+              notification
+                ?.notification_type ||
+              ""
+            )
+              .trim()
+              .toLowerCase()
+              .replaceAll("-", "_")
+              .replaceAll(" ", "_");
+
+            const isRead =
+              notification?.read ===
+                true ||
+              notification?.read ===
+                "true" ||
+              notification?.read ===
+                1 ||
+              notification?.isRead ===
+                true ||
+              notification?.is_read ===
+                true;
+
+            return (
+              !isRead &&
+              type !==
+                "follow_request"
             );
-
-          if (!response?.ok) {
-            return;
           }
+        ).length;
 
-          const requests =
-            await response.json();
+      /*
+       * Pending private follow requests remain
+       * in the badge until accepted or denied.
+       */
+      const totalCount =
+        unreadNormalCount +
+        requests.length;
 
-          if (mounted) {
-            setNotificationsCount(
-              Array.isArray(requests)
-                ? requests.length
-                : 0
-            );
-          }
-        } catch (error) {
-          console.error(
-            "[Sidebar] Notification error:",
-            error
-          );
-        }
-      };
+      setNotificationsCount(
+        totalCount
+      );
+    } catch (error) {
+      console.error(
+        "[Sidebar] Notification count error:",
+        error
+      );
 
-    fetchNotificationsCount();
+      setNotificationsCount(0);
+    }
+  }, []);
+
+/*
+ * Reload whenever the current page gets focus.
+ *
+ * Also check every 15 seconds so new notifications
+ * can appear without refreshing the whole app.
+ */
+useFocusEffect(
+  useCallback(() => {
+    loadNotificationsCount();
+
+    const intervalId =
+      setInterval(
+        loadNotificationsCount,
+        15000
+      );
 
     return () => {
-      mounted = false;
+      clearInterval(
+        intervalId
+      );
     };
-  }, []);
+  }, [
+    loadNotificationsCount,
+  ])
+);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -489,7 +645,7 @@ const handleLogout = useCallback(() => {
       pointerEvents="box-none"
     >
       {/* MOBILE HAMBURGER ONLY */}
-      {!isDesktop ? (
+      {!isDesktop && !menuOpen ? (
         <TouchableOpacity
           onPress={openMenu}
           style={styles.hamburgerButton}

@@ -33,6 +33,7 @@ import MusicCard from "../components/MusicCard";
 
 import {
   followUser,
+  getFollowers,
   getFollowRequests,
   postSearchResults,
   requestFollow,
@@ -145,6 +146,11 @@ export default function Search({
   ] = useState({});
 
   const [
+    followsMeUsers,
+    setFollowsMeUsers,
+  ] = useState({});
+
+  const [
     followRequests,
     setFollowRequests,
   ] = useState({});
@@ -217,6 +223,40 @@ export default function Search({
     },
     []
   );
+
+
+  const normalizeUsersArray =
+  useCallback((data) => {
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (Array.isArray(data?.users)) {
+      return data.users;
+    }
+
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
+
+    if (Array.isArray(data?.followers)) {
+      return data.followers;
+    }
+
+    return [];
+  }, []);
+
+const getRelationshipUserId =
+  useCallback((user) => {
+    return String(
+      user?.userId ||
+      user?.uid ||
+      user?.id ||
+      user?.followerId ||
+      user?.follower_id ||
+      ""
+    );
+  }, []);
 
   /*
    * Normalize all search result types.
@@ -597,6 +637,172 @@ export default function Search({
       );
     }, [searchResult]);
 
+
+    const loadRelationshipStatuses =
+  useCallback(async () => {
+    const currentUserId =
+      String(
+        auth.currentUser?.uid ||
+        ""
+      );
+
+    if (!currentUserId) {
+      return;
+    }
+
+    const userResults =
+      searchResult.filter(
+        (item) =>
+          item?.type === "user" &&
+          item?.userId &&
+          String(item.userId) !==
+            currentUserId
+      );
+
+    if (userResults.length === 0) {
+      setFollowingUsers({});
+      setFollowsMeUsers({});
+
+      return;
+    }
+
+    try {
+      /*
+       * Fetch the signed-in user's followers once.
+       * Anyone in this list follows the current user.
+       */
+      const myFollowersResponse =
+        await getFollowers(
+          currentUserId
+        );
+
+      const myFollowersData =
+        myFollowersResponse?.ok
+          ? await myFollowersResponse.json()
+          : [];
+
+      const myFollowerIds =
+        new Set(
+          normalizeUsersArray(
+            myFollowersData
+          )
+            .map(
+              getRelationshipUserId
+            )
+            .filter(Boolean)
+        );
+
+      const followsMeMap = {};
+
+      userResults.forEach((user) => {
+        const targetUserId =
+          String(user.userId);
+
+        followsMeMap[targetUserId] =
+          myFollowerIds.has(
+            targetUserId
+          );
+      });
+
+      setFollowsMeUsers(
+        followsMeMap
+      );
+
+      /*
+       * Fetch each result user's followers.
+       * If the signed-in user appears there,
+       * the signed-in user follows that result.
+       */
+      const relationshipResults =
+        await Promise.all(
+          userResults.map(
+            async (user) => {
+              const targetUserId =
+                String(user.userId);
+
+              try {
+                const response =
+                  await getFollowers(
+                    targetUserId
+                  );
+
+                if (!response?.ok) {
+                  return {
+                    targetUserId,
+                    isFollowing:
+                      Boolean(
+                        user?.isFollowing
+                      ),
+                  };
+                }
+
+                const data =
+                  await response.json();
+
+                const followerIds =
+                  normalizeUsersArray(
+                    data
+                  )
+                    .map(
+                      getRelationshipUserId
+                    )
+                    .filter(Boolean);
+
+                return {
+                  targetUserId,
+
+                  isFollowing:
+                    followerIds.includes(
+                      currentUserId
+                    ),
+                };
+              } catch (error) {
+                console.warn(
+                  `[Search] Unable to check relationship for ${targetUserId}:`,
+                  error
+                );
+
+                return {
+                  targetUserId,
+
+                  isFollowing:
+                    Boolean(
+                      user?.isFollowing
+                    ),
+                };
+              }
+            }
+          )
+        );
+
+      const followingMap = {};
+
+      relationshipResults.forEach(
+        ({
+          targetUserId,
+          isFollowing,
+        }) => {
+          followingMap[
+            targetUserId
+          ] = isFollowing;
+        }
+      );
+
+      setFollowingUsers(
+        followingMap
+      );
+    } catch (error) {
+      console.error(
+        "[Search] Relationship status error:",
+        error
+      );
+    }
+  }, [
+    getRelationshipUserId,
+    normalizeUsersArray,
+    searchResult,
+  ]);
+
   /*
    * Run search whenever query changes.
    */
@@ -624,6 +830,12 @@ export default function Search({
     loadFollowRequestStatuses();
   }, [
     loadFollowRequestStatuses,
+  ]);
+
+  useEffect(() => {
+    loadRelationshipStatuses();
+  }, [
+    loadRelationshipStatuses,
   ]);
 
   const handleRefresh =
@@ -697,6 +909,18 @@ export default function Search({
               response,
               "Unable to follow this user."
             );
+            if (
+            followsMeUsers[
+              targetUserId
+            ]
+          ) {
+            setFollowingUsers(
+              (current) => ({
+                ...current,
+                [targetUserId]: true,
+              })
+            );
+          }
           } else {
             if (
               followRequests[
@@ -770,6 +994,7 @@ export default function Search({
       [
         followLoading,
         followRequests,
+        followsMeUsers,
         parseResponse,
       ]
     );
@@ -1555,6 +1780,16 @@ export default function Search({
                                   : Boolean(
                                       item?.isFollowing
                                     );
+                                    const followsMe =
+                                  Boolean(
+                                    followsMeUsers[
+                                      userId
+                                    ]
+                                  );
+
+                                const isFriend =
+                                  isFollowing &&
+                                  followsMe;
 
                               const alreadyRequested =
                                 Boolean(
@@ -1587,6 +1822,11 @@ export default function Search({
                                 finalButtonLabel =
                                   "Loading...";
                               } else if (
+                                isFriend
+                              ) {
+                                finalButtonLabel =
+                                  "Friends";
+                              } else if (
                                 isFollowing
                               ) {
                                 finalButtonLabel =
@@ -1597,6 +1837,11 @@ export default function Search({
                               ) {
                                 finalButtonLabel =
                                   "Requested";
+                              } else if (
+                                followsMe
+                              ) {
+                                finalButtonLabel =
+                                  "Follow Back";
                               }
 
                               const avatar =
@@ -1665,9 +1910,13 @@ export default function Search({
                                           }
                                           numberOfLines={1}
                                         >
-                                          {userIsPublic
-                                            ? "Public profile"
-                                            : "Private profile"}
+                                          {isFriend
+                                          ? "Friends · Music sharing enabled"
+                                          : followsMe
+                                            ? "Follows you"
+                                            : userIsPublic
+                                              ? "Public profile"
+                                              : "Private profile"}
                                         </Text>
                                       </View>
 
@@ -1676,7 +1925,10 @@ export default function Search({
                                           style={[
                                             styles.userFollowButton,
 
-                                            isFollowing &&
+                                            (
+                                              isFollowing ||
+                                              isFriend
+                                            ) &&
                                               styles.userFollowingButton,
 
                                             alreadyRequested &&

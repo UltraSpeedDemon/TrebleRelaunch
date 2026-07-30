@@ -31,7 +31,6 @@ import {
   followUser,
   getFollowers,
   getFollowRequests,
-  getFriends,
   getReviewSong,
   getUser,
   getUserActivity,
@@ -117,8 +116,8 @@ export default function UserProfiles({
   ] = useState([]);
 
   const [
-    myFriends,
-    setMyFriends,
+    myFollowers,
+    setMyFollowers,
   ] = useState([]);
 
   const [
@@ -540,45 +539,46 @@ export default function UserProfiles({
       userId,
     ]);
 
-  const fetchMyFriends =
-    useCallback(async () => {
-      if (!currentUserId) {
+    const fetchMyFollowers =
+  useCallback(async () => {
+    if (!currentUserId) {
+      return [];
+    }
+
+    try {
+      const response =
+        await getFollowers(
+          currentUserId
+        );
+
+      if (!response?.ok) {
         return [];
       }
 
-      try {
-        const response =
-          await getFriends(
-            currentUserId
-          );
+      const data =
+        await response.json();
 
-        if (!response?.ok) {
-          return [];
-        }
+      const followers =
+        normalizeArray(data);
 
-        const data =
-          await response.json();
+      setMyFollowers(
+        followers
+      );
 
-        const friends =
-          normalizeArray(data);
+      return followers;
+    } catch (error) {
+      console.error(
+        "[UserProfiles] My followers error:",
+        error
+      );
 
-        setMyFriends(
-          friends
-        );
+      return [];
+    }
+  }, [
+    currentUserId,
+    normalizeArray,
+  ]);
 
-        return friends;
-      } catch (error) {
-        console.error(
-          "[UserProfiles] Friends error:",
-          error
-        );
-
-        return [];
-      }
-    }, [
-      currentUserId,
-      normalizeArray,
-    ]);
 
   const checkFollowRequest =
     useCallback(async () => {
@@ -755,7 +755,7 @@ export default function UserProfiles({
 
             fetchTheirFollowers(),
 
-            fetchMyFriends(),
+            fetchMyFollowers(),
 
             checkFollowRequest(),
           ]);
@@ -794,15 +794,15 @@ export default function UserProfiles({
         }
       },
       [
-        checkFollowRequest,
-        checkIfFollowing,
-        fetchMyFriends,
-        fetchTheirFollowers,
-        isSelf,
-        loadAllReviewsSections,
-        parseResponse,
-        userId,
-      ]
+      checkFollowRequest,
+      checkIfFollowing,
+      fetchMyFollowers,
+      fetchTheirFollowers,
+      isSelf,
+      loadAllReviewsSections,
+      parseResponse,
+      userId,
+    ]
     );
 
   useFocusEffect(
@@ -812,64 +812,80 @@ export default function UserProfiles({
   );
 
   const iAmFollowing =
-    useMemo(
-      () =>
-        theirFollowers.some(
-          (follower) =>
-            String(
-              follower?.userId ||
-              follower?.uid ||
-              ""
-            ) ===
-            currentUserId
-        ),
-      [
-        currentUserId,
-        theirFollowers,
-      ]
-    );
+  useMemo(
+    () =>
+      theirFollowers.some(
+        (follower) =>
+          String(
+            follower?.userId ||
+            follower?.uid ||
+            follower?.id ||
+            follower?.followerId ||
+            follower?.follower_id ||
+            ""
+          ) ===
+          currentUserId
+      ),
+    [
+      currentUserId,
+      theirFollowers,
+    ]
+  );
 
-  const isInMyFriends =
-    useMemo(
-      () =>
-        myFriends.some(
-          (friend) =>
-            String(
-              friend?.userId ||
-              friend?.uid ||
-              ""
-            ) ===
-            userId
-        ),
-      [
-        myFriends,
-        userId,
-      ]
-    );
+  const theyFollowMe =
+  useMemo(
+    () =>
+      myFollowers.some(
+        (follower) =>
+          String(
+            follower?.userId ||
+            follower?.uid ||
+            follower?.id ||
+            follower?.followerId ||
+            follower?.follower_id ||
+            ""
+          ) ===
+          userId
+      ),
+    [
+      myFollowers,
+      userId,
+    ]
+  );
 
-  const finalButtonLabel =
-    useMemo(() => {
-      if (
-        iAmFollowing ||
-        isInMyFriends
-      ) {
-        return "Following";
-      }
+const isFriend =
+  iAmFollowing &&
+  theyFollowMe;
 
-      if (
-        !isPublic &&
-        followRequested
-      ) {
-        return "Requested";
-      }
+const finalButtonLabel =
+  useMemo(() => {
+    if (isFriend) {
+      return "Friends";
+    }
 
-      return "Follow";
-    }, [
-      followRequested,
-      iAmFollowing,
-      isInMyFriends,
-      isPublic,
-    ]);
+    if (iAmFollowing) {
+      return "Following";
+    }
+
+    if (
+      !isPublic &&
+      followRequested
+    ) {
+      return "Requested";
+    }
+
+    if (theyFollowMe) {
+      return "Follow Back";
+    }
+
+    return "Follow";
+  }, [
+    followRequested,
+    iAmFollowing,
+    isFriend,
+    isPublic,
+    theyFollowMe,
+  ]);
 
   const updateReviewArray =
     useCallback(
@@ -1059,10 +1075,10 @@ export default function UserProfiles({
         setFollowLoading(true);
 
         if (
-          finalButtonLabel ===
-          "Following"
-        ) {
-          const response =
+            finalButtonLabel === "Following" ||
+            finalButtonLabel === "Friends"
+          ) {
+            const response =
             await unfollowUser(
               currentUserId,
               userId
@@ -1081,19 +1097,10 @@ export default function UserProfiles({
               )
           );
 
-          setMyFriends(
-            (current) =>
-              current.filter(
-                (friend) =>
-                  String(
-                    friend?.userId ||
-                    friend?.uid ||
-                    ""
-                  ) !== userId
-              )
-          );
-
-          await fetchTheirFollowers();
+          await Promise.all([
+            fetchTheirFollowers(),
+            fetchMyFollowers(),
+          ]);
 
           return;
         }
@@ -1117,7 +1124,7 @@ export default function UserProfiles({
 
           await Promise.all([
             fetchTheirFollowers(),
-            fetchMyFriends(),
+            fetchMyFollowers(),
           ]);
 
           return;
@@ -1178,17 +1185,17 @@ export default function UserProfiles({
         setFollowLoading(false);
       }
     }, [
-      currentUserId,
-      fetchMyFriends,
-      fetchTheirFollowers,
-      finalButtonLabel,
-      followLoading,
-      followRequested,
-      isPublic,
-      isSelf,
-      parseResponse,
-      userId,
-    ]);
+    currentUserId,
+    fetchMyFollowers,
+    fetchTheirFollowers,
+    finalButtonLabel,
+    followLoading,
+    followRequested,
+    isPublic,
+    isSelf,
+    parseResponse,
+    userId,
+  ]);
 
   const handleSpotifyBadgePress =
     useCallback(() => {
@@ -1706,8 +1713,10 @@ export default function UserProfiles({
                   style={[
                     styles.followButton,
 
-                    finalButtonLabel ===
-                      "Following" &&
+                    (
+                      finalButtonLabel === "Following" ||
+                      finalButtonLabel === "Friends"
+                    ) &&
                       styles.followingButton,
 
                     finalButtonLabel ===
@@ -1747,15 +1756,15 @@ export default function UserProfiles({
                   )}
                 </TouchableOpacity>
 
-                {isInMyFriends ? (
-                  <Text
-                    style={
-                      styles.friendText
-                    }
-                  >
-                    Friends
-                  </Text>
-                ) : null}
+                {isFriend ? (
+                <Text style={styles.friendText}>
+                  ✓ Friends — music sharing enabled
+                </Text>
+              ) : theyFollowMe && !iAmFollowing ? (
+                <Text style={styles.followsYouText}>
+                  Follows you
+                </Text>
+              ) : null}
               </View>
             ) : (
               <TouchableOpacity
@@ -1956,6 +1965,15 @@ export default function UserProfiles({
 
 const styles =
   StyleSheet.create({
+
+    followsYouText: {
+  color: "rgba(255,255,255,0.6)",
+
+  fontSize: 12,
+  fontWeight: "700",
+
+  marginTop: 8,
+},
     container: {
       flex: 1,
       minHeight: 0,

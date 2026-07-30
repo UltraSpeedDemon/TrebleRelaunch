@@ -33,7 +33,7 @@ import colours from "../styles/colours";
 import {
   deleteReview,
   getFollowers,
-  getFriends,
+  getFollowing,
   getReviewSong,
   getUser,
   getUserActivity,
@@ -327,6 +327,88 @@ export default function Profile({
       }
     }, [enrichReviewsWithSong]);
 
+    const normalizeUserArray =
+  useCallback((data) => {
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (Array.isArray(data?.users)) {
+      return data.users;
+    }
+
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
+
+    if (Array.isArray(data?.followers)) {
+      return data.followers;
+    }
+
+    if (Array.isArray(data?.following)) {
+      return data.following;
+    }
+
+    return [];
+  }, []);
+
+  const loadSocialCounts =
+  useCallback(async () => {
+    const currentUser =
+      auth.currentUser;
+
+    if (!currentUser?.uid) {
+      setFollowers(0);
+      setFollowing(0);
+
+      return;
+    }
+
+    try {
+      const [
+        followersResponse,
+        followingResponse,
+      ] = await Promise.all([
+        getFollowers(
+          currentUser.uid
+        ),
+
+        getFollowing(
+          currentUser.uid
+        ),
+      ]);
+
+      if (followersResponse?.ok) {
+        const followersData =
+          await followersResponse.json();
+
+        setFollowers(
+          normalizeUserArray(
+            followersData
+          ).length
+        );
+      }
+
+      if (followingResponse?.ok) {
+        const followingData =
+          await followingResponse.json();
+
+        setFollowing(
+          normalizeUserArray(
+            followingData
+          ).length
+        );
+      }
+    } catch (error) {
+      console.error(
+        "[Profile] Social-count error:",
+        error
+      );
+    }
+  }, [
+    normalizeUserArray,
+  ]);
+
   const loadProfile =
     useCallback(async () => {
       const currentUser =
@@ -408,7 +490,10 @@ export default function Profile({
           setAvatar(null);
         }
 
-        await loadReviewSections();
+        await Promise.all([
+          loadReviewSections(),
+          loadSocialCounts(),
+        ]);
       } catch (error) {
         console.error(
           "[Profile] Load error:",
@@ -425,6 +510,7 @@ export default function Profile({
       }
     }, [
       loadReviewSections,
+      loadSocialCounts,
       navigation,
     ]);
 
@@ -436,80 +522,6 @@ export default function Profile({
     isFocused,
     loadProfile,
   ]);
-
-  /*
-   * Update follower/following counts independently.
-   */
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchSocialCounts =
-      async () => {
-        const currentUser =
-          auth.currentUser;
-
-        if (!currentUser?.uid) {
-          return;
-        }
-
-        try {
-          const [
-            followersResponse,
-            followingResponse,
-          ] = await Promise.all([
-            getFollowers(
-              currentUser.uid
-            ),
-            getFriends(
-              currentUser.uid
-            ),
-          ]);
-
-          if (
-            mounted &&
-            followersResponse?.ok
-          ) {
-            const followerData =
-              await followersResponse.json();
-
-            setFollowers(
-              Array.isArray(
-                followerData
-              )
-                ? followerData.length
-                : 0
-            );
-          }
-
-          if (
-            mounted &&
-            followingResponse?.ok
-          ) {
-            const followingData =
-              await followingResponse.json();
-
-            setFollowing(
-              Array.isArray(
-                followingData
-              )
-                ? followingData.length
-                : 0
-            );
-          }
-        } catch (error) {
-          console.error(
-            "[Profile] Social-count error:",
-            error
-          );
-        }
-      };
-
-    fetchSocialCounts();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const updateReviewArray =
     useCallback(

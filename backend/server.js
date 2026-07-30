@@ -3307,9 +3307,1792 @@ app.get("/users/:uid", async (req, res) => {
   }
 });
 
-app.get("/users/:uid/followRequests", (req, res) => {
-  res.json([]);
-});
+// ============================================================================
+// FOLLOWERS, FOLLOWING, FRIENDS, FOLLOW REQUESTS, AND NOTIFICATIONS
+// ============================================================================
+
+function cleanUserId(value) {
+  return String(value || "").trim();
+}
+
+function buildFollowId(followerId, followedId) {
+  return `${followerId}_${followedId}`;
+}
+
+function buildFollowRequestId(followerId, followedId) {
+  return `${followerId}_${followedId}`;
+}
+
+async function getSocialUserProfile(userId) {
+  const cleanId = cleanUserId(userId);
+
+  if (!cleanId) {
+    return null;
+  }
+
+  const snapshot = await db
+    .collection("users")
+    .doc(cleanId)
+    .get();
+
+  if (!snapshot.exists) {
+    return {
+      uid: cleanId,
+      userId: cleanId,
+      id: cleanId,
+      rid: cleanId,
+      username: "Treble User",
+      displayName: "",
+      avatar: "None",
+      isPublic: true,
+    };
+  }
+
+  const data = snapshot.data() || {};
+
+  return {
+    ...data,
+
+    uid: cleanId,
+    userId: cleanId,
+    id: cleanId,
+    rid: cleanId,
+
+    username:
+      data.username ||
+      data.displayName ||
+      data.email?.split("@")[0] ||
+      "Treble User",
+
+    displayName:
+      data.displayName ||
+      data.username ||
+      "",
+
+    avatar:
+      data.avatar ||
+      data.photoURL ||
+      "None",
+
+    isPublic:
+      data.isPublic !== false,
+  };
+}
+
+async function createNotification({
+  type,
+  fromUserId,
+  toUserId,
+  targetId = null,
+  songTitle = "",
+  dedupeKey = null,
+}) {
+  const cleanFromUserId =
+    cleanUserId(fromUserId);
+
+  const cleanToUserId =
+    cleanUserId(toUserId);
+
+  if (
+    !type ||
+    !cleanFromUserId ||
+    !cleanToUserId ||
+    cleanFromUserId === cleanToUserId
+  ) {
+    return null;
+  }
+
+  const notificationRef =
+    dedupeKey
+      ? db
+          .collection("notifications")
+          .doc(dedupeKey)
+      : db
+          .collection("notifications")
+          .doc();
+
+  await notificationRef.set(
+    {
+      id: notificationRef.id,
+
+      type:
+        String(type)
+          .trim()
+          .toLowerCase(),
+
+      fromUserId:
+        cleanFromUserId,
+
+      toUserId:
+        cleanToUserId,
+
+      targetId:
+        targetId
+          ? String(targetId)
+          : null,
+
+      songTitle:
+        String(songTitle || ""),
+
+      read: false,
+
+      createdAt:
+        FieldValue.serverTimestamp(),
+
+      updatedAt:
+        FieldValue.serverTimestamp(),
+    },
+    {
+      merge: true,
+    }
+  );
+
+  return notificationRef.id;
+}
+
+async function deleteNotificationsMatching({
+  type,
+  fromUserId,
+  toUserId,
+}) {
+  const cleanFromUserId =
+    cleanUserId(fromUserId);
+
+  const cleanToUserId =
+    cleanUserId(toUserId);
+
+  if (
+    !type ||
+    !cleanFromUserId ||
+    !cleanToUserId
+  ) {
+    return;
+  }
+
+  const snapshot = await db
+    .collection("notifications")
+    .where(
+      "toUserId",
+      "==",
+      cleanToUserId
+    )
+    .get();
+
+  const batch = db.batch();
+
+  snapshot.docs.forEach((document) => {
+    const data =
+      document.data() || {};
+
+    if (
+      data.type === type &&
+      data.fromUserId ===
+        cleanFromUserId
+    ) {
+      batch.delete(document.ref);
+    }
+  });
+
+  await batch.commit();
+}
+
+async function updateSocialCounts(
+  followerId,
+  followedId
+) {
+  const cleanFollowerId =
+    cleanUserId(followerId);
+
+  const cleanFollowedId =
+    cleanUserId(followedId);
+
+  if (
+    !cleanFollowerId ||
+    !cleanFollowedId
+  ) {
+    return;
+  }
+
+  const [
+    followingSnapshot,
+    followersSnapshot,
+  ] = await Promise.all([
+    db
+      .collection("follows")
+      .where(
+        "followerId",
+        "==",
+        cleanFollowerId
+      )
+      .get(),
+
+    db
+      .collection("follows")
+      .where(
+        "followedId",
+        "==",
+        cleanFollowedId
+      )
+      .get(),
+  ]);
+
+  const batch = db.batch();
+
+  batch.set(
+    db
+      .collection("users")
+      .doc(cleanFollowerId),
+    {
+      followingCount:
+        followingSnapshot.size,
+
+      updatedAt:
+        FieldValue.serverTimestamp(),
+    },
+    {
+      merge: true,
+    }
+  );
+
+  batch.set(
+    db
+      .collection("users")
+      .doc(cleanFollowedId),
+    {
+      followersCount:
+        followersSnapshot.size,
+
+      updatedAt:
+        FieldValue.serverTimestamp(),
+    },
+    {
+      merge: true,
+    }
+  );
+
+  await batch.commit();
+}
+
+async function createFollowRelationship(
+  followerId,
+  followedId
+) {
+  const cleanFollowerId =
+    cleanUserId(followerId);
+
+  const cleanFollowedId =
+    cleanUserId(followedId);
+
+  if (
+    !cleanFollowerId ||
+    !cleanFollowedId
+  ) {
+    throw new Error(
+      "Both follower_id and followed_id are required."
+    );
+  }
+
+  if (
+    cleanFollowerId ===
+    cleanFollowedId
+  ) {
+    throw new Error(
+      "You cannot follow yourself."
+    );
+  }
+
+  const followId =
+    buildFollowId(
+      cleanFollowerId,
+      cleanFollowedId
+    );
+
+  const followRef = db
+    .collection("follows")
+    .doc(followId);
+
+  const existing =
+    await followRef.get();
+
+  if (existing.exists) {
+    return {
+      followId,
+      alreadyFollowing: true,
+    };
+  }
+
+  await followRef.set({
+    id: followId,
+
+    followerId:
+      cleanFollowerId,
+
+    followedId:
+      cleanFollowedId,
+
+    createdAt:
+      FieldValue.serverTimestamp(),
+  });
+
+  await updateSocialCounts(
+    cleanFollowerId,
+    cleanFollowedId
+  );
+
+  return {
+    followId,
+    alreadyFollowing: false,
+  };
+}
+
+// ============================================================================
+// FOLLOW A PUBLIC ACCOUNT
+// ============================================================================
+
+app.post(
+  "/users/follow",
+  async (req, res) => {
+    try {
+      const followerId =
+        cleanUserId(
+          req.body?.follower_id ||
+          req.body?.followerId
+        );
+
+      const followedId =
+        cleanUserId(
+          req.body?.followed_id ||
+          req.body?.followedId
+        );
+
+      if (
+        !followerId ||
+        !followedId
+      ) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "follower_id and followed_id are required.",
+          });
+      }
+
+      if (
+        followerId === followedId
+      ) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "You cannot follow yourself.",
+          });
+      }
+
+      const followedUser =
+        await getSocialUserProfile(
+          followedId
+        );
+
+      if (!followedUser) {
+        return res
+          .status(404)
+          .json({
+            ok: false,
+            error:
+              "The account you are trying to follow was not found.",
+          });
+      }
+
+      /*
+       * Private accounts must be handled through
+       * POST /users/requestFollow instead.
+       */
+      if (
+        followedUser.isPublic ===
+        false
+      ) {
+        return res
+          .status(403)
+          .json({
+            ok: false,
+            requiresRequest: true,
+            error:
+              "This account is private. Send a follow request instead.",
+          });
+      }
+
+      const result =
+        await createFollowRelationship(
+          followerId,
+          followedId
+        );
+
+      /*
+       * Only create one follow notification.
+       */
+      if (
+        !result.alreadyFollowing
+      ) {
+        await createNotification({
+          type: "follow",
+
+          fromUserId:
+            followerId,
+
+          toUserId:
+            followedId,
+
+          dedupeKey:
+            `follow_${followerId}_${followedId}`,
+        });
+      }
+
+      return res
+        .status(
+          result.alreadyFollowing
+            ? 200
+            : 201
+        )
+        .json({
+          ok: true,
+
+          following: true,
+
+          alreadyFollowing:
+            result.alreadyFollowing,
+
+          followerId,
+          followedId,
+
+          followId:
+            result.followId,
+        });
+    } catch (error) {
+      console.error(
+        "POST /users/follow error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          error:
+            error?.message ||
+            "Unable to follow user.",
+        });
+    }
+  }
+);
+
+// ============================================================================
+// UNFOLLOW
+// ============================================================================
+
+app.post(
+  "/users/unfollow",
+  async (req, res) => {
+    try {
+      const followerId =
+        cleanUserId(
+          req.body?.follower_id ||
+          req.body?.followerId
+        );
+
+      const followedId =
+        cleanUserId(
+          req.body?.followed_id ||
+          req.body?.followedId
+        );
+
+      if (
+        !followerId ||
+        !followedId
+      ) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "follower_id and followed_id are required.",
+          });
+      }
+
+      const followId =
+        buildFollowId(
+          followerId,
+          followedId
+        );
+
+      const followRef = db
+        .collection("follows")
+        .doc(followId);
+
+      const snapshot =
+        await followRef.get();
+
+      if (snapshot.exists) {
+        await followRef.delete();
+
+        await updateSocialCounts(
+          followerId,
+          followedId
+        );
+      }
+
+      /*
+       * Remove the old public follow notification.
+       */
+      await deleteNotificationsMatching({
+        type: "follow",
+
+        fromUserId:
+          followerId,
+
+        toUserId:
+          followedId,
+      });
+
+      return res
+        .status(200)
+        .json({
+          ok: true,
+          following: false,
+
+          removed:
+            snapshot.exists,
+
+          followerId,
+          followedId,
+        });
+    } catch (error) {
+      console.error(
+        "POST /users/unfollow error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          error:
+            error?.message ||
+            "Unable to unfollow user.",
+        });
+    }
+  }
+);
+
+// ============================================================================
+// GET FOLLOWERS
+// ============================================================================
+
+app.get(
+  "/users/:uid/followers",
+  async (req, res) => {
+    try {
+      const userId =
+        cleanUserId(
+          req.params.uid
+        );
+
+      if (!userId) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            followers: [],
+            error:
+              "User ID is required.",
+          });
+      }
+
+      const snapshot =
+        await db
+          .collection("follows")
+          .where(
+            "followedId",
+            "==",
+            userId
+          )
+          .get();
+
+      const followers =
+        await Promise.all(
+          snapshot.docs.map(
+            async (document) => {
+              const relationship =
+                document.data() ||
+                {};
+
+              const followerId =
+                cleanUserId(
+                  relationship.followerId
+                );
+
+              const profile =
+                await getSocialUserProfile(
+                  followerId
+                );
+
+              /*
+               * Does the viewed account also follow
+               * this follower back?
+               */
+              const reverseFollow =
+                await db
+                  .collection("follows")
+                  .doc(
+                    buildFollowId(
+                      userId,
+                      followerId
+                    )
+                  )
+                  .get();
+
+              return {
+                ...profile,
+
+                userId:
+                  followerId,
+
+                uid:
+                  followerId,
+
+                id:
+                  followerId,
+
+                isFollowing:
+                  reverseFollow.exists,
+
+                followsYou: true,
+
+                isFriend:
+                  reverseFollow.exists,
+
+                followedAt:
+                  serializeTimestamp(
+                    relationship.createdAt
+                  ),
+              };
+            }
+          )
+        );
+
+      followers.sort(
+        (first, second) => {
+          return (
+            new Date(
+              second.followedAt || 0
+            ).getTime() -
+            new Date(
+              first.followedAt || 0
+            ).getTime()
+          );
+        }
+      );
+
+      return res
+        .status(200)
+        .json({
+          ok: true,
+          followers,
+          count:
+            followers.length,
+        });
+    } catch (error) {
+      console.error(
+        "GET /users/:uid/followers error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          followers: [],
+          error:
+            error?.message ||
+            "Unable to load followers.",
+        });
+    }
+  }
+);
+
+// ============================================================================
+// GET FOLLOWING
+// ============================================================================
+
+app.get(
+  "/users/:uid/following",
+  async (req, res) => {
+    try {
+      const userId =
+        cleanUserId(
+          req.params.uid
+        );
+
+      if (!userId) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            following: [],
+            error:
+              "User ID is required.",
+          });
+      }
+
+      const snapshot =
+        await db
+          .collection("follows")
+          .where(
+            "followerId",
+            "==",
+            userId
+          )
+          .get();
+
+      const following =
+        await Promise.all(
+          snapshot.docs.map(
+            async (document) => {
+              const relationship =
+                document.data() ||
+                {};
+
+              const followedId =
+                cleanUserId(
+                  relationship.followedId
+                );
+
+              const profile =
+                await getSocialUserProfile(
+                  followedId
+                );
+
+              /*
+               * Does this account also follow
+               * the current user?
+               */
+              const reverseFollow =
+                await db
+                  .collection("follows")
+                  .doc(
+                    buildFollowId(
+                      followedId,
+                      userId
+                    )
+                  )
+                  .get();
+
+              return {
+                ...profile,
+
+                userId:
+                  followedId,
+
+                uid:
+                  followedId,
+
+                id:
+                  followedId,
+
+                isFollowing: true,
+
+                followsYou:
+                  reverseFollow.exists,
+
+                isFriend:
+                  reverseFollow.exists,
+
+                followedAt:
+                  serializeTimestamp(
+                    relationship.createdAt
+                  ),
+              };
+            }
+          )
+        );
+
+      following.sort(
+        (first, second) => {
+          return (
+            new Date(
+              second.followedAt || 0
+            ).getTime() -
+            new Date(
+              first.followedAt || 0
+            ).getTime()
+          );
+        }
+      );
+
+      return res
+        .status(200)
+        .json({
+          ok: true,
+          following,
+          count:
+            following.length,
+        });
+    } catch (error) {
+      console.error(
+        "GET /users/:uid/following error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          following: [],
+          error:
+            error?.message ||
+            "Unable to load following.",
+        });
+    }
+  }
+);
+
+// ============================================================================
+// GET FRIENDS
+// A friend is someone where both follow relationships exist.
+// ============================================================================
+
+app.get(
+  "/users/:uid/friends",
+  async (req, res) => {
+    try {
+      const userId =
+        cleanUserId(
+          req.params.uid
+        );
+
+      if (!userId) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            friends: [],
+            error:
+              "User ID is required.",
+          });
+      }
+
+      const followingSnapshot =
+        await db
+          .collection("follows")
+          .where(
+            "followerId",
+            "==",
+            userId
+          )
+          .get();
+
+      const friends = [];
+
+      for (
+        const document of
+        followingSnapshot.docs
+      ) {
+        const relationship =
+          document.data() ||
+          {};
+
+        const followedId =
+          cleanUserId(
+            relationship.followedId
+          );
+
+        if (!followedId) {
+          continue;
+        }
+
+        const reverseSnapshot =
+          await db
+            .collection("follows")
+            .doc(
+              buildFollowId(
+                followedId,
+                userId
+              )
+            )
+            .get();
+
+        if (!reverseSnapshot.exists) {
+          continue;
+        }
+
+        const profile =
+          await getSocialUserProfile(
+            followedId
+          );
+
+        friends.push({
+          ...profile,
+
+          userId:
+            followedId,
+
+          uid:
+            followedId,
+
+          id:
+            followedId,
+
+          isFollowing: true,
+          followsYou: true,
+          isFriend: true,
+        });
+      }
+
+      return res
+        .status(200)
+        .json({
+          ok: true,
+          friends,
+          count:
+            friends.length,
+        });
+    } catch (error) {
+      console.error(
+        "GET /users/:uid/friends error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          friends: [],
+          error:
+            error?.message ||
+            "Unable to load friends.",
+        });
+    }
+  }
+);
+
+// ============================================================================
+// REQUEST TO FOLLOW A PRIVATE ACCOUNT
+// ============================================================================
+
+app.post(
+  "/users/requestFollow",
+  async (req, res) => {
+    try {
+      const followerId =
+        cleanUserId(
+          req.body?.follower_id ||
+          req.body?.followerId
+        );
+
+      const followedId =
+        cleanUserId(
+          req.body?.followed_id ||
+          req.body?.followedId
+        );
+
+      if (
+        !followerId ||
+        !followedId
+      ) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "follower_id and followed_id are required.",
+          });
+      }
+
+      if (
+        followerId === followedId
+      ) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "You cannot request to follow yourself.",
+          });
+      }
+
+      const followedUser =
+        await getSocialUserProfile(
+          followedId
+        );
+
+      if (!followedUser) {
+        return res
+          .status(404)
+          .json({
+            ok: false,
+            error:
+              "The requested account was not found.",
+          });
+      }
+
+      /*
+       * Public accounts should be followed immediately.
+       */
+      if (
+        followedUser.isPublic !==
+        false
+      ) {
+        const result =
+          await createFollowRelationship(
+            followerId,
+            followedId
+          );
+
+        if (
+          !result.alreadyFollowing
+        ) {
+          await createNotification({
+            type: "follow",
+
+            fromUserId:
+              followerId,
+
+            toUserId:
+              followedId,
+
+            dedupeKey:
+              `follow_${followerId}_${followedId}`,
+          });
+        }
+
+        return res
+          .status(
+            result.alreadyFollowing
+              ? 200
+              : 201
+          )
+          .json({
+            ok: true,
+            following: true,
+            requestRequired: false,
+          });
+      }
+
+      const existingFollow =
+        await db
+          .collection("follows")
+          .doc(
+            buildFollowId(
+              followerId,
+              followedId
+            )
+          )
+          .get();
+
+      if (existingFollow.exists) {
+        return res
+          .status(200)
+          .json({
+            ok: true,
+            following: true,
+            alreadyFollowing: true,
+          });
+      }
+
+      const requestId =
+        buildFollowRequestId(
+          followerId,
+          followedId
+        );
+
+      const requestRef = db
+        .collection(
+          "followRequests"
+        )
+        .doc(requestId);
+
+      const existingRequest =
+        await requestRef.get();
+
+      if (!existingRequest.exists) {
+        await requestRef.set({
+          id: requestId,
+
+          followerId,
+          followedId,
+
+          status: "pending",
+
+          createdAt:
+            FieldValue.serverTimestamp(),
+
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        });
+
+        await createNotification({
+          type:
+            "follow_request",
+
+          fromUserId:
+            followerId,
+
+          toUserId:
+            followedId,
+
+          dedupeKey:
+            `follow_request_${followerId}_${followedId}`,
+        });
+      }
+
+      return res
+        .status(
+          existingRequest.exists
+            ? 200
+            : 201
+        )
+        .json({
+          ok: true,
+
+          requested: true,
+
+          alreadyRequested:
+            existingRequest.exists,
+
+          requestId,
+          followerId,
+          followedId,
+        });
+    } catch (error) {
+      console.error(
+        "POST /users/requestFollow error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          error:
+            error?.message ||
+            "Unable to send follow request.",
+        });
+    }
+  }
+);
+
+// ============================================================================
+// GET PENDING FOLLOW REQUESTS RECEIVED BY A USER
+// ============================================================================
+
+app.get(
+  "/users/:uid/followRequests",
+  async (req, res) => {
+    try {
+      const followedId =
+        cleanUserId(
+          req.params.uid
+        );
+
+      if (!followedId) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            requests: [],
+            error:
+              "User ID is required.",
+          });
+      }
+
+      const snapshot =
+        await db
+          .collection(
+            "followRequests"
+          )
+          .where(
+            "followedId",
+            "==",
+            followedId
+          )
+          .get();
+
+      const pendingDocuments =
+        snapshot.docs.filter(
+          (document) => {
+            const data =
+              document.data() ||
+              {};
+
+            return (
+              !data.status ||
+              data.status ===
+                "pending"
+            );
+          }
+        );
+
+      const requests =
+        await Promise.all(
+          pendingDocuments.map(
+            async (document) => {
+              const request =
+                document.data() ||
+                {};
+
+              const followerId =
+                cleanUserId(
+                  request.followerId
+                );
+
+              const profile =
+                await getSocialUserProfile(
+                  followerId
+                );
+
+              return {
+                ...profile,
+
+                id:
+                  document.id,
+
+                requestId:
+                  document.id,
+
+                userId:
+                  followerId,
+
+                uid:
+                  followerId,
+
+                requesterId:
+                  followerId,
+
+                fromUserId:
+                  followerId,
+
+                followedId,
+
+                status:
+                  request.status ||
+                  "pending",
+
+                createdAt:
+                  serializeTimestamp(
+                    request.createdAt
+                  ),
+              };
+            }
+          )
+        );
+
+      requests.sort(
+        (first, second) => {
+          return (
+            new Date(
+              second.createdAt || 0
+            ).getTime() -
+            new Date(
+              first.createdAt || 0
+            ).getTime()
+          );
+        }
+      );
+
+      return res
+        .status(200)
+        .json({
+          ok: true,
+          requests,
+          followRequests:
+            requests,
+          count:
+            requests.length,
+        });
+    } catch (error) {
+      console.error(
+        "GET /users/:uid/followRequests error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          requests: [],
+          followRequests: [],
+          error:
+            error?.message ||
+            "Unable to load follow requests.",
+        });
+    }
+  }
+);
+
+// ============================================================================
+// ACCEPT OR DENY A FOLLOW REQUEST
+// ============================================================================
+
+app.post(
+  "/users/respondFollowRequest",
+  async (req, res) => {
+    try {
+      const followedId =
+        cleanUserId(
+          req.body?.followed_id ||
+          req.body?.followedId
+        );
+
+      const followerId =
+        cleanUserId(
+          req.body?.follower_id ||
+          req.body?.followerId
+        );
+
+      const accept =
+        req.body?.accept === true ||
+        req.body?.accept ===
+          "true" ||
+        req.body?.accept === 1;
+
+      if (
+        !followedId ||
+        !followerId
+      ) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "followed_id and follower_id are required.",
+          });
+      }
+
+      const requestId =
+        buildFollowRequestId(
+          followerId,
+          followedId
+        );
+
+      const requestRef = db
+        .collection(
+          "followRequests"
+        )
+        .doc(requestId);
+
+      const requestSnapshot =
+        await requestRef.get();
+
+      if (
+        !requestSnapshot.exists
+      ) {
+        return res
+          .status(404)
+          .json({
+            ok: false,
+            error:
+              "Follow request was not found or was already handled.",
+          });
+      }
+
+      if (accept) {
+        await createFollowRelationship(
+          followerId,
+          followedId
+        );
+      }
+
+      /*
+       * Remove the pending request after either response.
+       */
+      await requestRef.delete();
+
+      /*
+       * Remove the receiver's request notification.
+       */
+      await deleteNotificationsMatching({
+        type:
+          "follow_request",
+
+        fromUserId:
+          followerId,
+
+        toUserId:
+          followedId,
+      });
+
+      if (accept) {
+        /*
+         * Notify the requester that their request
+         * was accepted.
+         */
+        await createNotification({
+          type:
+            "follow_accepted",
+
+          fromUserId:
+            followedId,
+
+          toUserId:
+            followerId,
+
+          dedupeKey:
+            `follow_accepted_${followedId}_${followerId}`,
+        });
+      }
+
+      return res
+        .status(200)
+        .json({
+          ok: true,
+
+          accepted:
+            accept,
+
+          denied:
+            !accept,
+
+          following:
+            accept,
+
+          followerId,
+          followedId,
+        });
+    } catch (error) {
+      console.error(
+        "POST /users/respondFollowRequest error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          error:
+            error?.message ||
+            "Unable to process follow request.",
+        });
+    }
+  }
+);
+
+// ============================================================================
+// GET NOTIFICATIONS
+// ============================================================================
+
+app.get(
+  "/users/:uid/notifications",
+  async (req, res) => {
+    try {
+      const userId =
+        cleanUserId(
+          req.params.uid
+        );
+
+      if (!userId) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            notifications: [],
+            error:
+              "User ID is required.",
+          });
+      }
+
+      /*
+       * Do not use orderBy here yet. Reading and sorting
+       * in JavaScript avoids requiring a Firestore
+       * composite index during initial setup.
+       */
+      const snapshot =
+        await db
+          .collection(
+            "notifications"
+          )
+          .where(
+            "toUserId",
+            "==",
+            userId
+          )
+          .get();
+
+      const notifications =
+        await Promise.all(
+          snapshot.docs.map(
+            async (document) => {
+              const data =
+                document.data() ||
+                {};
+
+              const fromUserId =
+                cleanUserId(
+                  data.fromUserId
+                );
+
+              const profile =
+                fromUserId
+                  ? await getSocialUserProfile(
+                      fromUserId
+                    )
+                  : null;
+
+              return {
+                id:
+                  document.id,
+
+                notificationId:
+                  document.id,
+
+                type:
+                  data.type ||
+                  "follow",
+
+                fromUserId,
+
+                userId:
+                  fromUserId,
+
+                toUserId:
+                  userId,
+
+                username:
+                  profile?.username ||
+                  "Treble User",
+
+                displayName:
+                  profile?.displayName ||
+                  "",
+
+                avatar:
+                  profile?.avatar ||
+                  "None",
+
+                targetId:
+                  data.targetId ||
+                  null,
+
+                songTitle:
+                  data.songTitle ||
+                  "",
+
+                read:
+                  data.read === true,
+
+                createdAt:
+                  serializeTimestamp(
+                    data.createdAt
+                  ),
+
+                updatedAt:
+                  serializeTimestamp(
+                    data.updatedAt
+                  ),
+              };
+            }
+          )
+        );
+
+      notifications.sort(
+        (first, second) => {
+          return (
+            new Date(
+              second.createdAt || 0
+            ).getTime() -
+            new Date(
+              first.createdAt || 0
+            ).getTime()
+          );
+        }
+      );
+
+      const unreadCount =
+        notifications.filter(
+          (notification) =>
+            !notification.read
+        ).length;
+
+      return res
+        .status(200)
+        .json({
+          ok: true,
+
+          notifications,
+
+          count:
+            notifications.length,
+
+          unreadCount,
+        });
+    } catch (error) {
+      console.error(
+        "GET /users/:uid/notifications error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          notifications: [],
+          unreadCount: 0,
+          error:
+            error?.message ||
+            "Unable to load notifications.",
+        });
+    }
+  }
+);
+
+// ============================================================================
+// MARK NOTIFICATIONS READ
+// ============================================================================
+
+app.post(
+  "/users/markNotificationsRead",
+  async (req, res) => {
+    try {
+      const userId =
+        cleanUserId(
+          req.body?.user_id ||
+          req.body?.userId
+        );
+
+      const notificationIds =
+        Array.isArray(
+          req.body
+            ?.notification_ids
+        )
+          ? req.body
+              .notification_ids
+              .map(cleanUserId)
+              .filter(Boolean)
+          : [];
+
+      if (!userId) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "user_id is required.",
+          });
+      }
+
+      let notificationDocuments =
+        [];
+
+      /*
+       * Mark only the supplied notification IDs when
+       * the frontend sends a list.
+       */
+      if (
+        notificationIds.length >
+        0
+      ) {
+        const snapshots =
+          await Promise.all(
+            notificationIds.map(
+              (notificationId) =>
+                db
+                  .collection(
+                    "notifications"
+                  )
+                  .doc(
+                    notificationId
+                  )
+                  .get()
+            )
+          );
+
+        notificationDocuments =
+          snapshots.filter(
+            (snapshot) =>
+              snapshot.exists &&
+              snapshot.data()
+                ?.toUserId ===
+                userId
+          );
+      } else {
+        /*
+         * An empty ID list means mark every notification
+         * belonging to this user as read.
+         */
+        const snapshot =
+          await db
+            .collection(
+              "notifications"
+            )
+            .where(
+              "toUserId",
+              "==",
+              userId
+            )
+            .get();
+
+        notificationDocuments =
+          snapshot.docs;
+      }
+
+      if (
+        notificationDocuments.length ===
+        0
+      ) {
+        return res
+          .status(200)
+          .json({
+            ok: true,
+            updatedCount: 0,
+          });
+      }
+
+      const batch = db.batch();
+
+      notificationDocuments.forEach(
+        (document) => {
+          batch.update(
+            document.ref,
+            {
+              read: true,
+
+              readAt:
+                FieldValue.serverTimestamp(),
+
+              updatedAt:
+                FieldValue.serverTimestamp(),
+            }
+          );
+        }
+      );
+
+      await batch.commit();
+
+      return res
+        .status(200)
+        .json({
+          ok: true,
+
+          updatedCount:
+            notificationDocuments.length,
+        });
+    } catch (error) {
+      console.error(
+        "POST /users/markNotificationsRead error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          error:
+            error?.message ||
+            "Unable to mark notifications as read.",
+        });
+    }
+  }
+);
 
 const server = app.listen(port, "0.0.0.0", () => {
   console.log(`Treble backend running at http://localhost:${port}`);

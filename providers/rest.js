@@ -370,6 +370,29 @@ export async function respondFollowRequest(followed_id, follower_id, accept) {
 }
 // #endregion
 
+// =====================================================
+// Notification endpoints
+// =====================================================
+
+export async function getNotifications(userId) {
+  return await serverGet(`users/${userId}/notifications`);
+}
+
+export async function markNotificationsRead(
+  userId,
+  notificationIds
+) {
+  return await serverPost(
+    "users/markNotificationsRead",
+    {
+      user_id: userId,
+      notification_ids: notificationIds,
+    }
+  );
+}
+
+
+
 //#region metadata endpoints
 export async function populateMetadata(reviewType, id) {
   const params = { reviewType, id };
