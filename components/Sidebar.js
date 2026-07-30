@@ -887,6 +887,9 @@ const handleLogout = useCallback(() => {
               onPress={() =>
                 navigateTo("Settings")
               }
+              iconStyle={
+                styles.cardGameIcon
+              }
             />
 
             <MenuItem
