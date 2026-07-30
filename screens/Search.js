@@ -2104,6 +2104,13 @@ const styles = StyleSheet.create({
 
     paddingTop: 20,
     paddingBottom: 10,
+
+    /*
+     * Reserve a dedicated area for the mobile Sidebar
+     * hamburger so it cannot sit over the search field.
+     */
+    paddingLeft: 92,
+    paddingRight: 14,
   },
 
   searchContainer: {
@@ -2120,7 +2127,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
 
-    marginLeft: 14,
+    marginLeft: 12,
 
     borderRadius: 24,
 

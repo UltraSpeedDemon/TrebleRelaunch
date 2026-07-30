@@ -1559,9 +1559,12 @@ const finalButtonLabel =
             </View>
 
             <View
-              style={
-                styles.headerInfo
-              }
+              style={[
+                styles.headerInfo,
+
+                isCompact &&
+                  styles.compactHeaderInfo,
+              ]}
             >
               <View
                 style={
@@ -2307,11 +2310,27 @@ const styles =
       marginLeft: 24,
     },
 
+    /*
+     * On mobile the profile header becomes vertical. Reset the
+     * desktop left margin and add space below the avatar badge.
+     */
+    compactHeaderInfo: {
+      width: "100%",
+
+      alignItems: "center",
+
+      marginLeft: 0,
+      marginTop: 30,
+    },
+
     usernameRow: {
       width: "100%",
 
       flexDirection: "row",
       alignItems: "center",
+      justifyContent: "center",
+
+      flexWrap: "wrap",
     },
 
     username: {

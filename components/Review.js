@@ -1127,6 +1127,8 @@ const styles = StyleSheet.create({
   commentTextContainer: {
     flex: 1,
     minWidth: 0,
+
+    paddingRight: 6,
   },
   commentTrashButton: {
     marginLeft: 10, // Adds spacing from the text
@@ -1154,11 +1156,21 @@ const styles = StyleSheet.create({
     height: 20,
   },
   accountName: {
+    color:
+      colours.lightblue ||
+      "#64B5F6",
+
     fontSize: 15,
-    fontWeight: "bold"
+    fontWeight: "800",
   },
+
   commentText: {
-    maxWidth: 120
+    color: "rgba(255,255,255,0.88)",
+
+    fontSize: 13,
+    lineHeight: 18,
+
+    flexShrink: 1,
   },
 
   repliesHeading: {
