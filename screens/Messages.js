@@ -375,7 +375,7 @@ export default function Messages({
                 >
                   <Image
                     source={require(
-                      "../images/blackSearchIcon.png"
+                      "../images/searchIcon.png"
                     )}
                     style={
                       styles.searchIcon

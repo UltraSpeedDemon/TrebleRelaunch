@@ -9,6 +9,7 @@ import React, {
 import {
   ActivityIndicator,
   Animated,
+  AppState,
   Image,
   PanResponder,
   Platform,
@@ -62,8 +63,17 @@ export function MusicSwiper({
   const [loadingSound, setLoadingSound] =
     useState(false);
 
-  const [sound, setSound] =
-    useState(null);
+  const soundRef =
+    useRef(null);
+
+  const previewRequestRef =
+    useRef(0);
+
+  const appStateRef =
+    useRef(AppState.currentState);
+
+  const [previewState, setPreviewState] =
+    useState("idle");
 
   const [isDragging, setIsDragging] =
     useState(false);
@@ -136,75 +146,219 @@ export function MusicSwiper({
 
   const stopSound =
     useCallback(async () => {
-      if (!sound) {
+      const activeSound =
+        soundRef.current;
+
+      soundRef.current = null;
+
+      if (!activeSound) {
         return;
       }
 
       try {
-        await sound.unloadAsync();
+        await activeSound.stopAsync();
+      } catch {
+        // The sound may already be stopped or unloaded.
+      }
+
+      try {
+        await activeSound.unloadAsync();
       } catch (error) {
         console.warn(
           "[MusicSwiper] Unable to unload sound:",
           error
         );
-      } finally {
-        setSound(null);
       }
-    }, [sound]);
+    }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const playPreview = async () => {
-      await stopSound();
-
-      if (
-        !currentSong?.audioUrl ||
-        cancelled
-      ) {
+  const configureMobileAudio =
+    useCallback(async () => {
+      if (Platform.OS === "web") {
         return;
       }
 
-      setLoadingSound(true);
-
       try {
-        const {
-          sound: loadedSound,
-        } =
-          await Audio.Sound.createAsync(
-            {
-              uri: currentSong.audioUrl,
-            },
-            {
-              shouldPlay: true,
-              isLooping: true,
-              isMuted,
-              volume: 0.68,
-            }
-          );
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (error) {
+        console.warn(
+          "[MusicSwiper] Audio mode setup failed:",
+          error
+        );
+      }
+    }, []);
 
-        if (cancelled) {
-          await loadedSound.unloadAsync();
+  const startPreview =
+    useCallback(
+      async ({
+        retry = false,
+      } = {}) => {
+        const previewUrl =
+          currentSong?.audioUrl;
+
+        const requestId =
+          previewRequestRef.current + 1;
+
+        previewRequestRef.current =
+          requestId;
+
+        await stopSound();
+
+        if (!previewUrl) {
+          setPreviewState("unavailable");
+          setLoadingSound(false);
           return;
         }
 
-        setSound(loadedSound);
-      } catch (error) {
-        console.error(
-          "[MusicSwiper] Preview error:",
-          error
+        setLoadingSound(true);
+        setPreviewState(
+          retry
+            ? "retrying"
+            : "loading"
         );
-      } finally {
-        if (!cancelled) {
-          setLoadingSound(false);
-        }
-      }
-    };
 
-    playPreview();
+        try {
+          await configureMobileAudio();
+
+          const {
+            sound: loadedSound,
+            status: initialStatus,
+          } =
+            await Audio.Sound.createAsync(
+              {
+                uri: previewUrl,
+              },
+              {
+                shouldPlay: false,
+                isLooping: true,
+                isMuted,
+                volume: 0.68,
+                progressUpdateIntervalMillis: 500,
+              }
+            );
+
+          if (
+            previewRequestRef.current !==
+            requestId
+          ) {
+            await loadedSound.unloadAsync();
+            return;
+          }
+
+          soundRef.current =
+            loadedSound;
+
+          loadedSound.setOnPlaybackStatusUpdate(
+            (status) => {
+              if (
+                previewRequestRef.current !==
+                requestId ||
+                !status?.isLoaded
+              ) {
+                return;
+              }
+
+              if (status.isPlaying) {
+                setPreviewState("playing");
+              } else if (
+                status.didJustFinish
+              ) {
+                loadedSound
+                  .replayAsync()
+                  .catch(() => {});
+              }
+            }
+          );
+
+          if (
+            initialStatus?.isLoaded
+          ) {
+            await loadedSound.playAsync();
+          } else {
+            await loadedSound.playAsync();
+          }
+
+          const status =
+            await loadedSound.getStatusAsync();
+
+          if (
+            status?.isLoaded &&
+            status?.isPlaying
+          ) {
+            setPreviewState("playing");
+          } else {
+            throw new Error(
+              "The preview loaded but did not begin playing."
+            );
+          }
+        } catch (error) {
+          console.warn(
+            "[MusicSwiper] Preview start failed:",
+            error
+          );
+
+          await stopSound();
+
+          /*
+           * Mobile connections and audio sessions occasionally
+           * need one short retry after the previous sound unloads.
+           */
+          if (
+            !retry &&
+            previewRequestRef.current ===
+              requestId
+          ) {
+            await new Promise(
+              (resolve) =>
+                setTimeout(resolve, 300)
+            );
+
+            if (
+              previewRequestRef.current ===
+              requestId
+            ) {
+              setLoadingSound(false);
+              setPreviewState("tap-to-play");
+            }
+
+            return;
+          }
+
+          if (
+            previewRequestRef.current ===
+            requestId
+          ) {
+            setPreviewState("tap-to-play");
+          }
+        } finally {
+          if (
+            previewRequestRef.current ===
+            requestId
+          ) {
+            setLoadingSound(false);
+          }
+        }
+      },
+      [
+        configureMobileAudio,
+        currentSong?.audioUrl,
+        currentSong?.id,
+        isMuted,
+        stopSound,
+      ]
+    );
+
+  useEffect(() => {
+    startPreview();
 
     return () => {
-      cancelled = true;
+      previewRequestRef.current += 1;
+      stopSound();
     };
   }, [
     currentSong?.audioUrl,
@@ -212,11 +366,14 @@ export function MusicSwiper({
   ]);
 
   useEffect(() => {
-    if (!sound) {
+    const activeSound =
+      soundRef.current;
+
+    if (!activeSound) {
       return;
     }
 
-    sound
+    activeSound
       .setIsMutedAsync(isMuted)
       .catch((error) => {
         console.warn(
@@ -224,14 +381,85 @@ export function MusicSwiper({
           error
         );
       });
-  }, [isMuted, sound]);
+  }, [isMuted]);
+
+  useEffect(() => {
+    const subscription =
+      AppState.addEventListener(
+        "change",
+        async (nextState) => {
+          const previousState =
+            appStateRef.current;
+
+          appStateRef.current =
+            nextState;
+
+          if (
+            previousState.match(
+              /inactive|background/
+            ) &&
+            nextState === "active" &&
+            currentSong?.audioUrl &&
+            !isMuted
+          ) {
+            const activeSound =
+              soundRef.current;
+
+            try {
+              if (activeSound) {
+                const status =
+                  await activeSound.getStatusAsync();
+
+                if (
+                  status?.isLoaded &&
+                  !status?.isPlaying
+                ) {
+                  await activeSound.playAsync();
+                  setPreviewState("playing");
+                  return;
+                }
+              }
+
+              await startPreview({
+                retry: true,
+              });
+            } catch {
+              setPreviewState("tap-to-play");
+            }
+          }
+        }
+      );
+
+    return () => {
+      subscription.remove();
+    };
+  }, [
+    currentSong?.audioUrl,
+    isMuted,
+    startPreview,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
+      if (
+        currentSong?.audioUrl &&
+        previewState === "tap-to-play"
+      ) {
+        startPreview({
+          retry: true,
+        });
+      }
+
       return () => {
+        previewRequestRef.current += 1;
         stopSound();
       };
-    }, [stopSound])
+    }, [
+      currentSong?.audioUrl,
+      previewState,
+      startPreview,
+      stopSound,
+    ])
   );
 
   useEffect(() => {
@@ -667,6 +895,7 @@ export function MusicSwiper({
             <SongCardSwipe
               song={nextSong}
               compact={isCompact}
+              previewState="idle"
             />
           </View>
         ) : null}
@@ -701,6 +930,12 @@ export function MusicSwiper({
           <SongCardSwipe
             song={currentSong}
             compact={isCompact}
+            previewState={previewState}
+            onRetryPreview={() =>
+              startPreview({
+                retry: true,
+              })
+            }
           />
 
           <Animated.View
@@ -781,9 +1016,39 @@ export function MusicSwiper({
             styles.controlButton,
             styles.muteButton,
           ]}
-          onPress={() =>
-            setIsMuted((value) => !value)
-          }
+          onPress={async () => {
+            const nextMuted =
+              !isMuted;
+
+            setIsMuted(nextMuted);
+
+            if (!nextMuted) {
+              const activeSound =
+                soundRef.current;
+
+              try {
+                if (activeSound) {
+                  const status =
+                    await activeSound.getStatusAsync();
+
+                  if (
+                    status?.isLoaded &&
+                    !status?.isPlaying
+                  ) {
+                    await activeSound.playAsync();
+                    setPreviewState("playing");
+                    return;
+                  }
+                }
+
+                await startPreview({
+                  retry: true,
+                });
+              } catch {
+                setPreviewState("tap-to-play");
+              }
+            }
+          }}
           activeOpacity={0.8}
         >
           {loadingSound ? (
