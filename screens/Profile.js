@@ -906,7 +906,7 @@ export default function Profile({
         <Text
           style={styles.loadingText}
         >
-          Loading profile...
+          Loading reviews...
         </Text>
       </View>
     );

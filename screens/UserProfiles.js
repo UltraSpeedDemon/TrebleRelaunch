@@ -1387,7 +1387,7 @@ const finalButtonLabel =
             styles.loaderText
           }
         >
-          Loading profile...
+          Loading reviews...
         </Text>
       </View>
     );

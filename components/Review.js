@@ -55,6 +55,24 @@ const ReviewCard = ({
     route?.name === "UserProfile" ||
     route?.name === "UserProfiles";
 
+  const currentUserId =
+    String(auth.currentUser?.uid || "");
+
+  const reviewOwnerId =
+    String(
+      item?.userId ||
+      item?.user_id ||
+      item?.uid ||
+      item?.user?.userId ||
+      item?.user?.uid ||
+      ""
+    );
+
+  const isOwner =
+    Boolean(currentUserId) &&
+    Boolean(reviewOwnerId) &&
+    currentUserId === reviewOwnerId;
+
   const reviewMessage =
     item?.message ||
     item?.text ||
@@ -84,21 +102,66 @@ const ReviewCard = ({
 
   const needsExpansion =
     profileReviewMode &&
-    (
-      reviewMessage.length > 72 ||
-      reviewedMusicTitle.length > 28 ||
-      reviewEmojis.length > 3
-    );
+    reviewMessage.trim().length > 115;
 
   useEffect(() => {
-    /*
-    * Threaded replies are temporarily disabled because the
-    * Firebase backend does not yet have:
-    *
-    * POST /post/getPostsByReview
-    */
-    setComments([]);
-  }, [item.id, refresh]);
+    let active = true;
+
+    const loadReplies = async () => {
+      if (!item?.id || !showComments) {
+        if (active) {
+          setComments([]);
+        }
+        return;
+      }
+
+      try {
+        const response =
+          await getComments(item.id);
+
+        if (!response?.ok) {
+          throw new Error(
+            `Unable to load replies (HTTP ${response?.status || "unknown"})`
+          );
+        }
+
+        const data =
+          await response.json();
+
+        const loadedComments =
+          Array.isArray(data)
+            ? data
+            : Array.isArray(data?.comments)
+              ? data.comments
+              : Array.isArray(data?.posts)
+                ? data.posts
+                : [];
+
+        if (active) {
+          setComments(loadedComments);
+        }
+      } catch (error) {
+        console.error(
+          "[Review] Reply loading error:",
+          error
+        );
+
+        if (active) {
+          setComments([]);
+        }
+      }
+    };
+
+    loadReplies();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    item?.id,
+    refresh,
+    showComments,
+  ]);
 
   // Format createdAt to show only the date (no time)
   const createdAtText = item.createdAt
@@ -107,6 +170,14 @@ const ReviewCard = ({
 
   // Confirm deletion of review
   const handleDeleteReview = (itemId) => {
+    if (!isOwner) {
+      Alert.alert(
+        "Unable to edit",
+        "You can only edit or delete your own review."
+      );
+      return;
+    }
+
     Alert.alert(
       "Confirm",
       "Are you sure you want to delete this post?",
@@ -482,7 +553,7 @@ const ReviewCard = ({
                   </View>
 
                   {/* Delete / Edit Buttons (if review belongs to the user) */}
-                  {item.isUser && (
+                  {isOwner && (
                     <View style={styles.actionButtons}>
                       <TouchableOpacity
                         onPress={() => handleDeleteReview(item.id)}
@@ -508,31 +579,51 @@ const ReviewCard = ({
                   )}
                 </View>
                 
-                {/* Only show reply input if showReplyInput is true */}
-                {showReplyInput && (
+                {showReplyInput && !profileReviewMode ? (
                   <KeyboardAvoidingView
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    keyboardVerticalOffset={10} // adjust as needed
+                    behavior={
+                      Platform.OS === "ios"
+                        ? "padding"
+                        : undefined
+                    }
+                    keyboardVerticalOffset={10}
+                    style={styles.replyComposer}
                   >
                     <TextInput
                       style={styles.replyInput}
                       placeholder="Write a reply..."
-                      placeholderTextColor="#CCC"
+                      placeholderTextColor="rgba(255,255,255,0.48)"
                       value={replyText}
                       onChangeText={setReplyText}
-                      editable={!loading} // Disable input while posting
+                      editable={!loading}
+                      multiline
+                      maxLength={500}
                     />
+
                     <TouchableOpacity
                       onPress={confirmReply}
-                      style={styles.replyButton}
-                      disabled={loading}
+                      style={[
+                        styles.replyButton,
+                        (
+                          !replyText.trim() ||
+                          loading
+                        ) &&
+                          styles.replyButtonDisabled,
+                      ]}
+                      disabled={
+                        !replyText.trim() ||
+                        loading
+                      }
+                      activeOpacity={0.8}
                     >
-                      <Text style={styles.replyText}>Reply</Text>
+                      <Text style={styles.replyText}>
+                        {loading
+                          ? "Posting..."
+                          : "Reply"}
+                      </Text>
                     </TouchableOpacity>
                   </KeyboardAvoidingView>
-                )}
-              </View>
-              
+                ) : null}
               <View style={styles.infoAndDateContainer}>  
                 {item.song && (
                   <View style={styles.songInfoContainer}>
@@ -604,29 +695,70 @@ const ReviewCard = ({
           <Text style={styles.upvoteCount}>{item.upvotes}</Text>
       </TouchableOpacity>
 
-      {/* Only show comments if showComments is true */}
-      {showComments && (
+      {/* Replies always sit underneath the original review. */}
+      {showComments && !profileReviewMode ? (
         <View style={styles.commentsContainer}>
           {comments.length > 0 ? (
-            comments.map((comment, index) => (
-              <CommentCard key={index} comment={comment} onDelete={handleDeletePost} />
-            ))
+            <>
+              <Text style={styles.repliesHeading}>
+                {comments.length === 1
+                  ? "1 Reply"
+                  : `${comments.length} Replies`}
+              </Text>
+
+              {comments.map((comment) => (
+                <CommentCard
+                  key={String(
+                    comment?.id ||
+                    `${comment?.username}-${comment?.createdAt}`
+                  )}
+                  comment={comment}
+                  onDelete={handleDeletePost}
+                />
+              ))}
+            </>
           ) : (
-            // If no comments, you could display something like "No comments yet"
-            <></>
+            <Text style={styles.noRepliesText}>
+              No replies yet
+            </Text>
           )}
         </View>
-      )}
+      ) : null}
     </View>
   );
 };
 
-const CommentCard = ({ comment, onDelete }) => (
-  <View style={styles.commentCard}>
-    <View style={[styles.row, styles.alignItemsCenter]}>
+const CommentCard = ({
+  comment,
+  onDelete,
+}) => {
+  const commentOwnerId =
+    String(
+      comment?.userId ||
+      comment?.user_id ||
+      comment?.uid ||
+      ""
+    );
+
+  const isCommentOwner =
+    Boolean(auth.currentUser?.uid) &&
+    String(auth.currentUser.uid) ===
+      commentOwnerId;
+
+  const commentDate =
+    comment?.createdAt
+      ? new Date(
+          comment.createdAt
+        ).toLocaleDateString()
+      : "";
+
+  return (
+    <View style={styles.commentCard}>
       <Image
         source={
-          comment?.avatar || comment?.avatarLong || comment?.profilePicture
+          comment?.avatar ||
+          comment?.avatarLong ||
+          comment?.profilePicture
             ? {
                 uri:
                   comment.avatar ||
@@ -637,19 +769,44 @@ const CommentCard = ({ comment, onDelete }) => (
         }
         style={styles.commentAvatar}
       />
-      <View style={styles.commentTextContainer}>
-        <Text style={styles.accountName}>{capitalize(comment?.username || "User")}</Text>
-        <Text style={styles.commentText}>{comment.message}</Text>
-      </View>
-    </View>
 
-    {comment.isUser && (
-      <TouchableOpacity onPress={() => onDelete(comment.id)} style={styles.commentTrashButton}>
-        <Image source={require("../images/trash.png")} style={styles.icon} />
-      </TouchableOpacity>
-    )}
-  </View>
-);
+      <View style={styles.commentTextContainer}>
+        <View style={styles.commentHeader}>
+          <Text style={styles.accountName}>
+            {capitalize(
+              comment?.username ||
+              "User"
+            )}
+          </Text>
+
+          {commentDate ? (
+            <Text style={styles.commentDate}>
+              {commentDate}
+            </Text>
+          ) : null}
+        </View>
+
+        <Text style={styles.commentText}>
+          {comment?.message || ""}
+        </Text>
+      </View>
+
+      {isCommentOwner ? (
+        <TouchableOpacity
+          onPress={() =>
+            onDelete(comment.id)
+          }
+          style={styles.commentTrashButton}
+        >
+          <Image
+            source={require("../images/trash.png")}
+            style={styles.commentDeleteIcon}
+          />
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   row: {
@@ -901,17 +1058,22 @@ const styles = StyleSheet.create({
 
   // ...rest of your styles
   commentsContainer: {
-    display: "flex",
-    flexDirection: "column",
     width: "100%",
-    marginTop: 10
+    marginTop: 12,
+    paddingTop: 11,
+    paddingLeft: 54,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.08)",
   },
   replyButton: {
-    marginTop: 10,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    backgroundColor: "#64B5F6",
-    borderRadius: 5,
+    minWidth: 84,
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colours.lightblue || "#64B5F6",
   },
   replyText: {
     fontSize: 14,
@@ -919,13 +1081,15 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   commentCard: {
-    backgroundColor: colours.lightblue,
-    borderRadius: 8,
-    padding: 10,
-    marginVertical: 5,
+    width: "100%",
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between", // Moves delete button to the right
+    alignItems: "flex-start",
+    padding: 10,
+    marginBottom: 7,
+    borderWidth: 1,
+    borderColor: "rgba(53,175,229,0.14)",
+    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.035)",
   },
   commentAvatar: {
     width: 30,
@@ -934,6 +1098,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   commentTextContainer: {
+    flex: 1,
+    minWidth: 0,
   },
   commentTrashButton: {
     marginLeft: 10, // Adds spacing from the text
@@ -944,12 +1110,17 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   replyInput: {
-    marginTop: 10,
     flex: 1,
-    backgroundColor: "#FFF",
-    borderRadius: 5,
-    padding: 5,
-    color: "#000",
+    minHeight: 42,
+    maxHeight: 110,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(53,175,229,0.24)",
+    borderRadius: 10,
+    color: "#ffffff",
+    backgroundColor: "rgba(255,255,255,0.055)",
+    textAlignVertical: "top",
   },
   icon: {
     width: 20,
@@ -961,7 +1132,50 @@ const styles = StyleSheet.create({
   },
   commentText: {
     maxWidth: 120
-  }
+  },
+
+  repliesHeading: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+
+  noRepliesText: {
+    color: "rgba(255,255,255,0.40)",
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+
+  replyComposer: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    marginTop: 10,
+  },
+
+  replyButtonDisabled: {
+    opacity: 0.45,
+  },
+
+  commentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 3,
+  },
+
+  commentDate: {
+    color: "rgba(255,255,255,0.38)",
+    fontSize: 10,
+  },
+
+  commentDeleteIcon: {
+    width: 16,
+    height: 16,
+    resizeMode: "contain",
+  },
 });
 
 export default ReviewCard;

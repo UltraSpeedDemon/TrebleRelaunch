@@ -1985,6 +1985,220 @@ app.post("/review/reviews", async (req, res) => {
   }
 });
 
+
+/* =========================================================
+   REVIEW REPLIES
+========================================================= */
+
+function formatReviewReply(document, currentUserId) {
+  const data = document.data() || {};
+
+  return {
+    id: document.id,
+    reviewId: data.reviewId || "",
+    userId: data.userId || "",
+    username: data.username || "Treble User",
+    avatar:
+      data.avatar ||
+      data.avatarLong ||
+      data.profilePicture ||
+      "",
+    message: data.message || "",
+    isUser:
+      Boolean(currentUserId) &&
+      data.userId === currentUserId,
+    createdAt:
+      data.createdAt?.toDate?.().toISOString?.() ||
+      data.createdAt ||
+      null,
+    updatedAt:
+      data.updatedAt?.toDate?.().toISOString?.() ||
+      data.updatedAt ||
+      null,
+  };
+}
+
+async function getRepliesForReview(reviewId, currentUserId) {
+  const snapshot = await db
+    .collection("reviewReplies")
+    .where("reviewId", "==", String(reviewId))
+    .get();
+
+  return snapshot.docs
+    .map((document) =>
+      formatReviewReply(document, currentUserId)
+    )
+    .sort((a, b) =>
+      new Date(a.createdAt || 0) -
+      new Date(b.createdAt || 0)
+    );
+}
+
+app.post("/post/getPostsByReview", async (req, res) => {
+  try {
+    const decodedUser = await verifyFirebaseUser(req);
+    const reviewId =
+      req.body?.reviewId ||
+      req.body?.review_id ||
+      req.body?.rid;
+
+    if (!reviewId) {
+      return res.status(400).json({
+        ok: false,
+        error: "Review ID is required.",
+      });
+    }
+
+    return res.json(
+      await getRepliesForReview(
+        reviewId,
+        decodedUser.uid
+      )
+    );
+  } catch (error) {
+    console.error("POST /post/getPostsByReview error:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+});
+
+async function createReviewReply(req, res) {
+  try {
+    const decodedUser = await verifyFirebaseUser(req);
+    const reviewId =
+      req.body?.reviewId ||
+      req.body?.review_id ||
+      req.body?.rid;
+    const message = String(
+      req.body?.message ||
+      req.body?.text ||
+      ""
+    ).trim();
+
+    if (!reviewId || !message) {
+      return res.status(400).json({
+        ok: false,
+        error: "Review ID and reply message are required.",
+      });
+    }
+
+    const reviewSnapshot = await db
+      .collection("reviews")
+      .doc(String(reviewId))
+      .get();
+
+    if (!reviewSnapshot.exists) {
+      return res.status(404).json({
+        ok: false,
+        error: "Review not found.",
+      });
+    }
+
+    const userSnapshot = await db
+      .collection("users")
+      .doc(decodedUser.uid)
+      .get();
+    const userData = userSnapshot.exists
+      ? userSnapshot.data()
+      : {};
+
+    const replyRef = db
+      .collection("reviewReplies")
+      .doc();
+
+    await replyRef.set({
+      reviewId: String(reviewId),
+      userId: decodedUser.uid,
+      username:
+        userData.username ||
+        decodedUser.name ||
+        decodedUser.email?.split("@")[0] ||
+        "Treble User",
+      avatar:
+        userData.avatar ||
+        userData.avatarLong ||
+        userData.profilePicture ||
+        decodedUser.picture ||
+        "",
+      message,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return res.status(201).json({
+      ok: true,
+      id: replyRef.id,
+    });
+  } catch (error) {
+    console.error("Create review reply error:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+}
+
+app.post("/post", createReviewReply);
+app.post("/post/addPost", createReviewReply);
+app.post("/review/reply", createReviewReply);
+
+async function deleteReviewReply(req, res) {
+  try {
+    const decodedUser = await verifyFirebaseUser(req);
+    const replyId =
+      req.body?.id ||
+      req.body?.postId ||
+      req.body?.post_id ||
+      req.body?.replyId ||
+      req.query?.id;
+
+    if (!replyId) {
+      return res.status(400).json({
+        ok: false,
+        error: "Reply ID is required.",
+      });
+    }
+
+    const replyRef = db
+      .collection("reviewReplies")
+      .doc(String(replyId));
+    const snapshot = await replyRef.get();
+
+    if (!snapshot.exists) {
+      return res.status(404).json({
+        ok: false,
+        error: "Reply not found.",
+      });
+    }
+
+    if (snapshot.data().userId !== decodedUser.uid) {
+      return res.status(403).json({
+        ok: false,
+        error: "You cannot delete another user's reply.",
+      });
+    }
+
+    await replyRef.delete();
+
+    return res.json({
+      ok: true,
+      deleted: true,
+    });
+  } catch (error) {
+    console.error("Delete review reply error:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+}
+
+app.delete("/post", deleteReviewReply);
+app.post("/post/deletePost", deleteReviewReply);
+app.delete("/review/reply", deleteReviewReply);
+
 app.post("/review/upvote", async (req, res) => {
   try {
     const decodedUser = await verifyFirebaseUser(req);
@@ -2109,9 +2323,11 @@ async function getUserReviews(uid, currentUid) {
 
 app.get("/users/:uid/top-reviews", async (req, res) => {
   try {
+    const decodedUser = await verifyFirebaseUser(req);
+
     const reviews = await getUserReviews(
       req.params.uid,
-      req.params.uid
+      decodedUser.uid
     );
 
     reviews.sort((a, b) => {
@@ -2135,9 +2351,11 @@ app.get("/users/:uid/top-reviews", async (req, res) => {
 
 app.get("/users/:uid/favorites", async (req, res) => {
   try {
+    const decodedUser = await verifyFirebaseUser(req);
+
     const reviews = await getUserReviews(
       req.params.uid,
-      req.params.uid
+      decodedUser.uid
     );
 
     const favorites = reviews
@@ -2160,9 +2378,11 @@ app.get("/users/:uid/favorites", async (req, res) => {
 
 app.get("/users/:uid/most-upvoted", async (req, res) => {
   try {
+    const decodedUser = await verifyFirebaseUser(req);
+
     const reviews = await getUserReviews(
       req.params.uid,
-      req.params.uid
+      decodedUser.uid
     );
 
     reviews.sort((a, b) => b.upvotes - a.upvotes);
@@ -2184,9 +2404,11 @@ app.get("/users/:uid/most-upvoted", async (req, res) => {
 
 app.get("/users/:uid/activity", async (req, res) => {
   try {
+    const decodedUser = await verifyFirebaseUser(req);
+
     const reviews = await getUserReviews(
       req.params.uid,
-      req.params.uid
+      decodedUser.uid
     );
 
     reviews.sort((a, b) => {
