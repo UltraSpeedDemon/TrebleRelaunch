@@ -264,37 +264,45 @@ export default function UserProfiles({
     }, []);
 
   const normalizeArray =
-    useCallback((data) => {
-      if (Array.isArray(data)) {
-        return data;
-      }
+  useCallback((data) => {
+    if (Array.isArray(data)) {
+      return data;
+    }
 
-      if (
-        Array.isArray(
-          data?.results
-        )
-      ) {
-        return data.results;
-      }
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
 
-      if (
-        Array.isArray(
-          data?.users
-        )
-      ) {
-        return data.users;
-      }
+    if (Array.isArray(data?.users)) {
+      return data.users;
+    }
 
-      if (
-        Array.isArray(
-          data?.requests
-        )
-      ) {
-        return data.requests;
-      }
+    if (Array.isArray(data?.followers)) {
+      return data.followers;
+    }
 
-      return [];
-    }, []);
+    if (Array.isArray(data?.following)) {
+      return data.following;
+    }
+
+    if (Array.isArray(data?.friends)) {
+      return data.friends;
+    }
+
+    if (Array.isArray(data?.requests)) {
+      return data.requests;
+    }
+
+    if (Array.isArray(data?.followRequests)) {
+      return data.followRequests;
+    }
+
+    if (Array.isArray(data?.notifications)) {
+      return data.notifications;
+    }
+
+    return [];
+  }, []);
 
   const enrichReviewsWithSong =
     useCallback(
@@ -524,6 +532,10 @@ export default function UserProfiles({
         setTheirFollowers(
           followers
         );
+          console.log(
+      "[Followers]",
+      followers
+  );
 
         return followers;
       } catch (error) {
@@ -550,6 +562,10 @@ export default function UserProfiles({
         await getFollowers(
           currentUserId
         );
+console.log(
+    "Current User:",
+    currentUserId
+);
 
       if (!response?.ok) {
         return [];
@@ -564,7 +580,10 @@ export default function UserProfiles({
       setMyFollowers(
         followers
       );
-
+      console.log(
+    "Their Followers:",
+    followers
+);
       return followers;
     } catch (error) {
       console.error(
