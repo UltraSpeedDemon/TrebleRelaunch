@@ -860,7 +860,7 @@ const handleLogout = useCallback(() => {
             />
 
             <MenuItem
-              label="Music Swipe Game"
+              label="Swipe to Discover"
               onPress={() =>
                 navigateTo(
                   "MusicSwiperTest"

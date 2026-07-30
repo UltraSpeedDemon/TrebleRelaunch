@@ -620,7 +620,7 @@ export function MusicSwiper({
           </Text>
 
           <Text style={styles.mainTitle}>
-            Music You'll Love
+            Swipe to Discover
           </Text>
 
           <Text style={styles.subtitle}>
