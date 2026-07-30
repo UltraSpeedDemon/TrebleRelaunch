@@ -620,7 +620,7 @@ export function MusicSwiper({
           </Text>
 
           <Text style={styles.mainTitle}>
-            Discover your next favourite
+            Music You'll Love
           </Text>
 
           <Text style={styles.subtitle}>
@@ -1171,32 +1171,30 @@ const styles =
     },
 
     footerRow: {
-      width: "100%",
-      maxWidth: 920,
+      position: "absolute",
+      top: 24,
+      left: 24,
+      right: 24,
 
       flexDirection: "row",
+      justifyContent: "space-between",
       alignItems: "center",
-      justifyContent:
-        "space-between",
 
-      marginTop: 14,
+      zIndex: 100,
     },
 
     backButton: {
       flexDirection: "row",
       alignItems: "center",
 
-      paddingHorizontal: 15,
+      paddingHorizontal: 14,
       paddingVertical: 10,
 
+      borderRadius: 14,
+
+      backgroundColor: "rgba(18,24,35,0.88)",
       borderWidth: 1,
-      borderColor:
-        "rgba(255,255,255,0.1)",
-
-      borderRadius: 11,
-
-      backgroundColor:
-        "rgba(255,255,255,0.06)",
+      borderColor: "rgba(53,175,229,0.28)",
     },
 
     backButtonText: {
