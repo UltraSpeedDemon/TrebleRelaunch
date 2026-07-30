@@ -26,15 +26,6 @@ import colours from "../styles/colours";
 
 const PAGE_SIZE = 10;
 
-const isUsablePreviewUrl = (value) => {
-  return (
-    typeof value === "string" &&
-    /^https?:\/\//i.test(
-      value.trim()
-    )
-  );
-};
-
 const MusicSwiperTest = () => {
   const [songs, setSongs] =
     useState([]);
@@ -120,13 +111,7 @@ const MusicSwiperTest = () => {
           itemInfo?.previewUrl ||
           "";
 
-        if (
-          !isUsablePreviewUrl(
-            previewUrl
-          )
-        ) {
-          previewUrl = "";
-
+        if (!previewUrl) {
           try {
             const deezerResponse =
               await getSongFromDeezer(
@@ -137,17 +122,9 @@ const MusicSwiperTest = () => {
               const deezerData =
                 await deezerResponse.json();
 
-              const deezerPreview =
-                deezerData?.preview ||
-                deezerData?.data?.preview ||
-                "";
-
               previewUrl =
-                isUsablePreviewUrl(
-                  deezerPreview
-                )
-                  ? deezerPreview.trim()
-                  : "";
+                deezerData?.preview ||
+                "";
             }
           } catch (error) {
             console.warn(
@@ -333,6 +310,10 @@ const MusicSwiperTest = () => {
             offset +
             recommendations.length;
 
+          /*
+           * Keep loading until the server returns fewer than
+           * one full page. This avoids restarting after ten.
+           */
           setHasMore(
             recommendations.length ===
               PAGE_SIZE

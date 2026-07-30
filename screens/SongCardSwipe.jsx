@@ -4,7 +4,6 @@ import {
   Image,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -16,8 +15,6 @@ import colours from "../styles/colours";
 export function SongCardSwipe({
   song,
   compact = false,
-  previewState = "idle",
-  onRetryPreview,
 }) {
   const imageSource =
     song?.albumArt ||
@@ -30,45 +27,6 @@ export function SongCardSwipe({
             "../images/albumImage.jpg"
           )
     );
-
-  const hasPreview =
-    Boolean(song?.audioUrl);
-
-  const previewIsPlaying =
-    previewState === "playing";
-
-  const previewIsLoading =
-    previewState === "loading" ||
-    previewState === "retrying";
-
-  const previewNeedsTap =
-    previewState === "tap-to-play";
-
-  const badgeText =
-    !hasPreview
-      ? "No preview"
-      : previewIsPlaying
-        ? "Preview playing"
-        : previewIsLoading
-          ? "Loading preview..."
-          : previewNeedsTap
-            ? "Tap to play"
-            : "Preview ready";
-
-  const badgeIcon =
-    !hasPreview
-      ? "volume-off"
-      : previewIsPlaying
-        ? "volume-up"
-        : previewIsLoading
-          ? "spinner"
-          : "play";
-
-  const BadgeWrapper =
-    previewNeedsTap &&
-    typeof onRetryPreview === "function"
-      ? TouchableOpacity
-      : View;
 
   return (
     <View style={styles.card}>
@@ -94,41 +52,41 @@ export function SongCardSwipe({
           }
         />
 
-        <BadgeWrapper
-          style={[
-            styles.previewBadge,
-            !hasPreview &&
-              styles.noPreviewBadge,
-            previewNeedsTap &&
-              styles.retryPreviewBadge,
-          ]}
-          onPress={
-            previewNeedsTap
-              ? onRetryPreview
-              : undefined
-          }
-          activeOpacity={0.8}
-        >
-          <FontAwesome
-            name={badgeIcon}
-            size={11}
-            color={
-              hasPreview
-                ? "#ffffff"
-                : "rgba(255,255,255,0.72)"
-            }
-          />
+        {song?.audioUrl ? (
+          <View style={styles.previewBadge}>
+            <FontAwesome
+              name="volume-up"
+              size={11}
+              color="#ffffff"
+            />
 
-          <Text
+            <Text style={styles.previewBadgeText}>
+              Preview playing
+            </Text>
+          </View>
+        ) : (
+          <View
             style={[
-              styles.previewBadgeText,
-              !hasPreview &&
-                styles.noPreviewText,
+              styles.previewBadge,
+              styles.noPreviewBadge,
             ]}
           >
-            {badgeText}
-          </Text>
-        </BadgeWrapper>
+            <FontAwesome
+              name="volume-off"
+              size={11}
+              color="rgba(255,255,255,0.72)"
+            />
+
+            <Text
+              style={[
+                styles.previewBadgeText,
+                styles.noPreviewText,
+              ]}
+            >
+              No preview
+            </Text>
+          </View>
+        )}
 
         <View style={styles.content}>
           <View style={styles.musicTypeBadge}>
@@ -178,7 +136,11 @@ export function SongCardSwipe({
                 color="#ff727f"
               />
 
-              <Text style={styles.skipInstruction}>
+              <Text
+                style={
+                  styles.skipInstruction
+                }
+              >
                 Skip
               </Text>
             </View>
@@ -186,7 +148,11 @@ export function SongCardSwipe({
             <View style={styles.instructionDivider} />
 
             <View style={styles.instructionItem}>
-              <Text style={styles.likeInstruction}>
+              <Text
+                style={
+                  styles.likeInstruction
+                }
+              >
                 Like
               </Text>
 
@@ -227,20 +193,25 @@ const styles =
 
     imageContainer: {
       flex: 1,
+
       position: "relative",
+
       overflow: "hidden",
     },
 
     image: {
       width: "100%",
       height: "100%",
+
       resizeMode: "cover",
+
       backgroundColor:
         "rgba(255,255,255,0.05)",
     },
 
     previewBadge: {
       position: "absolute",
+
       top: 16,
       left: 16,
 
@@ -254,16 +225,6 @@ const styles =
 
       backgroundColor:
         "rgba(53,175,229,0.84)",
-
-      zIndex: 10,
-    },
-
-    retryPreviewBadge: {
-      borderWidth: 1,
-      borderColor:
-        "rgba(255,255,255,0.38)",
-      backgroundColor:
-        "rgba(53,175,229,0.96)",
     },
 
     noPreviewBadge: {
@@ -273,8 +234,10 @@ const styles =
 
     previewBadgeText: {
       color: "#ffffff",
+
       fontSize: 11,
       fontWeight: "800",
+
       marginLeft: 6,
     },
 
@@ -285,19 +248,25 @@ const styles =
 
     content: {
       position: "absolute",
+
       left: 0,
       right: 0,
       bottom: 0,
+
       paddingHorizontal: 22,
       paddingBottom: 23,
     },
 
     musicTypeBadge: {
       alignSelf: "flex-start",
+
       paddingHorizontal: 8,
       paddingVertical: 4,
+
       marginBottom: 10,
+
       borderRadius: 8,
+
       backgroundColor:
         "rgba(53,175,229,0.18)",
     },
@@ -306,6 +275,7 @@ const styles =
       color:
         colours.lightblue ||
         "#35afe5",
+
       fontSize: 10,
       fontWeight: "900",
       letterSpacing: 1.4,
@@ -313,6 +283,7 @@ const styles =
 
     title: {
       color: "#ffffff",
+
       fontSize: 31,
       lineHeight: 36,
       fontWeight: "900",
@@ -326,9 +297,11 @@ const styles =
     artist: {
       color:
         "rgba(255,255,255,0.82)",
+
       fontSize: 18,
       lineHeight: 24,
       fontWeight: "600",
+
       marginTop: 5,
     },
 
@@ -340,24 +313,32 @@ const styles =
     album: {
       color:
         "rgba(255,255,255,0.55)",
+
       fontSize: 13,
       lineHeight: 18,
+
       marginTop: 3,
     },
 
     instructions: {
       alignSelf: "stretch",
+
       flexDirection: "row",
       alignItems: "center",
       justifyContent:
         "space-between",
+
       paddingHorizontal: 12,
       paddingVertical: 9,
+
       marginTop: 18,
+
       borderWidth: 1,
       borderColor:
         "rgba(255,255,255,0.09)",
+
       borderRadius: 12,
+
       backgroundColor:
         "rgba(0,0,0,0.28)",
     },
@@ -370,14 +351,17 @@ const styles =
     instructionDivider: {
       width: 1,
       height: 17,
+
       backgroundColor:
         "rgba(255,255,255,0.12)",
     },
 
     skipInstruction: {
       color: "#ff727f",
+
       fontSize: 12,
       fontWeight: "800",
+
       marginLeft: 6,
     },
 
@@ -385,8 +369,10 @@ const styles =
       color:
         colours.lightblue ||
         "#35afe5",
+
       fontSize: 12,
       fontWeight: "800",
+
       marginRight: 6,
     },
   });
