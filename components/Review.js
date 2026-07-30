@@ -27,6 +27,9 @@ const ReviewCard = ({
   // NEW PROPS for toggling comments/reply on/off
   showComments = true,
   showReplyInput = true,
+  onUserPress,
+  onReviewPress,
+  onReplyConfirmation,
 }) => {
 
   const [comments, setComments] = useState([]);
@@ -82,16 +85,26 @@ const ReviewCard = ({
   };
 
   const confirmReply = () => {
-    if (replyText && replyText.trim()) {
-      Alert.alert(
-        "Confirm Reply",
-        "Are you sure you want to post this reply?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Post", style: "default", onPress: handlePostReply },
-        ]
-      );
+    if (!replyText.trim() || loading) {
+      return;
     }
+
+    if (typeof onReplyConfirmation === "function") {
+      onReplyConfirmation({
+        message: "Are you sure you want to post this reply?",
+        onConfirm: handlePostReply,
+      });
+      return;
+    }
+
+    Alert.alert(
+      "Confirm Reply",
+      "Are you sure you want to post this reply?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Post", style: "default", onPress: handlePostReply },
+      ]
+    );
   };
 
   const handleDeletePost = async (postId) => {
@@ -120,7 +133,15 @@ const ReviewCard = ({
       Alert.alert("Error", "Reply message cannot be empty!");
       return;
     }
-      const currentUser = auth.currentUser;
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      Alert.alert("Error", "You must be signed in to reply.");
+      return;
+    }
+
+    setLoading(true);
+
     try {
       // Fetch user data from your backend
       const orientRes = await getUser(currentUser.uid);
@@ -129,15 +150,24 @@ const ReviewCard = ({
       }
       const userData = await orientRes.json();
 
-      const response = await addComment(userData.rid, item.id, replyText); // Send the reply to the API
+      const response = await addComment(userData.rid, item.id, replyText.trim());
+      const responseText = await response.text();
 
-      if (response.status === 201) {
-        setReplyText(""); // Clear the reply input field
-        // After posting the comment, refresh the comments list
-        setRefresh((prev) => !prev);  // Toggle the refresh state to trigger useEffect again
-      } else {
-        throw new Error("Failed to post reply");
+      let data = {};
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        data = {};
       }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || `Failed to post reply (HTTP ${response.status})`
+        );
+      }
+
+      setReplyText("");
+      setRefresh((prev) => !prev);
     } catch (error) {
       console.error("Error posting reply:", error);
       Alert.alert("Error", "Failed to post your reply.");
@@ -167,16 +197,68 @@ const ReviewCard = ({
     }
   };
 
+
+  const resolvedAvatar =
+    avatar ||
+    item?.avatarLong ||
+    item?.avatar ||
+    item?.userAvatar ||
+    item?.user_avatar ||
+    item?.profilePicture ||
+    item?.profile_picture ||
+    item?.photoURL ||
+    item?.photoUrl ||
+    item?.user?.avatarLong ||
+    item?.user?.avatar ||
+    item?.user?.profilePicture ||
+    null;
+
+  const openUserProfile = () => {
+    if (typeof onUserPress === "function") {
+      onUserPress();
+      return;
+    }
+
+    const reviewUserId =
+      item?.userId ||
+      item?.user_id ||
+      item?.uid ||
+      item?.user?.userId ||
+      item?.user?.uid;
+
+    if (reviewUserId && navigation) {
+      navigation.navigate("UserProfile", {
+        userId: reviewUserId,
+        username: item?.username || item?.userName || item?.user?.username || "",
+      });
+    }
+  };
+
+  const openReviewProfile = () => {
+    if (typeof onReviewPress === "function") {
+      onReviewPress();
+      return;
+    }
+
+    openUserProfile();
+  };
+
   return (
     <View style={styles.reviewCard}>
       <View style={[styles.row, styles.reviewContent]}>
-        <Image
-          source={avatar ? { uri: avatar } : require("../images/avatarIcon.png")}
-          style={styles.avatar}
-        />
+        <TouchableOpacity onPress={openUserProfile} activeOpacity={0.75}>
+          <Image
+            source={
+              resolvedAvatar
+                ? { uri: resolvedAvatar }
+                : require("../images/avatarIcon.png")
+            }
+            style={styles.avatar}
+          />
+        </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={handleContentPress}
+          onPress={openReviewProfile}
           activeOpacity={0.8}
           style={styles.contentTouchable}
         >
@@ -184,7 +266,11 @@ const ReviewCard = ({
             <View>
               {/* Inline container for username, heart and emojis */}
               <View style={styles.inlineContainer}>
-                <Text style={styles.username}>{capitalize(item.username)}</Text>
+                <TouchableOpacity onPress={openUserProfile} activeOpacity={0.75}>
+                  <Text style={styles.username}>
+                    {capitalize(item?.username || item?.userName || "User")}
+                  </Text>
+                </TouchableOpacity>
                 {reviewHearted && (
                   <Image
                     source={require("../images/whiteFullHeart.png")}
@@ -343,9 +429,21 @@ const ReviewCard = ({
 const CommentCard = ({ comment, onDelete }) => (
   <View style={styles.commentCard}>
     <View style={[styles.row, styles.alignItemsCenter]}>
-      <Image source={comment.avatar != "" ? { uri: comment.avatar } : require("../images/avatarIcon.png") } style={styles.commentAvatar} />
+      <Image
+        source={
+          comment?.avatar || comment?.avatarLong || comment?.profilePicture
+            ? {
+                uri:
+                  comment.avatar ||
+                  comment.avatarLong ||
+                  comment.profilePicture,
+              }
+            : require("../images/avatarIcon.png")
+        }
+        style={styles.commentAvatar}
+      />
       <View style={styles.commentTextContainer}>
-        <Text style={styles.accountName}>{capitalize(comment.username)}</Text>
+        <Text style={styles.accountName}>{capitalize(comment?.username || "User")}</Text>
         <Text style={styles.commentText}>{comment.message}</Text>
       </View>
     </View>

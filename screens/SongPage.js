@@ -343,7 +343,6 @@ export default function SongPage({ route, navigation }) {
       : data.reviews || [];
 
     setReviews(loadedReviews);
-    setUsers([]);
 
     const myExistingReview = loadedReviews.find(
       (item) => item.isUser === true
@@ -1493,14 +1492,26 @@ const handlePlayPreview = async () => {
               item.avatarLong ||
               item.avatar ||
               item.userAvatar ||
+              item.user_avatar ||
               item.profilePicture ||
+              item.profile_picture ||
+              item.photoURL ||
+              item.photoUrl ||
+              item.user?.avatarLong ||
+              item.user?.avatar ||
+              item.user?.profilePicture ||
               user?.avatarLong ||
               user?.avatar ||
               null;
 
             const openReviewUser = () => {
               const reviewUserId =
-                item.userId || item.user_id || item.uid;
+                item.userId ||
+                item.user_id ||
+                item.uid ||
+                item.user?.userId ||
+                item.user?.uid ||
+                item.user?.id;
 
               if (!reviewUserId) {
                 Alert.alert(
@@ -1510,7 +1521,7 @@ const handlePlayPreview = async () => {
                 return;
               }
 
-              navigation.navigate("Profile", {
+              navigation.navigate("UserProfile", {
                 userId: reviewUserId,
                 username: item.username || item.userName || "",
               });
@@ -2010,7 +2021,7 @@ artist: {
     borderRadius: 21,
 
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: colours.lightblue,
 
     backgroundColor: "rgba(255,255,255,0.05)",
   },
@@ -2408,7 +2419,7 @@ artist: {
   confirmCard: {
     width: "100%",
     maxWidth: 420,
-    backgroundColor: "#18181f",
+    backgroundColor: colours.darkblue,
     borderRadius: 18,
     padding: 22,
     borderWidth: 1,
@@ -2448,7 +2459,7 @@ artist: {
   },
 
   confirmSubmitButton: {
-    backgroundColor: colours.primary || "#7c5cff",
+    backgroundColor: colours.lightblue,
   },
 
   confirmCancelText: {
