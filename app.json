@@ -35,7 +35,15 @@
       "package": "com.aleks4920.musicadvancedproject"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "output": "single",
+      "name": "Treble",
+      "shortName": "Treble",
+      "favicon": "./assets/treblelogo.png",
+      "themeColor": "#101010",
+      "backgroundColor": "#101010",
+      "display": "standalone",
+      "startUrl": "/",
+      "scope": "/"
     },
     "plugins": [
       "expo-asset",
