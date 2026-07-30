@@ -825,7 +825,7 @@ const handleLogout = useCallback(() => {
 
             <MenuItem
               icon={require("../images/messagesIcon.png")}
-              label="Shared"
+              label="Messages"
               onPress={() =>
                 navigateTo("Messages")
               }
@@ -886,9 +886,6 @@ const handleLogout = useCallback(() => {
               label="Settings"
               onPress={() =>
                 navigateTo("Settings")
-              }
-              iconStyle={
-                styles.cardGameIcon
               }
             />
 

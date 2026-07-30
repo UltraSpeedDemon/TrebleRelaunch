@@ -442,25 +442,27 @@ const ReviewCard = ({
 
   const handleReviewPress = () => {
     /*
-     * On UserProfile, the review body represents the reviewed
-     * music, so open that music page.
+     * Profile-page review cards open the reviewed music.
+     * On Song, Album, and Artist pages, only the avatar and
+     * username open the review author's profile.
      */
     if (isUserProfilePage) {
       handleContentPress();
-      return;
     }
-
-    /*
-     * SongPage, AlbumPage, and ArtistPage can provide their own
-     * profile callback. Otherwise use the built-in profile route.
-     */
-    if (typeof onReviewPress === "function") {
-      onReviewPress();
-      return;
-    }
-
-    openUserProfile();
   };
+
+  const ReviewContentWrapper =
+    isUserProfilePage
+      ? TouchableOpacity
+      : View;
+
+  const reviewContentWrapperProps =
+    isUserProfilePage
+      ? {
+          onPress: handleReviewPress,
+          activeOpacity: 0.8,
+        }
+      : {};
 
   return (
     <View
@@ -487,9 +489,8 @@ const ReviewCard = ({
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={handleReviewPress}
-          activeOpacity={0.8}
+        <ReviewContentWrapper
+          {...reviewContentWrapperProps}
           style={styles.contentTouchable}
         >
           <View style={styles.contentContainer}>
@@ -592,6 +593,9 @@ const ReviewCard = ({
                     <TextInput
                       style={styles.replyInput}
                       placeholder="Write a reply..."
+                      onPressIn={(event) =>
+                        event?.stopPropagation?.()
+                      }
                       placeholderTextColor="rgba(255,255,255,0.48)"
                       value={replyText}
                       onChangeText={setReplyText}
@@ -601,7 +605,10 @@ const ReviewCard = ({
                     />
 
                     <TouchableOpacity
-                      onPress={confirmReply}
+                      onPress={(event) => {
+                        event?.stopPropagation?.();
+                        confirmReply();
+                      }}
                       style={[
                         styles.replyButton,
                         (
@@ -659,7 +666,7 @@ const ReviewCard = ({
               </View>
             </View>
           </View>
-        </TouchableOpacity>
+        </ReviewContentWrapper>
 
         
       </View>

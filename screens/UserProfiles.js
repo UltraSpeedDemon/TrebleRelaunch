@@ -1364,10 +1364,7 @@ const finalButtonLabel =
       ]
     );
 
-  if (
-    loading &&
-    !username
-  ) {
+  if (loading) {
     return (
       <View
         style={
