@@ -680,8 +680,27 @@ export default function Profile({
           return;
         }
 
+        const currentUserId =
+          String(
+            auth.currentUser?.uid ||
+            ""
+          );
+
+        const reviewOwnerId =
+          String(
+            existingReview?.userId ||
+            existingReview?.user_id ||
+            existingReview?.uid ||
+            existingReview?.user?.userId ||
+            existingReview?.user?.uid ||
+            ""
+          );
+
         if (
-          !existingReview.isUser
+          !currentUserId ||
+          !reviewOwnerId ||
+          currentUserId !==
+            reviewOwnerId
         ) {
           Alert.alert(
             "Unable to delete",

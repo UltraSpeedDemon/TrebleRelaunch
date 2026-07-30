@@ -2323,11 +2323,18 @@ async function getUserReviews(uid, currentUid) {
 
 app.get("/users/:uid/top-reviews", async (req, res) => {
   try {
-    const decodedUser = await verifyFirebaseUser(req);
-
+    /*
+     * These profile sections are readable profile data.
+     * Do not require an Authorization header here because the
+     * existing mobile/web REST helpers call these endpoints
+     * without one.
+     *
+     * Ownership is calculated safely in Review.js using the
+     * signed-in Firebase UID and the review's stored userId.
+     */
     const reviews = await getUserReviews(
       req.params.uid,
-      decodedUser.uid
+      null
     );
 
     reviews.sort((a, b) => {
@@ -2351,11 +2358,18 @@ app.get("/users/:uid/top-reviews", async (req, res) => {
 
 app.get("/users/:uid/favorites", async (req, res) => {
   try {
-    const decodedUser = await verifyFirebaseUser(req);
-
+    /*
+     * These profile sections are readable profile data.
+     * Do not require an Authorization header here because the
+     * existing mobile/web REST helpers call these endpoints
+     * without one.
+     *
+     * Ownership is calculated safely in Review.js using the
+     * signed-in Firebase UID and the review's stored userId.
+     */
     const reviews = await getUserReviews(
       req.params.uid,
-      decodedUser.uid
+      null
     );
 
     const favorites = reviews
@@ -2378,11 +2392,18 @@ app.get("/users/:uid/favorites", async (req, res) => {
 
 app.get("/users/:uid/most-upvoted", async (req, res) => {
   try {
-    const decodedUser = await verifyFirebaseUser(req);
-
+    /*
+     * These profile sections are readable profile data.
+     * Do not require an Authorization header here because the
+     * existing mobile/web REST helpers call these endpoints
+     * without one.
+     *
+     * Ownership is calculated safely in Review.js using the
+     * signed-in Firebase UID and the review's stored userId.
+     */
     const reviews = await getUserReviews(
       req.params.uid,
-      decodedUser.uid
+      null
     );
 
     reviews.sort((a, b) => b.upvotes - a.upvotes);
@@ -2404,11 +2425,18 @@ app.get("/users/:uid/most-upvoted", async (req, res) => {
 
 app.get("/users/:uid/activity", async (req, res) => {
   try {
-    const decodedUser = await verifyFirebaseUser(req);
-
+    /*
+     * These profile sections are readable profile data.
+     * Do not require an Authorization header here because the
+     * existing mobile/web REST helpers call these endpoints
+     * without one.
+     *
+     * Ownership is calculated safely in Review.js using the
+     * signed-in Firebase UID and the review's stored userId.
+     */
     const reviews = await getUserReviews(
       req.params.uid,
-      decodedUser.uid
+      null
     );
 
     reviews.sort((a, b) => {
