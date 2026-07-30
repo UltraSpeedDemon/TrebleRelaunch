@@ -6,16 +6,21 @@ import React, {
 
 import {
   ActivityIndicator,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 
 import {
   onAuthStateChanged,
 } from "firebase/auth";
+
+import { FontAwesome } from "@expo/vector-icons";
 
 import { auth } from "../utils/firebase";
 import { getSession } from "../utils/session";
@@ -24,6 +29,20 @@ import colours from "../styles/colours";
 export default function Home({
   navigation,
 }) {
+  const { width } = useWindowDimensions();
+
+  const isWeb =
+    Platform.OS === "web";
+
+  const isMobileWidth =
+    width < 768;
+
+  const [showInstallPrompt, setShowInstallPrompt] =
+    useState(false);
+
+  const [mobilePlatform, setMobilePlatform] =
+    useState("mobile");
+
   const [
     checkingSession,
     setCheckingSession,
@@ -45,6 +64,102 @@ export default function Home({
         ],
       });
     }, [navigation]);
+
+  const closeInstallPrompt =
+    useCallback(() => {
+      setShowInstallPrompt(false);
+
+      if (
+        Platform.OS === "web" &&
+        typeof window !== "undefined"
+      ) {
+        try {
+          window.localStorage.setItem(
+            "treble-install-prompt-dismissed",
+            "true"
+          );
+        } catch {
+          // Storage can be unavailable in private browsing.
+        }
+      }
+    }, []);
+
+  useEffect(() => {
+    if (
+      !isWeb ||
+      !isMobileWidth ||
+      typeof window === "undefined"
+    ) {
+      setShowInstallPrompt(false);
+      return;
+    }
+
+    const userAgent =
+      window.navigator?.userAgent ||
+      "";
+
+    const isIOS =
+      /iPad|iPhone|iPod/i.test(
+        userAgent
+      ) ||
+      (
+        /Macintosh/i.test(userAgent) &&
+        Number(
+          window.navigator?.maxTouchPoints ||
+          0
+        ) > 1
+      );
+
+    const isAndroid =
+      /Android/i.test(userAgent);
+
+    const isStandalone =
+      window.matchMedia?.(
+        "(display-mode: standalone)"
+      )?.matches ||
+      window.navigator?.standalone === true;
+
+    let wasDismissed = false;
+
+    try {
+      wasDismissed =
+        window.localStorage.getItem(
+          "treble-install-prompt-dismissed"
+        ) === "true";
+    } catch {
+      wasDismissed = false;
+    }
+
+    if (
+      isStandalone ||
+      wasDismissed ||
+      (
+        !isIOS &&
+        !isAndroid
+      )
+    ) {
+      setShowInstallPrompt(false);
+      return;
+    }
+
+    setMobilePlatform(
+      isIOS
+        ? "ios"
+        : "android"
+    );
+
+    const timer =
+      window.setTimeout(() => {
+        setShowInstallPrompt(true);
+      }, 850);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    isMobileWidth,
+    isWeb,
+  ]);
 
   useEffect(() => {
     let componentMounted = true;
@@ -206,6 +321,196 @@ export default function Home({
           styles.backgroundGlowBottom
         }
       />
+
+      <Modal
+        visible={showInstallPrompt}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={
+          closeInstallPrompt
+        }
+      >
+        <View style={styles.installOverlay}>
+          <View style={styles.installModal}>
+            <TouchableOpacity
+              style={styles.installCloseButton}
+              onPress={closeInstallPrompt}
+              activeOpacity={0.75}
+              accessibilityLabel="Close install instructions"
+            >
+              <FontAwesome
+                name="times"
+                size={20}
+                color="rgba(255,255,255,0.72)"
+              />
+            </TouchableOpacity>
+
+            <View style={styles.installIconCircle}>
+              <FontAwesome
+                name="mobile"
+                size={34}
+                color={
+                  colours.lightblue ||
+                  "#42bfee"
+                }
+              />
+            </View>
+
+            <Text style={styles.installTitle}>
+              Add Treble to Your Home Screen
+            </Text>
+
+            <Text style={styles.installDescription}>
+              You’re using Treble on mobile. Save it as an app for faster access and a full-screen experience.
+            </Text>
+
+            <View style={styles.installSteps}>
+              {mobilePlatform === "ios" ? (
+                <>
+                  <View style={styles.installStep}>
+                    <View style={styles.installStepIcon}>
+                      <FontAwesome
+                        name="share-square-o"
+                        size={21}
+                        color="#ffffff"
+                      />
+                    </View>
+
+                    <View style={styles.installStepContent}>
+                      <Text style={styles.installStepTitle}>
+                        1. Tap Share
+                      </Text>
+
+                      <Text style={styles.installStepText}>
+                        In Safari, tap the Share icon at the bottom of the screen.
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.installStep}>
+                    <View style={styles.installStepIcon}>
+                      <FontAwesome
+                        name="plus-square-o"
+                        size={22}
+                        color="#ffffff"
+                      />
+                    </View>
+
+                    <View style={styles.installStepContent}>
+                      <Text style={styles.installStepTitle}>
+                        2. Add to Home Screen
+                      </Text>
+
+                      <Text style={styles.installStepText}>
+                        Scroll down and choose “Add to Home Screen.”
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.installStep}>
+                    <View style={styles.installStepIcon}>
+                      <FontAwesome
+                        name="check"
+                        size={20}
+                        color="#ffffff"
+                      />
+                    </View>
+
+                    <View style={styles.installStepContent}>
+                      <Text style={styles.installStepTitle}>
+                        3. Tap Add
+                      </Text>
+
+                      <Text style={styles.installStepText}>
+                        Confirm the Treble name and logo, then tap Add.
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.installStep}>
+                    <View style={styles.installStepIcon}>
+                      <FontAwesome
+                        name="ellipsis-v"
+                        size={21}
+                        color="#ffffff"
+                      />
+                    </View>
+
+                    <View style={styles.installStepContent}>
+                      <Text style={styles.installStepTitle}>
+                        1. Open the browser menu
+                      </Text>
+
+                      <Text style={styles.installStepText}>
+                        In Chrome, tap the three-dot menu in the top-right.
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.installStep}>
+                    <View style={styles.installStepIcon}>
+                      <FontAwesome
+                        name="download"
+                        size={20}
+                        color="#ffffff"
+                      />
+                    </View>
+
+                    <View style={styles.installStepContent}>
+                      <Text style={styles.installStepTitle}>
+                        2. Install the app
+                      </Text>
+
+                      <Text style={styles.installStepText}>
+                        Choose “Install app” or “Add to Home screen.”
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.installStep}>
+                    <View style={styles.installStepIcon}>
+                      <FontAwesome
+                        name="check"
+                        size={20}
+                        color="#ffffff"
+                      />
+                    </View>
+
+                    <View style={styles.installStepContent}>
+                      <Text style={styles.installStepTitle}>
+                        3. Confirm
+                      </Text>
+
+                      <Text style={styles.installStepText}>
+                        Tap Install to add the Treble icon to your Home Screen.
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={styles.installGotItButton}
+              onPress={closeInstallPrompt}
+              activeOpacity={0.82}
+            >
+              <Text style={styles.installGotItText}>
+                Got It
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.installBrowserNote}>
+              {mobilePlatform === "ios"
+                ? "Use Safari for the Add to Home Screen option."
+                : "Chrome provides the best installation experience."}
+            </Text>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView
         contentContainerStyle={
@@ -749,6 +1054,210 @@ const styles =
       lineHeight: 17,
 
       marginTop: 20,
+
+      textAlign: "center",
+    },
+
+    installOverlay: {
+      flex: 1,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 20,
+      paddingVertical: 30,
+
+      backgroundColor:
+        "rgba(0,0,0,0.78)",
+    },
+
+    installModal: {
+      position: "relative",
+
+      width: "100%",
+      maxWidth: 430,
+
+      alignItems: "center",
+
+      paddingTop: 31,
+      paddingBottom: 24,
+      paddingHorizontal: 21,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(66,191,238,0.34)",
+
+      borderRadius: 25,
+
+      backgroundColor:
+        colours.darkblue ||
+        "#1b1f28",
+
+      shadowColor: "#000000",
+      shadowOffset: {
+        width: 0,
+        height: 13,
+      },
+      shadowOpacity: 0.48,
+      shadowRadius: 28,
+
+      elevation: 18,
+    },
+
+    installCloseButton: {
+      position: "absolute",
+
+      top: 13,
+      right: 13,
+
+      width: 38,
+      height: 38,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderRadius: 19,
+
+      backgroundColor:
+        "rgba(255,255,255,0.06)",
+    },
+
+    installIconCircle: {
+      width: 66,
+      height: 66,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(66,191,238,0.42)",
+
+      borderRadius: 33,
+
+      backgroundColor:
+        "rgba(66,191,238,0.12)",
+    },
+
+    installTitle: {
+      color: "#ffffff",
+
+      fontSize: 23,
+      lineHeight: 29,
+      fontWeight: "900",
+
+      marginTop: 15,
+
+      textAlign: "center",
+    },
+
+    installDescription: {
+      color:
+        "rgba(255,255,255,0.67)",
+
+      fontSize: 14,
+      lineHeight: 20,
+
+      marginTop: 8,
+
+      textAlign: "center",
+    },
+
+    installSteps: {
+      width: "100%",
+
+      marginTop: 20,
+    },
+
+    installStep: {
+      width: "100%",
+
+      flexDirection: "row",
+      alignItems: "center",
+
+      padding: 12,
+      marginBottom: 9,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.08)",
+
+      borderRadius: 14,
+
+      backgroundColor:
+        "rgba(255,255,255,0.035)",
+    },
+
+    installStepIcon: {
+      width: 42,
+      height: 42,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      marginRight: 12,
+
+      borderRadius: 21,
+
+      backgroundColor:
+        colours.primaryblue ||
+        "#359fe1",
+    },
+
+    installStepContent: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    installStepTitle: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      lineHeight: 19,
+      fontWeight: "800",
+    },
+
+    installStepText: {
+      color:
+        "rgba(255,255,255,0.58)",
+
+      fontSize: 12,
+      lineHeight: 17,
+
+      marginTop: 2,
+    },
+
+    installGotItButton: {
+      width: "100%",
+      height: 49,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      marginTop: 8,
+
+      borderRadius: 25,
+
+      backgroundColor:
+        colours.primaryblue ||
+        "#359fe1",
+    },
+
+    installGotItText: {
+      color: "#ffffff",
+
+      fontSize: 15,
+      fontWeight: "900",
+    },
+
+    installBrowserNote: {
+      color:
+        "rgba(255,255,255,0.38)",
+
+      fontSize: 11,
+      lineHeight: 16,
+
+      marginTop: 11,
 
       textAlign: "center",
     },
