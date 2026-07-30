@@ -729,7 +729,7 @@ export default function Favourites({
           }
         >
           <Image
-            source={require("./images/searchIcon.png")}
+            source={require("../images/searchIcon.png")}
             style={styles.inputSearchIcon}
           />
 
