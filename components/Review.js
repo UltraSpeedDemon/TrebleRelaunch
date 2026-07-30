@@ -30,6 +30,7 @@ const ReviewCard = ({
   onReviewPress,
   onReplyConfirmation,
   profileReviewMode = false,
+  compactMode = false,
 }) => {
 
   const route = useRoute();
@@ -38,6 +39,7 @@ const ReviewCard = ({
   const [replyText, setReplyText] = useState("");
   const [loading, setLoading] = useState(false); // To manage loading state while posting a reply
   const [refresh, setRefresh] = useState(false);  // Add the refresh state
+  const [expanded, setExpanded] = useState(false);
 
   /*
    * Review-card behavior depends on where it is displayed:
@@ -71,6 +73,22 @@ const ReviewCard = ({
     : Array.isArray(item?.userSelectedEmojis)
       ? item.userSelectedEmojis
       : [];
+
+  const reviewedMusicTitle =
+    item?.song?.title ||
+    item?.song?.name ||
+    item?.listenable?.title ||
+    item?.listenable?.name ||
+    item?.songTitle ||
+    "";
+
+  const needsExpansion =
+    profileReviewMode &&
+    (
+      reviewMessage.length > 72 ||
+      reviewedMusicTitle.length > 28 ||
+      reviewEmojis.length > 3
+    );
 
   useEffect(() => {
     /*
@@ -379,13 +397,22 @@ const ReviewCard = ({
         styles.reviewCard,
         isUserProfilePage &&
           styles.profileReviewCard,
+        isUserProfilePage &&
+          !expanded &&
+          styles.profileReviewCardCollapsed,
+        compactMode &&
+          styles.compactReviewCard,
       ]}
     >
       <View style={[styles.row, styles.reviewContent]}>
         <TouchableOpacity onPress={openUserProfile} activeOpacity={0.75}>
           <Image
             source={avatarSource}
-            style={styles.avatar}
+            style={[
+              styles.avatar,
+              compactMode &&
+                styles.compactAvatar,
+            ]}
           />
         </TouchableOpacity>
 
@@ -422,7 +449,19 @@ const ReviewCard = ({
                   <Text style={styles.emptyEmojiSpace}> </Text>
                 )}
               </View>
-              <Text style={styles.reviewText}>
+              <Text
+                style={[
+                  styles.reviewText,
+                  compactMode &&
+                    styles.compactReviewText,
+                ]}
+                numberOfLines={
+                  profileReviewMode &&
+                  !expanded
+                    ? 3
+                    : undefined
+                }
+              >
                 {reviewMessage}
               </Text>
             </View>
@@ -497,7 +536,15 @@ const ReviewCard = ({
               <View style={styles.infoAndDateContainer}>  
                 {item.song && (
                   <View style={styles.songInfoContainer}>
-                    <Text style={styles.songTitle}>
+                    <Text
+                      style={styles.songTitle}
+                      numberOfLines={
+                        profileReviewMode &&
+                        !expanded
+                          ? 1
+                          : undefined
+                      }
+                    >
                       {" "}
                       {item.song.type === "album"
                         ? item.song.title
@@ -524,6 +571,22 @@ const ReviewCard = ({
 
         
       </View>
+
+      {needsExpansion ? (
+        <TouchableOpacity
+          style={styles.expandButton}
+          onPress={() =>
+            setExpanded((value) => !value)
+          }
+          activeOpacity={0.8}
+        >
+          <Text style={styles.expandButtonText}>
+            {expanded
+              ? "Show Less"
+              : "View More"}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       {/* Upvote Button */}
       <TouchableOpacity
@@ -631,11 +694,24 @@ const styles = StyleSheet.create({
   },
 
   profileReviewCard: {
-    minHeight: 190,
+    minHeight: 210,
 
     borderColor: "rgba(53,175,229,0.28)",
     backgroundColor:
       "rgba(18,24,35,0.96)",
+  },
+
+  profileReviewCardCollapsed: {
+    height: 210,
+  },
+
+  compactReviewCard: {
+    minHeight: 0,
+
+    padding: 11,
+    marginBottom: 7,
+
+    borderRadius: 11,
   },
   contentTouchable: {
     flex: 1,
@@ -653,6 +729,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
 
     backgroundColor: "rgba(255,255,255,0.08)",
+  },
+
+  compactAvatar: {
+    width: 36,
+    height: 36,
+
+    borderRadius: 18,
+
+    marginRight: 8,
   },
   contentContainer: {
     flex: 1,
@@ -674,6 +759,14 @@ const styles = StyleSheet.create({
     marginBottom: 5,
 
     paddingRight: 2,
+  },
+
+  compactReviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+
+    marginTop: 4,
+    marginBottom: 3,
   },
   infoAndDateContainer: {
     flexDirection: "row",
@@ -785,6 +878,27 @@ const styles = StyleSheet.create({
   
     width: 20,
   },
+  expandButton: {
+    alignSelf: "flex-start",
+
+    marginTop: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+
+    borderWidth: 1,
+    borderColor: "rgba(53,175,229,0.28)",
+    borderRadius: 10,
+
+    backgroundColor: "rgba(53,175,229,0.08)",
+  },
+
+  expandButtonText: {
+    color: colours.lightblue || "#35afe5",
+
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
   // ...rest of your styles
   commentsContainer: {
     display: "flex",

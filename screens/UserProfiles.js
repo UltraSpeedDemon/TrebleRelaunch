@@ -1949,7 +1949,8 @@ const finalButtonLabel =
                               item
                             }
                             avatar={
-                              avatar
+                              avatar ||
+                              FALLBACK_AVATAR
                             }
                             handleUpvote={
                               handleUpvote
@@ -1960,6 +1961,9 @@ const finalButtonLabel =
                             navigation={
                               navigation
                             }
+                            showReplyInput={false}
+                            showComments={false}
+                            profileReviewMode
                           />
                         </View>
                       )
@@ -2548,6 +2552,7 @@ const styles =
 
     reviewSnippetCard: {
       width: 310,
+      minHeight: 210,
 
       marginRight: 14,
     },

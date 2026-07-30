@@ -327,6 +327,64 @@ export default function SongPage({ route, navigation }) {
     fetchUserData();
   }, [navigation, isFocused]);
 
+  const enrichReviewUsers = async (reviewItems) => {
+    return Promise.all(
+      reviewItems.map(async (reviewItem) => {
+        const reviewUserId =
+          reviewItem?.userId ||
+          reviewItem?.user_id ||
+          reviewItem?.uid ||
+          reviewItem?.user?.userId ||
+          reviewItem?.user?.uid;
+
+        if (
+          !reviewUserId ||
+          reviewItem?.avatar ||
+          reviewItem?.avatarLong ||
+          reviewItem?.userAvatar
+        ) {
+          return reviewItem;
+        }
+
+        try {
+          const userResponse =
+            await getUser(reviewUserId);
+
+          if (!userResponse?.ok) {
+            return reviewItem;
+          }
+
+          const userData =
+            await userResponse.json();
+
+          return {
+            ...reviewItem,
+            userId: String(reviewUserId),
+            username:
+              reviewItem?.username ||
+              reviewItem?.userName ||
+              userData?.username ||
+              userData?.displayName ||
+              "Treble User",
+            avatar:
+              userData?.avatar ||
+              userData?.avatarLong ||
+              userData?.profilePicture ||
+              "",
+          };
+        } catch (error) {
+          console.warn(
+            "[SongPage] Could not load review user:",
+            error
+          );
+
+          return reviewItem;
+        }
+      })
+    );
+  };
+
+
   async function populateReviews() {
   try {
     const response = await getReviews(track.id);
@@ -342,9 +400,14 @@ export default function SongPage({ route, navigation }) {
       ? data
       : data.reviews || [];
 
-    setReviews(loadedReviews);
+    const enrichedReviews =
+      await enrichReviewUsers(
+        loadedReviews
+      );
 
-    const myExistingReview = loadedReviews.find(
+    setReviews(enrichedReviews);
+
+    const myExistingReview = enrichedReviews.find(
       (item) => item.isUser === true
     );
 
@@ -1521,7 +1584,7 @@ const handlePlayPreview = async () => {
                 return;
               }
 
-              navigation.navigate("UserProfile", {
+              navigation.navigate("UserProfiles", {
                 userId: reviewUserId,
                 username: item.username || item.userName || "",
               });
@@ -1539,6 +1602,7 @@ const handlePlayPreview = async () => {
                   showReplyInput={!item.isUser}
                   onUserPress={openReviewUser}
                   onReviewPress={openReviewUser}
+                  compactMode
                   onReplyConfirmation={({ message, onConfirm }) =>
                     openConfirmation({
                       title: "Post Reply?",

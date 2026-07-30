@@ -409,6 +409,64 @@ export default function AlbumPage({ route, navigation }) {
       fetchUserData();
     }
   }, [navigation, isFocused]);
+
+  const enrichReviewUsers = async (reviewItems) => {
+    return Promise.all(
+      reviewItems.map(async (reviewItem) => {
+        const reviewUserId =
+          reviewItem?.userId ||
+          reviewItem?.user_id ||
+          reviewItem?.uid ||
+          reviewItem?.user?.userId ||
+          reviewItem?.user?.uid;
+
+        if (
+          !reviewUserId ||
+          reviewItem?.avatar ||
+          reviewItem?.avatarLong ||
+          reviewItem?.userAvatar
+        ) {
+          return reviewItem;
+        }
+
+        try {
+          const userResponse =
+            await getUser(reviewUserId);
+
+          if (!userResponse?.ok) {
+            return reviewItem;
+          }
+
+          const userData =
+            await userResponse.json();
+
+          return {
+            ...reviewItem,
+            userId: String(reviewUserId),
+            username:
+              reviewItem?.username ||
+              reviewItem?.userName ||
+              userData?.username ||
+              userData?.displayName ||
+              "Treble User",
+            avatar:
+              userData?.avatar ||
+              userData?.avatarLong ||
+              userData?.profilePicture ||
+              "",
+          };
+        } catch (error) {
+          console.warn(
+            "[AlbumPage] Could not load review user:",
+            error
+          );
+
+          return reviewItem;
+        }
+      })
+    );
+  };
+
   
   async function populateReviewsAndSongs() {
     setSongsLoading(true);
@@ -530,8 +588,13 @@ export default function AlbumPage({ route, navigation }) {
         })
       );
 
-      setReviews(loadedReviews);
-      setUsers([]);
+      const enrichedReviews =
+        await enrichReviewUsers(
+          loadedReviews
+        );
+
+      setReviews(enrichedReviews);
+      setUsers(enrichedReviews);
       setAlbumSongs(updatedSongs);
       setSummary(
         summaryData?.summary || ""
@@ -1879,6 +1942,9 @@ export default function AlbumPage({ route, navigation }) {
             );
 
             const avatar =
+              item?.avatarLong ||
+              item?.avatar ||
+              item?.userAvatar ||
               user?.avatarLong ||
               user?.avatar ||
               null;

@@ -1363,6 +1363,7 @@ export default function Profile({
                         showComments={
                           false
                         }
+                        profileReviewMode
                       />
                     </View>
                   )
@@ -1883,12 +1884,14 @@ desktopBottomNavBar: {
 
   reviewSnippetCard: {
     width: 340,
+    minHeight: 210,
 
     marginRight: 13,
   },
 
   compactReviewSnippetCard: {
     width: 285,
+    minHeight: 210,
   },
 
   /* =====================================================
