@@ -657,6 +657,7 @@ const ReviewCard = ({
               <View style={styles.dateContainer}>
                 <Text style={styles.reviewDate}>{createdAtText}</Text>
               </View>
+            </View>
           </View>
         </TouchableOpacity>
 
