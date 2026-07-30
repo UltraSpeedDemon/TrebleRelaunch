@@ -1334,7 +1334,8 @@ const finalButtonLabel =
                       item
                     }
                     avatar={
-                      avatar
+                      avatar ||
+                      FALLBACK_AVATAR
                     }
                     handleUpvote={
                       handleUpvote
@@ -1345,6 +1346,9 @@ const finalButtonLabel =
                     navigation={
                       navigation
                     }
+                    showReplyInput={false}
+                    showComments={false}
+                    profileReviewMode
                   />
                 </View>
               )}

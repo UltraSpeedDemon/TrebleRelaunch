@@ -776,11 +776,7 @@ export default function Profile({
           <ReviewCard
             item={item}
             avatar={
-              avatar
-                ? {
-                    uri: avatar,
-                  }
-                : noAvatar
+              avatar || noAvatar
             }
             handleUpvote={
               handleUpvote
@@ -791,6 +787,7 @@ export default function Profile({
             navigation={navigation}
             showReplyInput={false}
             showComments={false}
+            profileReviewMode
           />
         </View>
       ),

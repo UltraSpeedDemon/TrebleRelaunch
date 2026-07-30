@@ -868,7 +868,7 @@ const handleLogout = useCallback(() => {
                 )
               }
               iconStyle={
-                styles.favouritesIcon
+                styles.cardGameIcon
               }
               dividerAfter
             />
@@ -1235,6 +1235,21 @@ const styles = StyleSheet.create({
 
     marginLeft: 1,
     marginRight: 17,
+  },
+
+  /*
+   * The two-card Swipe to Discover artwork contains more
+   * empty transparent space than the other sidebar icons,
+   * so it needs its own larger dimensions.
+   */
+  cardGameIcon: {
+    width: 34,
+    height: 34,
+
+    marginLeft: -6,
+    marginRight: 9,
+
+    resizeMode: "contain",
   },
 
   menuIconPlaceholder: {

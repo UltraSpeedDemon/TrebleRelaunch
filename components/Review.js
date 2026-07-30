@@ -29,6 +29,7 @@ const ReviewCard = ({
   onUserPress,
   onReviewPress,
   onReplyConfirmation,
+  profileReviewMode = false,
 }) => {
 
   const route = useRoute();
@@ -47,7 +48,10 @@ const ReviewCard = ({
    * The avatar and username always open the author's profile.
    */
   const isUserProfilePage =
-    route?.name === "UserProfile";
+    profileReviewMode ||
+    route?.name === "Profile" ||
+    route?.name === "UserProfile" ||
+    route?.name === "UserProfiles";
 
   const reviewMessage =
     item?.message ||
@@ -190,20 +194,33 @@ const ReviewCard = ({
 
   // Open the song, album, or artist attached to a profile review.
   const handleContentPress = () => {
-    const reviewedItem =
+    const rawMusic =
       item?.song ||
       item?.listenable ||
       item?.track ||
       item?.album ||
       item?.artist ||
+      item?.item_info ||
+      item?.itemInfo ||
+      item?.music ||
       null;
 
-    const reviewedType =
+    const reviewedItem =
+      rawMusic?.item_info ||
+      rawMusic?.itemInfo ||
+      rawMusic?.data ||
+      rawMusic;
+
+    const reviewedType = String(
       reviewedItem?.type ||
+      rawMusic?.type ||
       item?.type ||
       item?.listenableType ||
       item?.listenable_type ||
-      "track";
+      "track"
+    )
+      .trim()
+      .toLowerCase();
 
     if (!reviewedItem || !navigation) {
       Alert.alert(
@@ -213,24 +230,68 @@ const ReviewCard = ({
       return;
     }
 
+    const musicId =
+      reviewedItem?.id ||
+      reviewedItem?.listenableId ||
+      reviewedItem?.listenable_id ||
+      item?.listenableId ||
+      item?.listenable_id;
+
+    const normalizedMusic = {
+      ...reviewedItem,
+      id: musicId
+        ? String(musicId)
+        : reviewedItem?.id,
+      listenableId: musicId
+        ? String(musicId)
+        : reviewedItem?.listenableId,
+      title:
+        reviewedItem?.title ||
+        reviewedItem?.name ||
+        item?.songTitle ||
+        "Unknown",
+      name:
+        reviewedItem?.name ||
+        reviewedItem?.title ||
+        item?.songTitle ||
+        "Unknown",
+      image:
+        reviewedItem?.image ||
+        reviewedItem?.coverArt ||
+        reviewedItem?.albumArt ||
+        "",
+      coverArt:
+        reviewedItem?.coverArt ||
+        reviewedItem?.image ||
+        reviewedItem?.albumArt ||
+        "",
+    };
+
     switch (reviewedType) {
       case "album":
         navigation.navigate("AlbumPage", {
-          album: reviewedItem,
+          album: {
+            ...normalizedMusic,
+            type: "album",
+          },
         });
         break;
 
       case "artist":
         navigation.navigate("ArtistPage", {
-          artist: reviewedItem,
+          artist: {
+            ...normalizedMusic,
+            type: "artist",
+          },
         });
         break;
 
+      case "song":
       case "track":
       default:
         navigation.navigate("SongPage", {
           track: {
-            ...reviewedItem,
+            ...normalizedMusic,
             type: "track",
           },
         });
@@ -254,6 +315,21 @@ const ReviewCard = ({
     item?.user?.profilePicture ||
     null;
 
+  const avatarSource =
+    resolvedAvatar &&
+    typeof resolvedAvatar === "object" &&
+    (
+      resolvedAvatar.uri ||
+      resolvedAvatar.default
+    )
+      ? resolvedAvatar
+      : typeof resolvedAvatar === "string" &&
+        resolvedAvatar.trim()
+        ? {
+            uri: resolvedAvatar.trim(),
+          }
+        : require("../images/avatarIcon.png");
+
   const openUserProfile = () => {
     if (typeof onUserPress === "function") {
       onUserPress();
@@ -268,7 +344,7 @@ const ReviewCard = ({
       item?.user?.uid;
 
     if (reviewUserId && navigation) {
-      navigation.navigate("UserProfile", {
+      navigation.navigate("UserProfiles", {
         userId: reviewUserId,
         username: item?.username || item?.userName || item?.user?.username || "",
       });
@@ -298,15 +374,17 @@ const ReviewCard = ({
   };
 
   return (
-    <View style={styles.reviewCard}>
+    <View
+      style={[
+        styles.reviewCard,
+        isUserProfilePage &&
+          styles.profileReviewCard,
+      ]}
+    >
       <View style={[styles.row, styles.reviewContent]}>
         <TouchableOpacity onPress={openUserProfile} activeOpacity={0.75}>
           <Image
-            source={
-              resolvedAvatar
-                ? { uri: resolvedAvatar }
-                : require("../images/avatarIcon.png")
-            }
+            source={avatarSource}
             style={styles.avatar}
           />
         </TouchableOpacity>
@@ -518,7 +596,9 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   reviewContent: {
-    minHeight: 100
+    width: "100%",
+    minHeight: 100,
+    alignItems: "flex-start",
   },
   actionButtons: {
     flexDirection: "row",
@@ -530,25 +610,49 @@ const styles = StyleSheet.create({
     paddingVertical: 5
   },
   reviewCard: {
+    width: "100%",
+
     flexDirection: "column",
-    backgroundColor: colours.darkblue,
-    borderRadius: 10,
+    alignItems: "stretch",
+
     padding: 15,
-    paddingBottom: 30, // Reserve space for the date
     marginBottom: 10,
-    alignItems: "flex-start",
+
+    borderWidth: 1,
+    borderColor: "rgba(100,181,246,0.16)",
+    borderRadius: 14,
+
+    backgroundColor: colours.darkblue,
+
     position: "relative",
     minHeight: 100,
+
+    overflow: "hidden",
+  },
+
+  profileReviewCard: {
+    minHeight: 190,
+
+    borderColor: "rgba(53,175,229,0.28)",
+    backgroundColor:
+      "rgba(18,24,35,0.96)",
   },
   contentTouchable: {
     flex: 1,
+    minWidth: 0,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-    marginTop: 5,
+    width: 46,
+    height: 46,
+
+    borderWidth: 1,
+    borderColor: "rgba(100,181,246,0.34)",
+    borderRadius: 23,
+
+    marginRight: 11,
+    marginTop: 2,
+
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   contentContainer: {
     flex: 1,
@@ -561,10 +665,15 @@ const styles = StyleSheet.create({
     color: "#64B5F6",
   },
   reviewText: {
-    fontSize: 14,
     color: "#FFF",
-    marginVertical: 5,
-    paddingRight: 20,
+
+    fontSize: 14,
+    lineHeight: 20,
+
+    marginTop: 7,
+    marginBottom: 5,
+
+    paddingRight: 2,
   },
   infoAndDateContainer: {
     flexDirection: "row",
@@ -619,11 +728,23 @@ const styles = StyleSheet.create({
     color: "#FFF",
   },
   upvoteButton: {
-    position: "absolute",
-    top: 10,
-    right: 10,
+    alignSelf: "flex-end",
+
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+
+    minHeight: 34,
+
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+
+    borderWidth: 1,
+    borderColor: "rgba(100,181,246,0.28)",
+    borderRadius: 17,
+
+    backgroundColor: "rgba(100,181,246,0.10)",
   },
   upvoteIcon: {
     width: 20,
@@ -645,6 +766,10 @@ const styles = StyleSheet.create({
   inlineContainer: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
+
+    minWidth: 0,
+    paddingRight: 4,
   },
   heartEmoji: {
     width: 15,
