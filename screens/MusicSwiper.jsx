@@ -826,41 +826,79 @@ export function MusicSwiper({
         </TouchableOpacity>
       </View>
 
-      <View style={styles.footerRow}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() =>
-            navigation.goBack()
-          }
-          activeOpacity={0.8}
-        >
-          <FontAwesome
-            name="arrow-left"
-            size={16}
-            color="#ffffff"
-          />
-
-          <Text style={styles.backButtonText}>
-            Back
-          </Text>
-        </TouchableOpacity>
-
-        {loadingMore ? (
-          <View style={styles.loadingMoreRow}>
-            <ActivityIndicator
-              size="small"
-              color={
-                colours.lightblue ||
-                "#35afe5"
-              }
+      {isCompact ? (
+        <View style={styles.mobileFooter}>
+          <TouchableOpacity
+            style={styles.mobileBackButton}
+            onPress={() =>
+              navigation.goBack()
+            }
+            activeOpacity={0.8}
+          >
+            <FontAwesome
+              name="arrow-left"
+              size={16}
+              color="#ffffff"
             />
 
-            <Text style={styles.loadingMoreText}>
-              Loading more songs...
+            <Text style={styles.backButtonText}>
+              Back
             </Text>
-          </View>
-        ) : null}
-      </View>
+          </TouchableOpacity>
+
+          {loadingMore ? (
+            <View style={styles.mobileLoadingMoreRow}>
+              <ActivityIndicator
+                size="small"
+                color={
+                  colours.lightblue ||
+                  "#35afe5"
+                }
+              />
+
+              <Text style={styles.loadingMoreText}>
+                Loading more songs...
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.footerRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() =>
+              navigation.goBack()
+            }
+            activeOpacity={0.8}
+          >
+            <FontAwesome
+              name="arrow-left"
+              size={16}
+              color="#ffffff"
+            />
+
+            <Text style={styles.backButtonText}>
+              Back
+            </Text>
+          </TouchableOpacity>
+
+          {loadingMore ? (
+            <View style={styles.loadingMoreRow}>
+              <ActivityIndicator
+                size="small"
+                color={
+                  colours.lightblue ||
+                  "#35afe5"
+                }
+              />
+
+              <Text style={styles.loadingMoreText}>
+                Loading more songs...
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -1181,6 +1219,43 @@ const styles =
       alignItems: "center",
 
       zIndex: 100,
+    },
+
+    mobileFooter: {
+      width: "100%",
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      marginTop: 14,
+      paddingBottom: 8,
+    },
+
+    mobileBackButton: {
+      minWidth: 132,
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 20,
+      paddingVertical: 11,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(53,175,229,0.3)",
+
+      borderRadius: 16,
+
+      backgroundColor:
+        "rgba(18,24,35,0.9)",
+    },
+
+    mobileLoadingMoreRow: {
+      flexDirection: "row",
+      alignItems: "center",
+
+      marginTop: 9,
     },
 
     backButton: {

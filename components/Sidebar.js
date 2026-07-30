@@ -860,11 +860,15 @@ const handleLogout = useCallback(() => {
             />
 
             <MenuItem
+              icon={require("../images/cardgame.png")}
               label="Swipe to Discover"
               onPress={() =>
                 navigateTo(
                   "MusicSwiperTest"
                 )
+              }
+              iconStyle={
+                styles.favouritesIcon
               }
               dividerAfter
             />
