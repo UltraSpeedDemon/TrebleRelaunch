@@ -13,8 +13,7 @@ import {
 import colours from "../styles/colours";
 import { getComments, getUser, addComment, deleteComment } from "../providers/rest"; // Import the API function
 import { auth } from '../utils/firebase';
-
-import ArtistListenables from "../screens/ArtistListenables";
+import { useRoute } from "@react-navigation/native";
 
 const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
 
@@ -32,10 +31,23 @@ const ReviewCard = ({
   onReplyConfirmation,
 }) => {
 
+  const route = useRoute();
+
   const [comments, setComments] = useState([]);
   const [replyText, setReplyText] = useState("");
   const [loading, setLoading] = useState(false); // To manage loading state while posting a reply
   const [refresh, setRefresh] = useState(false);  // Add the refresh state
+
+  /*
+   * Review-card behavior depends on where it is displayed:
+   *
+   * - UserProfile: clicking the review opens the reviewed music.
+   * - Song/Album/Artist pages: clicking the review opens its author.
+   *
+   * The avatar and username always open the author's profile.
+   */
+  const isUserProfilePage =
+    route?.name === "UserProfile";
 
   const reviewMessage =
     item?.message ||
@@ -176,24 +188,53 @@ const ReviewCard = ({
     }
   };
 
-  // console.log("item", item);
-  // When the content area is pressed, navigate based on the enriched song data.
+  // Open the song, album, or artist attached to a profile review.
   const handleContentPress = () => {
-    if (item.song && item.song.type) {
-      switch (item.song.type) {
-        case "track":
-          navigation.navigate("SongPage", { track: item.song });
-          break;
-        case "album":
-          navigation.navigate("AlbumPage", { album: item.song });
-          break;
-        case "artist":
-          navigation.navigate("ArtistPage", { artist: item.song });
-          break;
-        default:
-          navigation.navigate("SongPage", { track: item.song });
-          break;
-      }
+    const reviewedItem =
+      item?.song ||
+      item?.listenable ||
+      item?.track ||
+      item?.album ||
+      item?.artist ||
+      null;
+
+    const reviewedType =
+      reviewedItem?.type ||
+      item?.type ||
+      item?.listenableType ||
+      item?.listenable_type ||
+      "track";
+
+    if (!reviewedItem || !navigation) {
+      Alert.alert(
+        "Music unavailable",
+        "This review does not contain enough music information to open it."
+      );
+      return;
+    }
+
+    switch (reviewedType) {
+      case "album":
+        navigation.navigate("AlbumPage", {
+          album: reviewedItem,
+        });
+        break;
+
+      case "artist":
+        navigation.navigate("ArtistPage", {
+          artist: reviewedItem,
+        });
+        break;
+
+      case "track":
+      default:
+        navigation.navigate("SongPage", {
+          track: {
+            ...reviewedItem,
+            type: "track",
+          },
+        });
+        break;
     }
   };
 
@@ -234,7 +275,20 @@ const ReviewCard = ({
     }
   };
 
-  const openReviewProfile = () => {
+  const handleReviewPress = () => {
+    /*
+     * On UserProfile, the review body represents the reviewed
+     * music, so open that music page.
+     */
+    if (isUserProfilePage) {
+      handleContentPress();
+      return;
+    }
+
+    /*
+     * SongPage, AlbumPage, and ArtistPage can provide their own
+     * profile callback. Otherwise use the built-in profile route.
+     */
     if (typeof onReviewPress === "function") {
       onReviewPress();
       return;
@@ -258,7 +312,7 @@ const ReviewCard = ({
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={openReviewProfile}
+          onPress={handleReviewPress}
           activeOpacity={0.8}
           style={styles.contentTouchable}
         >

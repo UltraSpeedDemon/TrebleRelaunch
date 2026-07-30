@@ -1922,6 +1922,17 @@ export default function Feed({ navigation }) {
         />
       </View>
 
+      {/* Mobile search sits beside the hamburger with its own gap. */}
+      {!isDesktopWeb ? (
+        <View style={styles.mobileTopSearchRow}>
+          <View style={styles.mobileHamburgerSpace} />
+
+          <View style={styles.mobileTopSearchContainer}>
+            <SearchBar />
+          </View>
+        </View>
+      ) : null}
+
       {/* =========================================================
           MAIN FEED
       ========================================================= */}
@@ -1964,10 +1975,6 @@ export default function Feed({ navigation }) {
                   </View>
                 ) : null}
               </TouchableOpacity>
-            </View>
-
-            <View style={styles.mobileSearchContainer}>
-              <SearchBar />
             </View>
           </View>
         ) : (
@@ -2355,7 +2362,7 @@ desktopBottomNavBar: {
     minHeight: 0,
 
     paddingHorizontal: 16,
-    paddingTop: 78,
+    paddingTop: 108,
     paddingBottom: 80,
   },
 
@@ -2393,7 +2400,7 @@ desktopBottomNavBar: {
 
     minHeight: 0,
 
-    paddingTop: 78,
+    paddingTop: 108,
     paddingBottom: 75,
     paddingHorizontal: 14,
 
@@ -2415,7 +2422,7 @@ desktopBottomNavBar: {
     width: "100%",
     maxWidth: 760,
     alignSelf: "center",
-    marginBottom: 18,
+    marginBottom: 10,
   },
 
   mobileTitleRow: {
@@ -2423,7 +2430,7 @@ desktopBottomNavBar: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 4,
   },
 
   headerTextContainer: {
@@ -2432,15 +2439,44 @@ desktopBottomNavBar: {
     paddingRight: 14,
   },
 
-  mobileSearchContainer: {
-    width: "100%",
+  mobileTopSearchRow: {
+    position: "absolute",
+    top: 42,
+    left: 12,
+    right: 12,
+
     minHeight: 52,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    zIndex: 70,
+    elevation: 15,
+  },
+
+  /*
+   * Reserve a fixed area for the Sidebar hamburger so the
+   * search bar can never slide underneath or overlap it.
+   */
+  mobileHamburgerSpace: {
+    width: 58,
+    flexShrink: 0,
+  },
+
+  mobileTopSearchContainer: {
+    flex: 1,
+    minWidth: 0,
+
+    marginLeft: 12,
+
     position: "relative",
     zIndex: 20,
   },
 
   header: {
-    color: "#ffffff",
+    color:
+        colours.lightblue ||
+        "#35afe5",
     fontSize: 27,
     lineHeight: 33,
     fontWeight: "800",

@@ -128,14 +128,11 @@ function DraggableSongRow({
         false
       );
 
-      node.setPointerCapture?.(
-        event.pointerId
-      );
-
       /*
-       * Do not prevent the initial pointer-down.
-       * Preventing it here stops TouchableOpacity song cards
-       * from receiving their normal click on web.
+       * Do not capture the pointer on the parent row.
+       * Pointer capture causes web song-card clicks to be
+       * delivered to this scrolling container instead of the
+       * TouchableOpacity card underneath it.
        */
     };
 
@@ -197,10 +194,6 @@ function DraggableSongRow({
         false;
 
       setDragging(false);
-
-      node?.releasePointerCapture?.(
-        event?.pointerId
-      );
 
       setTimeout(() => {
         dragState.current.moved =
