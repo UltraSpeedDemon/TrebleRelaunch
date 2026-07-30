@@ -43,7 +43,7 @@ const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const BOTTOM_NAV_HEIGHT = 72;
 const MAX_CONTENT_WIDTH = 1120;
-const HEADER_CONTENT_WIDTH = 1240;
+const HEADER_CONTENT_WIDTH = MAX_CONTENT_WIDTH;
 
 /*
  * Horizontal song row that supports:
@@ -132,7 +132,11 @@ function DraggableSongRow({
         event.pointerId
       );
 
-      event.preventDefault();
+      /*
+       * Do not prevent the initial pointer-down.
+       * Preventing it here stops TouchableOpacity song cards
+       * from receiving their normal click on web.
+       */
     };
 
   const handlePointerMove =
@@ -155,7 +159,7 @@ function DraggableSongRow({
 
       if (
         Math.abs(movement) >
-        4
+        6
       ) {
         dragState.current.moved =
           true;
@@ -163,14 +167,18 @@ function DraggableSongRow({
         onDragChange?.(
           true
         );
+
+        node.scrollLeft =
+          dragState.current
+            .startScrollLeft -
+          movement;
+
+        /*
+         * Only suppress the browser event once the gesture
+         * is clearly a drag. A normal click remains clickable.
+         */
+        event.preventDefault();
       }
-
-      node.scrollLeft =
-        dragState.current
-          .startScrollLeft -
-        movement;
-
-      event.preventDefault();
     };
 
   const stopPointerDrag =
@@ -201,7 +209,7 @@ function DraggableSongRow({
         onDragChange?.(
           false
         );
-      }, 150);
+      }, 40);
     };
 
   return React.createElement(
@@ -1591,13 +1599,13 @@ const styles =
      * The section list below uses the same width.
      */
     alignedContent: {
-        width: "100%",
+      width: "100%",
 
-        maxWidth:
-          HEADER_CONTENT_WIDTH,
+      maxWidth:
+        MAX_CONTENT_WIDTH,
 
-        alignSelf: "center",
-      },
+      alignSelf: "center",
+    },
 
     pageHeader: {
       width: "100%",
@@ -1705,6 +1713,10 @@ const styles =
 
     searchBarContainer: {
       width: "100%",
+      maxWidth:
+        MAX_CONTENT_WIDTH,
+
+      alignSelf: "center",
 
       minHeight: 52,
 
@@ -1719,6 +1731,10 @@ const styles =
       minHeight: 0,
 
       width: "100%",
+      maxWidth:
+        MAX_CONTENT_WIDTH,
+
+      alignSelf: "center",
     },
 
     webContentList: {

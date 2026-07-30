@@ -1866,40 +1866,39 @@ export default function Feed({ navigation }) {
         isWeb && styles.webContainer,
       ]}
     >
-      {/* =========================================================
-          TOP SEARCH BAR
-      ========================================================= */}
-      <View
-        style={[
-          styles.pageHeader,
-          isDesktopWeb && styles.desktopPageHeader,
-          isMobileWeb && styles.mobileWebPageHeader,
-        ]}
-      >
-        <View style={styles.searchContainer}>
-          <SearchBar />
-        </View>
-
-        <TouchableOpacity
-          style={styles.notificationsButton}
-          onPress={() => navigation.navigate("Notifications")}
+      {/* Desktop keeps the compact search bar across the top. */}
+      {isDesktopWeb ? (
+        <View
+          style={[
+            styles.pageHeader,
+            styles.desktopPageHeader,
+          ]}
         >
-          <Image
-            source={require("../images/notificationsIcon2.png")}
-            style={styles.notificationIcon}
-          />
+          <View style={styles.searchContainer}>
+            <SearchBar />
+          </View>
 
-          {notificationsCount > 0 ? (
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationBadgeText}>
-                {notificationsCount > 99
-                  ? "99+"
-                  : notificationsCount}
-              </Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={styles.notificationsButton}
+            onPress={() => navigation.navigate("Notifications")}
+          >
+            <Image
+              source={require("../images/notificationsIcon2.png")}
+              style={styles.notificationIcon}
+            />
+
+            {notificationsCount > 0 ? (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {notificationsCount > 99
+                    ? "99+"
+                    : notificationsCount}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* =========================================================
           LEFT SIDEBAR
@@ -1933,20 +1932,60 @@ export default function Feed({ navigation }) {
           isMobileWeb && styles.mobileWebContent,
         ]}
       >
-        <View
-          style={[
-            styles.titleRow,
-            isWeb && styles.webTitleRow,
-          ]}
-        >
-          <Text style={styles.header}>
-            Recent Feed
-          </Text>
+        {!isDesktopWeb ? (
+          <View style={styles.mobileHeaderSection}>
+            <View style={styles.mobileTitleRow}>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.header}>
+                  Recent Feed
+                </Text>
 
-          <Text style={styles.headerDescription}>
-            Music selected for you and activity from your friends.
-          </Text>
-        </View>
+                <Text style={styles.headerDescription}>
+                  Music selected for you and activity from your friends.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.notificationsButton}
+                onPress={() => navigation.navigate("Notifications")}
+              >
+                <Image
+                  source={require("../images/notificationsIcon2.png")}
+                  style={styles.notificationIcon}
+                />
+
+                {notificationsCount > 0 ? (
+                  <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationBadgeText}>
+                      {notificationsCount > 99
+                        ? "99+"
+                        : notificationsCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.mobileSearchContainer}>
+              <SearchBar />
+            </View>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.titleRow,
+              isWeb && styles.webTitleRow,
+            ]}
+          >
+            <Text style={styles.header}>
+              Recent Feed
+            </Text>
+
+            <Text style={styles.headerDescription}>
+              Music selected for you and activity from your friends.
+            </Text>
+          </View>
+        )}
 
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -2316,7 +2355,7 @@ desktopBottomNavBar: {
     minHeight: 0,
 
     paddingHorizontal: 16,
-    paddingTop: 125,
+    paddingTop: 78,
     paddingBottom: 80,
   },
 
@@ -2347,14 +2386,14 @@ desktopBottomNavBar: {
   mobileWebContent: {
     position: "absolute",
 
-    top: 105,
+    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
 
     minHeight: 0,
 
-    paddingTop: 14,
+    paddingTop: 78,
     paddingBottom: 75,
     paddingHorizontal: 14,
 
@@ -2370,6 +2409,34 @@ desktopBottomNavBar: {
 
   webTitleRow: {
     marginBottom: 14,
+  },
+
+  mobileHeaderSection: {
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
+    marginBottom: 18,
+  },
+
+  mobileTitleRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+
+  headerTextContainer: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 14,
+  },
+
+  mobileSearchContainer: {
+    width: "100%",
+    minHeight: 52,
+    position: "relative",
+    zIndex: 20,
   },
 
   header: {
