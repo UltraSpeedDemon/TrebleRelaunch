@@ -85,6 +85,37 @@ export default function SongPage({ route, navigation }) {
   const [comment, setComment] = useState("");
   const [currentShareItem, setCurrentShareItem] = useState(null);
 
+  // In-app confirmation modal used on native and web.
+  const [confirmation, setConfirmation] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    confirmText: "Post",
+    onConfirm: null,
+  });
+
+  const openConfirmation = ({ title, message, confirmText, onConfirm }) => {
+    setConfirmation({
+      visible: true,
+      title,
+      message,
+      confirmText: confirmText || "Confirm",
+      onConfirm,
+    });
+  };
+
+  const closeConfirmation = () => {
+    setConfirmation((current) => ({ ...current, visible: false, onConfirm: null }));
+  };
+
+  const confirmAction = async () => {
+    const action = confirmation.onConfirm;
+    closeConfirmation();
+    if (typeof action === "function") {
+      await action();
+    }
+  };
+
   // -------------------------------------------------------------------------
   //  handleModal (open share modal)
   // -------------------------------------------------------------------------
@@ -537,54 +568,19 @@ export default function SongPage({ route, navigation }) {
       "Review required",
       "Please enter a review before posting."
     );
-
     return;
   }
 
-  const isUpdating =
-    Boolean(existingReviewId);
+  const isUpdating = Boolean(existingReviewId);
 
-  const confirmationMessage =
-    isUpdating
-      ? "Do you want to update your existing review?"
-      : "Are you sure you want to post this review?";
-
-  /*
-   * React Native Alert buttons do not work
-   * reliably on Expo Web.
-   */
-  if (Platform.OS === "web") {
-    const confirmed =
-      window.confirm(
-        confirmationMessage
-      );
-
-    if (confirmed) {
-      actuallyAddReview();
-    }
-
-    return;
-  }
-
-  Alert.alert(
-    isUpdating
-      ? "Update Review?"
-      : "Want to Post?",
-    confirmationMessage,
-    [
-      {
-        text: "No",
-        style: "cancel",
-      },
-      {
-        text: "Yes",
-        onPress: actuallyAddReview,
-      },
-    ],
-    {
-      cancelable: true,
-    }
-  );
+  openConfirmation({
+    title: isUpdating ? "Update Review?" : "Post Review?",
+    message: isUpdating
+      ? "Are you sure you want to update this review?"
+      : "Are you sure you want to post this review?",
+    confirmText: isUpdating ? "Update" : "Post",
+    onConfirm: actuallyAddReview,
+  });
 };
 
   async function actuallyAddReview() {
@@ -970,6 +966,41 @@ const handlePlayPreview = async () => {
       }
       keyboardVerticalOffset={10}
     >
+      {/* =========================================================
+          APP CONFIRMATION MODAL
+      ========================================================= */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={confirmation.visible}
+        onRequestClose={closeConfirmation}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>{confirmation.title}</Text>
+            <Text style={styles.confirmMessage}>{confirmation.message}</Text>
+
+            <View style={styles.confirmButtons}>
+              <TouchableOpacity
+                style={[styles.confirmButton, styles.confirmCancelButton]}
+                onPress={closeConfirmation}
+              >
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.confirmButton, styles.confirmSubmitButton]}
+                onPress={confirmAction}
+              >
+                <Text style={styles.confirmSubmitText}>
+                  {confirmation.confirmText}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* =========================================================
           SHARE MODAL
       ========================================================= */}
@@ -1458,9 +1489,32 @@ const handlePlayPreview = async () => {
                 userItem.userId === item.userId
             );
 
-            const reviewAvatar = user
-              ? user.avatarLong
-              : null;
+            const reviewAvatar =
+              item.avatarLong ||
+              item.avatar ||
+              item.userAvatar ||
+              item.profilePicture ||
+              user?.avatarLong ||
+              user?.avatar ||
+              null;
+
+            const openReviewUser = () => {
+              const reviewUserId =
+                item.userId || item.user_id || item.uid;
+
+              if (!reviewUserId) {
+                Alert.alert(
+                  "Profile unavailable",
+                  "This review does not contain a user ID."
+                );
+                return;
+              }
+
+              navigation.navigate("Profile", {
+                userId: reviewUserId,
+                username: item.username || item.userName || "",
+              });
+            };
 
             return (
               <View style={styles.reviewCardWrapper}>
@@ -1470,8 +1524,20 @@ const handlePlayPreview = async () => {
                   handleUpvote={handleUpvote}
                   handleDelete={handleDelete}
                   navigation={navigation}
-                  showComments={false}
-                  showReplyInput={false}
+                  showComments={true}
+                  showReplyInput={!item.isUser}
+                  onUserPress={openReviewUser}
+                  onReviewPress={openReviewUser}
+                  onReplyConfirmation={({ message, onConfirm }) =>
+                    openConfirmation({
+                      title: "Post Reply?",
+                      message:
+                        message ||
+                        "Are you sure you want to post this reply?",
+                      confirmText: "Reply",
+                      onConfirm,
+                    })
+                  }
                 />
               </View>
             );
@@ -2330,4 +2396,69 @@ artist: {
     fontSize: 15,
     fontWeight: "800",
   },
+
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 22,
+  },
+
+  confirmCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#18181f",
+    borderRadius: 18,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+
+  confirmTitle: {
+    color: "#ffffff",
+    fontSize: 21,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+
+  confirmMessage: {
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 22,
+  },
+
+  confirmButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+
+  confirmButton: {
+    minWidth: 105,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+
+  confirmCancelButton: {
+    backgroundColor: "rgba(255,255,255,0.09)",
+  },
+
+  confirmSubmitButton: {
+    backgroundColor: colours.primary || "#7c5cff",
+  },
+
+  confirmCancelText: {
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+
+  confirmSubmitText: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+
 });
