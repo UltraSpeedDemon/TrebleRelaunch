@@ -1947,11 +1947,21 @@ export default function Feed({ navigation }) {
           <View style={styles.mobileHeaderSection}>
             <View style={styles.mobileTitleRow}>
               <View style={styles.headerTextContainer}>
-                <Text style={styles.header}>
+                <Text
+                  style={[
+                    styles.header,
+                    styles.mobileHeader,
+                  ]}
+                >
                   Recent Feed
                 </Text>
 
-                <Text style={styles.headerDescription}>
+                <Text
+                  style={[
+                    styles.headerDescription,
+                    styles.mobileHeaderDescription,
+                  ]}
+                >
                   Music selected for you and activity from your friends.
                 </Text>
               </View>
@@ -2362,7 +2372,7 @@ desktopBottomNavBar: {
     minHeight: 0,
 
     paddingHorizontal: 16,
-    paddingTop: 108,
+    paddingTop: 92,
     paddingBottom: 80,
   },
 
@@ -2400,7 +2410,7 @@ desktopBottomNavBar: {
 
     minHeight: 0,
 
-    paddingTop: 108,
+    paddingTop: 92,
     paddingBottom: 75,
     paddingHorizontal: 14,
 
@@ -2422,7 +2432,7 @@ desktopBottomNavBar: {
     width: "100%",
     maxWidth: 760,
     alignSelf: "center",
-    marginBottom: 10,
+    marginBottom: 7,
   },
 
   mobileTitleRow: {
@@ -2441,7 +2451,7 @@ desktopBottomNavBar: {
 
   mobileTopSearchRow: {
     position: "absolute",
-    top: 42,
+    top: 28,
     left: 12,
     right: 12,
 
@@ -2487,6 +2497,17 @@ desktopBottomNavBar: {
     fontSize: 14,
     lineHeight: 20,
     marginTop: 3,
+  },
+
+  mobileHeader: {
+    fontSize: 23,
+    lineHeight: 28,
+  },
+
+  mobileHeaderDescription: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    marginTop: 2,
   },
 
   loadingContainer: {

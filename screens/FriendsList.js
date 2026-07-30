@@ -794,63 +794,82 @@ export default function FriendsList({
       {/* =====================================================
           TOP HEADER
       ===================================================== */}
-      <View
-        style={[
-          styles.pageHeader,
-          isDesktopWeb &&
-            styles.desktopPageHeader,
-          isMobileWeb &&
-            styles.mobilePageHeader,
-        ]}
-      >
+      {isDesktopWeb ? (
         <View
-          style={
-            styles.searchContainer
-          }
+          style={[
+            styles.pageHeader,
+            styles.desktopPageHeader,
+          ]}
         >
-          <SearchBar />
-        </View>
+          <View style={styles.searchContainer}>
+            <SearchBar />
+          </View>
 
-        <TouchableOpacity
-          style={
-            styles.notificationsButton
-          }
-          onPress={() =>
-            navigation.navigate(
-              "Notifications"
-            )
-          }
-        >
-          <Image
-            source={require(
-              "../images/notificationsIcon2.png"
-            )}
-            style={
-              styles.notificationIcon
+          <TouchableOpacity
+            style={styles.notificationsButton}
+            onPress={() =>
+              navigation.navigate(
+                "Notifications"
+              )
             }
-          />
+          >
+            <Image
+              source={require(
+                "../images/notificationsIcon2.png"
+              )}
+              style={styles.notificationIcon}
+            />
 
-          {notificationsCount >
-          0 ? (
-            <View
-              style={
-                styles.notificationBadge
-              }
-            >
-              <Text
-                style={
-                  styles.notificationBadgeText
-                }
-              >
-                {notificationsCount >
-                99
-                  ? "99+"
-                  : notificationsCount}
-              </Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
-      </View>
+            {notificationsCount > 0 ? (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {notificationsCount > 99
+                    ? "99+"
+                    : notificationsCount}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.mobileTopHeader}>
+          {/* Keep a dedicated area for the Sidebar hamburger. */}
+          <View style={styles.mobileHamburgerSpace} />
+
+          <View style={styles.mobileSearchContainer}>
+            <SearchBar />
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.notificationsButton,
+              styles.mobileNotificationsButton,
+            ]}
+            onPress={() =>
+              navigation.navigate(
+                "Notifications"
+              )
+            }
+          >
+            <Image
+              source={require(
+                "../images/notificationsIcon2.png"
+              )}
+              style={styles.notificationIcon}
+            />
+
+            {notificationsCount > 0 ? (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {notificationsCount > 99
+                    ? "99+"
+                    : notificationsCount}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* =====================================================
           SIDEBAR
@@ -1088,15 +1107,56 @@ const styles = StyleSheet.create({
   },
 
   mobilePageHeader: {
-    height: 105,
+    height: 92,
 
-    paddingTop: 20,
-    paddingBottom: 10,
+    paddingTop: 12,
+    paddingBottom: 8,
   },
 
   searchContainer: {
     flex: 1,
     minWidth: 0,
+  },
+
+  mobileTopHeader: {
+    position: "absolute",
+
+    top: 28,
+    left: 12,
+    right: 12,
+
+    minHeight: 52,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    zIndex: 70,
+    elevation: 15,
+  },
+
+  /*
+   * Reserve space for the Sidebar hamburger so the search
+   * field cannot slide underneath it.
+   */
+  mobileHamburgerSpace: {
+    width: 58,
+    flexShrink: 0,
+  },
+
+  mobileSearchContainer: {
+    flex: 1,
+    minWidth: 0,
+
+    marginLeft: 12,
+  },
+
+  mobileNotificationsButton: {
+    width: 46,
+    height: 46,
+
+    marginLeft: 12,
+
+    borderRadius: 23,
   },
 
   notificationsButton: {
@@ -1236,7 +1296,7 @@ const styles = StyleSheet.create({
   mobilePageContent: {
     position: "absolute",
 
-    top: 105,
+    top: 92,
     left: 0,
     right: 0,
 
@@ -1273,7 +1333,7 @@ const styles = StyleSheet.create({
   titleContainer: {
     width: "100%",
 
-    marginBottom: 16,
+    marginBottom: 12,
   },
 
   pageTitle: {

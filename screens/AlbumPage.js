@@ -85,6 +85,47 @@ export default function AlbumPage({ route, navigation }) {
   const [existingReviewId, setExistingReviewId] =
     useState(null);
 
+  // In-app confirmation modal used on native and web.
+  const [confirmation, setConfirmation] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    confirmText: "Post",
+    onConfirm: null,
+  });
+
+  const openConfirmation = ({
+    title,
+    message,
+    confirmText,
+    onConfirm,
+  }) => {
+    setConfirmation({
+      visible: true,
+      title,
+      message,
+      confirmText: confirmText || "Confirm",
+      onConfirm,
+    });
+  };
+
+  const closeConfirmation = () => {
+    setConfirmation((current) => ({
+      ...current,
+      visible: false,
+      onConfirm: null,
+    }));
+  };
+
+  const confirmAction = async () => {
+    const action = confirmation.onConfirm;
+    closeConfirmation();
+
+    if (typeof action === "function") {
+      await action();
+    }
+  };
+
   // Like, Save, Favourite states
   const [liked, setLiked] = useState(false);
   const [savedToLibrary, setSavedToLibrary] = useState(false);
@@ -839,27 +880,18 @@ export default function AlbumPage({ route, navigation }) {
       return;
     }
 
-    Alert.alert(
-      existingReviewId
-        ? "Update Review?"
-        : "Want to Post?",
-      existingReviewId
-        ? "Do you want to update your existing album review?"
+    const isUpdating = Boolean(existingReviewId);
+
+    openConfirmation({
+      title: isUpdating
+        ? "Update Album Review?"
+        : "Post Album Review?",
+      message: isUpdating
+        ? "Are you sure you want to update this album review?"
         : "Are you sure you want to post this album review?",
-      [
-        {
-          text: "No",
-          style: "cancel",
-        },
-        {
-          text: "Yes",
-          onPress: actuallyAddReview,
-        },
-      ],
-      {
-        cancelable: true,
-      }
-    );
+      confirmText: isUpdating ? "Update" : "Post",
+      onConfirm: actuallyAddReview,
+    });
   };
 
   async function actuallyAddReview() {
@@ -1175,6 +1207,63 @@ export default function AlbumPage({ route, navigation }) {
       }
       keyboardVerticalOffset={10}
     >
+
+      {/* =====================================================
+          APP CONFIRMATION MODAL
+      ===================================================== */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={confirmation.visible}
+        onRequestClose={closeConfirmation}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconCircle}>
+              <MaterialIcons
+                name="rate-review"
+                size={27}
+                color="#ffffff"
+              />
+            </View>
+
+            <Text style={styles.confirmTitle}>
+              {confirmation.title}
+            </Text>
+
+            <Text style={styles.confirmMessage}>
+              {confirmation.message}
+            </Text>
+
+            <View style={styles.confirmButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.confirmButton,
+                  styles.confirmCancelButton,
+                ]}
+                onPress={closeConfirmation}
+              >
+                <Text style={styles.confirmCancelText}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.confirmButton,
+                  styles.confirmSubmitButton,
+                ]}
+                onPress={confirmAction}
+              >
+                <Text style={styles.confirmSubmitText}>
+                  {confirmation.confirmText}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* =====================================================
           SHARE MODAL
       ===================================================== */}
@@ -1825,6 +1914,99 @@ export default function AlbumPage({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+
+  confirmOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 22,
+    backgroundColor: "rgba(0,0,0,0.76)",
+  },
+
+  confirmCard: {
+    width: "100%",
+    maxWidth: 420,
+    alignItems: "center",
+    padding: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(53,175,229,0.5)",
+    backgroundColor: colours.darkblue || "#181f2b",
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.42,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+
+  confirmIconCircle: {
+    width: 56,
+    height: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+    borderRadius: 28,
+    backgroundColor:
+      colours.lightblue || "#35afe5",
+  },
+
+  confirmTitle: {
+    color: "#ffffff",
+    fontSize: 21,
+    fontWeight: "800",
+    textAlign: "center",
+    marginBottom: 9,
+  },
+
+  confirmMessage: {
+    color: "rgba(255,255,255,0.76)",
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    marginBottom: 23,
+  },
+
+  confirmButtons: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  confirmButton: {
+    flex: 1,
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    borderRadius: 11,
+  },
+
+  confirmCancelButton: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.07)",
+  },
+
+  confirmSubmitButton: {
+    backgroundColor:
+      colours.lightblue || "#35afe5",
+  },
+
+  confirmCancelText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  confirmSubmitText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
 desktopBottomNavBar: {
   left: DESKTOP_SIDEBAR_WIDTH,
   right: 0,
