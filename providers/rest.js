@@ -624,16 +624,58 @@ export function getServerEndpointBase() {
 }
 
 
-export async function getComments(review_id, user_rid) {
-  return await serverPost("post/getPostsByReview", {review_id, user_rid})
+export async function getComments(review_id) {
+  const idToken =
+    await getCurrentUserIdToken();
+
+  return await serverPost(
+    "post/getPostsByReview",
+    {
+      review_id,
+      reviewId: review_id,
+      id_token: idToken,
+    }
+  );
 }
 
 export async function deleteComment(post_id) {
-  return await serverDelete("post/deletePost", {post_id})
+  const idToken =
+    await getCurrentUserIdToken();
+
+  return await serverPost(
+    "post/deletePost",
+    {
+      post_id,
+      postId: post_id,
+      replyId: post_id,
+      id_token: idToken,
+    }
+  );
 }
 
-export async function addComment(author_id, review_id, message) {
-  return await serverPost("post/addPost",{author_id, review_id, message})
+export async function addComment(
+  author_id,
+  review_id,
+  message
+) {
+  const idToken =
+    await getCurrentUserIdToken();
+
+  /*
+   * author_id is kept in the function signature for compatibility
+   * with older callers. The backend identifies the reply author
+   * securely from the Firebase token.
+   */
+  return await serverPost(
+    "post/addPost",
+    {
+      author_id,
+      review_id,
+      reviewId: review_id,
+      message,
+      id_token: idToken,
+    }
+  );
 }
 
 

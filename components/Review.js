@@ -11,7 +11,7 @@ import {
   Platform,
 } from "react-native";
 import colours from "../styles/colours";
-import { getComments, getUser, addComment, deleteComment } from "../providers/rest"; // Import the API function
+import { getComments, addComment, deleteComment } from "../providers/rest"; // Import the API function
 import { auth } from '../utils/firebase';
 import { useRoute } from "@react-navigation/native";
 
@@ -248,15 +248,20 @@ const ReviewCard = ({
     setLoading(true);
 
     try {
-      // Fetch user data from your backend
-      const orientRes = await getUser(currentUser.uid);
-      if (!orientRes.ok) {
-        throw new Error('Failed to fetch user data from backend.');
-      }
-      const userData = await orientRes.json();
+      /*
+       * rest.js attaches the signed-in user's Firebase token.
+       * The backend determines reply ownership from that token,
+       * so a separate user/RID lookup is not required.
+       */
+      const response =
+        await addComment(
+          currentUser.uid,
+          item.id,
+          replyText.trim()
+        );
 
-      const response = await addComment(userData.rid, item.id, replyText.trim());
-      const responseText = await response.text();
+      const responseText =
+        await response.text();
 
       let data = {};
       try {
@@ -826,7 +831,14 @@ const styles = StyleSheet.create({
   reviewContent: {
     width: "100%",
     minHeight: 100,
+
     alignItems: "flex-start",
+
+    /*
+     * Keep the review text and emoji row clear of the
+     * top-right upvote pill.
+     */
+    paddingRight: 58,
   },
   actionButtons: {
     flexDirection: "row",
@@ -986,23 +998,28 @@ const styles = StyleSheet.create({
     color: "#FFF",
   },
   upvoteButton: {
-    alignSelf: "flex-end",
+    position: "absolute",
+    top: 11,
+    right: 11,
+
+    zIndex: 30,
+    elevation: 8,
 
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
 
+    minWidth: 48,
     minHeight: 34,
 
-    marginTop: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
 
     borderWidth: 1,
-    borderColor: "rgba(100,181,246,0.28)",
+    borderColor: "rgba(100,181,246,0.32)",
     borderRadius: 17,
 
-    backgroundColor: "rgba(100,181,246,0.10)",
+    backgroundColor: "rgba(18,24,35,0.94)",
   },
   upvoteIcon: {
     width: 20,
@@ -1067,9 +1084,11 @@ const styles = StyleSheet.create({
   // ...rest of your styles
   commentsContainer: {
     width: "100%",
-    marginTop: 12,
-    paddingTop: 11,
+
+    marginTop: 5,
+    paddingTop: 8,
     paddingLeft: 54,
+
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.08)",
   },
