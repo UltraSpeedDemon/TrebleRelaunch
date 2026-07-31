@@ -123,15 +123,18 @@ export default function Feed({ navigation }) {
   const [comment, setComment] = useState("");
   const [currentShareItem, setCurrentShareItem] = useState(null);
 
-  const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentPreview, setCurrentPreview] = useState(null);
+  const [playLoadingId, setPlayLoadingId] = useState(null);
 
-  // Preloaded Expo Audio.Sound instances, keyed by preview URL.
-  // Feed cards prepare these before the user presses Play.
-  const preloadedSoundsRef = useRef(new Map());
-  const preloadInFlightRef = useRef(new Set());
+  /*
+   * Keep the active sound in a ref. This matches SongPage's simple
+   * one-preview-at-a-time behavior and avoids stale React state
+   * closures while playback is starting or stopping.
+   */
+  const soundRef = useRef(null);
+  const playbackRequestRef = useRef(0);
 
   const fetchedInitial = useRef(false);
   const initialRequestInFlight = useRef(false);
@@ -293,159 +296,386 @@ export default function Feed({ navigation }) {
     return `${Math.floor(differenceSeconds / 86400)}d ago`;
   }, []);
 
-  const stopCurrentPreview = useCallback(async () => {
-    if (sound) {
+  const unloadCurrentSound = useCallback(async () => {
+    /*
+     * Invalidate any playback attempt that is still loading.
+     */
+    playbackRequestRef.current += 1;
+
+    const activeSound = soundRef.current;
+    soundRef.current = null;
+
+    if (activeSound) {
       try {
-        await sound.pauseAsync();
-        await sound.setPositionAsync(0);
+        activeSound.setOnPlaybackStatusUpdate(null);
+        await activeSound.unloadAsync();
       } catch (error) {
-        console.warn("[Feed] Could not stop preview:", error);
+        console.warn(
+          "[Feed] Could not unload preview:",
+          error
+        );
       }
     }
 
-    setSound(null);
-    setIsPlaying(false);
-    setProgress(0);
     setCurrentPreview(null);
-  }, [sound]);
+    setProgress(0);
+    setIsPlaying(false);
+  }, []);
 
-  const handlePlayPreview = useCallback(
-    async (previewUrl) => {
-      if (!previewUrl) {
-        return false;
+  const getPreviewVolume = useCallback(async () => {
+    const savedVolume =
+      await AsyncStorage.getItem(
+        "treble_preview_volume"
+      );
+
+    const parsedVolume =
+      savedVolume !== null
+        ? Number(savedVolume)
+        : 0.65;
+
+    return Number.isFinite(parsedVolume)
+      ? Math.min(1, Math.max(0, parsedVolume))
+      : 0.65;
+  }, []);
+
+  const updateFeedItemPreview = useCallback(
+    (itemId, previewUrl, deezerTrack = null) => {
+      if (!itemId || !previewUrl) {
+        return;
       }
 
-      try {
-        if (
-          currentPreview === previewUrl &&
-          sound
-        ) {
-          await stopCurrentPreview();
-          return true;
-        }
+      setCombinedFeed((currentItems) =>
+        currentItems.map((feedItem) => {
+          if (
+            String(getItemId(feedItem)) !==
+            String(itemId)
+          ) {
+            return feedItem;
+          }
 
-        await stopCurrentPreview();
-
-        const savedVolume =
-          await AsyncStorage.getItem(
-            "treble_preview_volume"
-          );
-
-        const parsedVolume =
-          savedVolume !== null
-            ? Number(savedVolume)
-            : 0.65;
-
-        const previewVolume =
-          Number.isFinite(
-            parsedVolume
-          )
-            ? Math.min(
-                1,
-                Math.max(
-                  0,
-                  parsedVolume
-                )
-              )
-            : 0.65;
-
-        let loadedSound =
-          preloadedSoundsRef.current.get(previewUrl);
-
-        if (!loadedSound) {
-          const created = await Audio.Sound.createAsync(
-            { uri: previewUrl },
-            {
-              shouldPlay: false,
-              volume: previewVolume,
-            },
-            undefined,
-            true
-          );
-
-          loadedSound = created.sound;
-          preloadedSoundsRef.current.set(
+          const previewFields = {
+            preview: previewUrl,
             previewUrl,
-            loadedSound
-          );
-        }
+            playbackUrl: previewUrl,
+          };
 
-        await loadedSound.setVolumeAsync(previewVolume);
-        await loadedSound.setPositionAsync(0);
-        await loadedSound.playAsync();
+          if (feedItem?.item_info) {
+            return {
+              ...feedItem,
+              ...previewFields,
+              item_info: {
+                ...feedItem.item_info,
+                ...(deezerTrack || {}),
+                ...previewFields,
+              },
+            };
+          }
 
-        setSound(loadedSound);
-        setCurrentPreview(
-          previewUrl
-        );
-        setIsPlaying(true);
-        setProgress(0);
+          return {
+            ...feedItem,
+            ...(deezerTrack || {}),
+            ...previewFields,
+          };
+        })
+      );
+    },
+    [getItemId]
+  );
 
-        loadedSound.setOnPlaybackStatusUpdate(
-          (status) => {
-            if (!status.isLoaded) {
-              if (status?.error) {
-                console.warn(
-                  "[Feed] Playback status error:",
-                  status.error
-                );
-              }
-
-              return;
-            }
-
-            if (
-              status.durationMillis &&
-              status.positionMillis !==
-                undefined
-            ) {
-              setProgress(
-                Math.min(
-                  100,
-                  (
-                    status.positionMillis /
-                    status.durationMillis
-                  ) * 100
-                )
-              );
-            }
-
-            setIsPlaying(
-              Boolean(
-                status.isPlaying
-              )
-            );
-
-            if (
-              status.didJustFinish
-            ) {
-              setProgress(0);
-              setIsPlaying(false);
-              setCurrentPreview(null);
-              setSound(null);
-
-              loadedSound
-                .unloadAsync()
-                .catch(() => {});
-            }
+  const requestTrackPreview = useCallback(
+    async (
+      itemId,
+      {
+        forceRefresh = false,
+      } = {}
+    ) => {
+      const response =
+        await getSongFromDeezer(
+          String(itemId),
+          {
+            refresh: true,
+            forceRefresh,
           }
         );
 
-        return true;
+      if (!response?.ok) {
+        throw new Error(
+          `Deezer request failed with HTTP ${response?.status}`
+        );
+      }
+
+      const deezerTrack =
+        await response.json();
+
+      const previewUrl =
+        deezerTrack?.preview ||
+        deezerTrack?.previewUrl ||
+        deezerTrack?.playbackUrl ||
+        "";
+
+      if (!previewUrl) {
+        throw new Error(
+          "Deezer did not return a playable preview."
+        );
+      }
+
+      updateFeedItemPreview(
+        itemId,
+        previewUrl,
+        deezerTrack
+      );
+
+      return {
+        previewUrl,
+        deezerTrack,
+      };
+    },
+    [updateFeedItemPreview]
+  );
+
+  const playPreviewUrl = useCallback(
+    async (
+      previewUrl,
+      itemId,
+      requestId
+    ) => {
+      const previewVolume =
+        await getPreviewVolume();
+
+      /*
+       * Configure native audio in the same way as SongPage.
+       * This does not request microphone permission.
+       */
+      if (Platform.OS !== "web") {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      }
+
+      /*
+       * Play the Deezer URL exactly as returned. Do not append query
+       * parameters because preview URLs may be signed.
+       */
+      const created =
+        await Audio.Sound.createAsync(
+          {
+            uri: previewUrl,
+          },
+          {
+            shouldPlay: true,
+            volume: previewVolume,
+            progressUpdateIntervalMillis: 200,
+          },
+          undefined,
+          true
+        );
+
+      if (
+        requestId !== playbackRequestRef.current
+      ) {
+        await created.sound
+          .unloadAsync()
+          .catch(() => {});
+
+        return false;
+      }
+
+      soundRef.current = created.sound;
+      setCurrentPreview(previewUrl);
+      setProgress(0);
+      setIsPlaying(true);
+
+      created.sound.setOnPlaybackStatusUpdate(
+        (status) => {
+          if (!status.isLoaded) {
+            if (status?.error) {
+              console.warn(
+                "[Feed] Playback status error:",
+                status.error
+              );
+            }
+
+            return;
+          }
+
+          if (
+            status.durationMillis &&
+            status.positionMillis !== undefined
+          ) {
+            setProgress(
+              Math.min(
+                100,
+                (
+                  status.positionMillis /
+                  status.durationMillis
+                ) * 100
+              )
+            );
+          }
+
+          setIsPlaying(
+            Boolean(status.isPlaying)
+          );
+
+          if (status.didJustFinish) {
+            setProgress(0);
+            setIsPlaying(false);
+            setCurrentPreview(null);
+            soundRef.current = null;
+
+            created.sound
+              .unloadAsync()
+              .catch(() => {});
+          }
+        }
+      );
+
+      return true;
+    },
+    [getPreviewVolume]
+  );
+
+  const handlePlayItem = useCallback(
+    async (item) => {
+      const itemId =
+        String(getItemId(item) || "");
+
+      if (
+        getItemType(item) !== "track" ||
+        !itemId
+      ) {
+        Alert.alert(
+          "Preview unavailable",
+          "This item does not have a valid Deezer track ID."
+        );
+
+        return;
+      }
+
+      const existingPreview =
+        getPreviewUrl(item);
+
+      /*
+       * Pressing the active card again stops it, exactly like SongPage.
+       */
+      if (
+        soundRef.current &&
+        currentPreview &&
+        existingPreview === currentPreview
+      ) {
+        await unloadCurrentSound();
+        return;
+      }
+
+      if (playLoadingId) {
+        return;
+      }
+
+      setPlayLoadingId(itemId);
+
+      try {
+        await unloadCurrentSound();
+
+        const requestId =
+          playbackRequestRef.current + 1;
+
+        playbackRequestRef.current =
+          requestId;
+
+        let previewUrl =
+          existingPreview;
+
+        /*
+         * SongPage always checks the track endpoint before playing.
+         * Use the normal cache-friendly refresh first.
+         */
+        try {
+          const fresh =
+            await requestTrackPreview(
+              itemId,
+              {
+                forceRefresh: false,
+              }
+            );
+
+          previewUrl =
+            fresh.previewUrl;
+        } catch (normalRefreshError) {
+          console.warn(
+            "[Feed] Normal preview refresh failed; trying the card URL:",
+            normalRefreshError
+          );
+        }
+
+        if (!previewUrl) {
+          throw new Error(
+            "No preview URL is available for this track."
+          );
+        }
+
+        try {
+          await playPreviewUrl(
+            previewUrl,
+            itemId,
+            requestId
+          );
+        } catch (firstPlaybackError) {
+          console.warn(
+            "[Feed] First preview failed. Force-refreshing:",
+            firstPlaybackError
+          );
+
+          await unloadCurrentSound();
+
+          const retryRequestId =
+            playbackRequestRef.current + 1;
+
+          playbackRequestRef.current =
+            retryRequestId;
+
+          const forced =
+            await requestTrackPreview(
+              itemId,
+              {
+                forceRefresh: true,
+              }
+            );
+
+          await playPreviewUrl(
+            forced.previewUrl,
+            itemId,
+            retryRequestId
+          );
+        }
       } catch (error) {
-        console.warn(
-          "[Feed] Preview URL failed:",
+        console.error(
+          "[Feed] Preview playback error:",
           error
         );
 
-        await stopCurrentPreview();
-        return false;
+        await unloadCurrentSound();
+
+        Alert.alert(
+          "Preview unavailable",
+          "Treble could not start this song preview. Please try again."
+        );
+      } finally {
+        setPlayLoadingId(null);
       }
     },
     [
       currentPreview,
-      sound,
-      stopCurrentPreview,
+      getItemId,
+      getItemType,
+      getPreviewUrl,
+      playLoadingId,
+      playPreviewUrl,
+      requestTrackPreview,
+      unloadCurrentSound,
     ]
   );
 
@@ -455,20 +685,18 @@ export default function Feed({ navigation }) {
         clearTimeout(tapTimerRef.current);
       }
 
-      for (const preloadedSound of
-        preloadedSoundsRef.current.values()) {
-        preloadedSound.unloadAsync().catch(() => {});
-      }
-
-      preloadedSoundsRef.current.clear();
+      unloadCurrentSound();
     };
-  }, []);
+  }, [unloadCurrentSound]);
 
   useEffect(() => {
     if (!isFocused) {
-      stopCurrentPreview();
+      unloadCurrentSound();
     }
-  }, [isFocused, stopCurrentPreview]);
+  }, [
+    isFocused,
+    unloadCurrentSound,
+  ]);
 
   useEffect(() => {
     const showEvent =
@@ -504,295 +732,6 @@ export default function Feed({ navigation }) {
       keyboardHideListener.remove();
     };
   }, [slideAnim]);
-
-  const preloadPreviewUrl = useCallback(
-    async (previewUrl) => {
-      if (
-        !previewUrl ||
-        preloadedSoundsRef.current.has(previewUrl) ||
-        preloadInFlightRef.current.has(previewUrl)
-      ) {
-        return;
-      }
-
-      preloadInFlightRef.current.add(previewUrl);
-
-      try {
-        const savedVolume =
-          await AsyncStorage.getItem(
-            "treble_preview_volume"
-          );
-
-        const parsedVolume =
-          savedVolume !== null
-            ? Number(savedVolume)
-            : 0.65;
-
-        const previewVolume =
-          Number.isFinite(parsedVolume)
-            ? Math.min(1, Math.max(0, parsedVolume))
-            : 0.65;
-
-        const { sound: preloadedSound } =
-          await Audio.Sound.createAsync(
-            { uri: previewUrl },
-            {
-              shouldPlay: false,
-              volume: previewVolume,
-              progressUpdateIntervalMillis: 250,
-            },
-            undefined,
-            true
-          );
-
-        preloadedSoundsRef.current.set(
-          previewUrl,
-          preloadedSound
-        );
-      } catch (error) {
-        console.warn(
-          "[Feed] Could not preload preview:",
-          error
-        );
-      } finally {
-        preloadInFlightRef.current.delete(previewUrl);
-      }
-    },
-    []
-  );
-
-  const prepareFeedPreviews = useCallback(
-    async (items) => {
-      const trackItems = items.filter(
-        (item) =>
-          getItemType(item) === "track" &&
-          getItemId(item)
-      );
-
-      // Refresh preview URLs in small batches, then preload the audio.
-      const batchSize = 4;
-
-      for (let index = 0; index < trackItems.length; index += batchSize) {
-        const batch = trackItems.slice(index, index + batchSize);
-
-        await Promise.all(
-          batch.map(async (item) => {
-            const itemId = String(getItemId(item));
-            let previewUrl = getPreviewUrl(item);
-
-            try {
-              const response = await getSongFromDeezer(
-                itemId,
-                { refresh: true }
-              );
-
-              if (response?.ok) {
-                const deezerData = await response.json();
-                previewUrl =
-                  deezerData?.preview ||
-                  deezerData?.previewUrl ||
-                  deezerData?.playbackUrl ||
-                  previewUrl;
-              }
-            } catch (error) {
-              console.warn(
-                `[Feed] Could not refresh preview ${itemId}:`,
-                error
-              );
-            }
-
-            if (!previewUrl) return;
-
-            setCombinedFeed((currentItems) =>
-              currentItems.map((feedItem) => {
-                if (String(getItemId(feedItem)) !== itemId) {
-                  return feedItem;
-                }
-
-                const previewFields = {
-                  preview: previewUrl,
-                  previewUrl,
-                  playbackUrl: previewUrl,
-                };
-
-                return feedItem.item_info
-                  ? {
-                      ...feedItem,
-                      ...previewFields,
-                      item_info: {
-                        ...feedItem.item_info,
-                        ...previewFields,
-                      },
-                    }
-                  : {
-                      ...feedItem,
-                      ...previewFields,
-                    };
-              })
-            );
-
-            await preloadPreviewUrl(previewUrl);
-          })
-        );
-      }
-    },
-    [
-      getItemId,
-      getItemType,
-      getPreviewUrl,
-      preloadPreviewUrl,
-    ]
-  );
-
-  useEffect(() => {
-    if (!isFocused || combinedFeed.length === 0) {
-      return;
-    }
-
-    prepareFeedPreviews(combinedFeed);
-  }, [
-    combinedFeed.length,
-    isFocused,
-    prepareFeedPreviews,
-  ]);
-
-  const fetchPreviewForItem = useCallback(
-    async (item) => {
-      const itemType = getItemType(item);
-      const itemId = getItemId(item);
-      const existingPreview = getPreviewUrl(item);
-
-      if (
-        itemType !== "track" ||
-        !itemId ||
-        existingPreview
-      ) {
-        return item;
-      }
-
-      try {
-        const response = await getSongFromDeezer(itemId);
-
-        if (!response?.ok) {
-          return item;
-        }
-
-        const deezerData = await response.json();
-
-        if (!deezerData?.preview) {
-          return item;
-        }
-
-        if (item.item_info) {
-          return {
-            ...item,
-            item_info: {
-              ...item.item_info,
-              preview: deezerData.preview,
-            },
-          };
-        }
-
-        return {
-          ...item,
-          preview: deezerData.preview,
-        };
-      } catch (error) {
-        console.warn(
-          `[Feed] Could not fetch preview for ${itemId}:`,
-          error
-        );
-
-        return item;
-      }
-    },
-    [
-      getItemId,
-      getItemType,
-      getPreviewUrl,
-    ]
-  );
-
-  const handlePlayItem = useCallback(
-    async (item) => {
-      const itemId = String(getItemId(item) || "");
-
-      if (getItemType(item) !== "track" || !itemId) {
-        Alert.alert(
-          "Preview unavailable",
-          "This item does not have a valid Deezer track ID."
-        );
-        return;
-      }
-
-      try {
-        // The normal path is instant because prepareFeedPreviews already
-        // refreshed and loaded this URL when the Feed appeared.
-        let preview = getPreviewUrl(item);
-        let played = preview
-          ? await handlePlayPreview(preview)
-          : false;
-
-        // Safety fallback for a missing or rotated Deezer URL.
-        if (!played) {
-          const response = await getSongFromDeezer(
-            itemId,
-            {
-              refresh: true,
-              forceRefresh: true,
-            }
-          );
-
-          if (!response?.ok) {
-            throw new Error(
-              `Preview request failed with status ${response?.status}`
-            );
-          }
-
-          const deezerData = await response.json();
-          preview =
-            deezerData?.preview ||
-            deezerData?.previewUrl ||
-            deezerData?.playbackUrl ||
-            "";
-
-          if (!preview) {
-            throw new Error(
-              "Deezer did not return a playable preview."
-            );
-          }
-
-          await preloadPreviewUrl(preview);
-          played = await handlePlayPreview(preview);
-        }
-
-        if (!played) {
-          throw new Error(
-            "The Deezer preview could not be played."
-          );
-        }
-      } catch (error) {
-        console.error(
-          "[Feed] Deezer playback error:",
-          error
-        );
-
-        Alert.alert(
-          "Preview error",
-          "This track does not currently have a playable Deezer preview."
-        );
-      }
-    },
-    [
-      getItemId,
-      getItemType,
-      getPreviewUrl,
-      handlePlayPreview,
-      preloadPreviewUrl,
-    ]
-  );
-
-
 
   const fetchTimelineItems = useCallback(
     async (offset, refresh = false) => {
@@ -2176,6 +2115,9 @@ export default function Feed({ navigation }) {
       const isCurrentPreview =
         currentPreview === previewUrl;
 
+      const isPreviewLoading =
+        playLoadingId === String(itemId);
+
       return (
         <TouchableWithoutFeedback
           onPress={() =>
@@ -2323,6 +2265,10 @@ export default function Feed({ navigation }) {
                       );
                     }}
                     style={styles.playButton}
+                    disabled={
+                      Boolean(playLoadingId) &&
+                      !isPreviewLoading
+                    }
                   >
                     <AnimatedCircularProgress
                       size={58}
@@ -2338,18 +2284,25 @@ export default function Feed({ navigation }) {
                       backgroundColor="rgba(255,255,255,0.20)"
                       rotation={0}
                     >
-                      {() => (
-                        <Icon
-                          name={
-                            isCurrentPreview &&
-                            isPlaying
-                              ? "stop"
-                              : "play-arrow"
-                          }
-                          size={34}
-                          color="#ffffff"
-                        />
-                      )}
+                      {() =>
+                        isPreviewLoading ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="#ffffff"
+                          />
+                        ) : (
+                          <Icon
+                            name={
+                              isCurrentPreview &&
+                              isPlaying
+                                ? "stop"
+                                : "play-arrow"
+                            }
+                            size={34}
+                            color="#ffffff"
+                          />
+                        )
+                      }
                     </AnimatedCircularProgress>
                   </TouchableOpacity>
                 ) : null}
@@ -2411,6 +2364,7 @@ export default function Feed({ navigation }) {
       likeLoading,
       openShareModal,
       progress,
+      playLoadingId,
       renderReview,
     ]
   );
