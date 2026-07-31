@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  />
+  <title>Treble Music Graph</title>
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js"
+  ></script>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family:
+        Inter,
+        system-ui,
+        sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #0f0f10;
+      color: #f4f4f4;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid #333;
+      background: #1a1a1c;
+    }
+
+    .toolbar input,
+    .toolbar select,
+    .toolbar button {
+      min-height: 40px;
+      border: 1px solid #444;
+      border-radius: 8px;
+      background: #242426;
+      color: #fff;
+      padding: 8px 10px;
+    }
+
+    .toolbar input {
+      flex: 1;
+      min-width: 240px;
+    }
+
+    .toolbar button {
+      cursor: pointer;
+      border-color: #00aeef;
+    }
+
+    .stats {
+      color: #00aeef;
+      font-weight: 700;
+    }
+
+    #cy {
+      width: 100%;
+      height: calc(100vh - 70px);
+    }
+
+    .legend {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 5;
+      width: 190px;
+      border: 1px solid #444;
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(24, 24, 26, 0.94);
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0;
+      font-size: 13px;
+    }
+
+    .dot {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+    }
+
+    .user { background: #8bd3dd; }
+    .artist { background: #a07ac5; }
+    .album { background: #ff8f3d; }
+    .track { background: #e5df7b; }
+  </style>
+</head>
+
+<body>
+  <div class="toolbar">
+    <strong>Treble Music Graph</strong>
+
+    <input
+      id="apiUrl"
+      value="/admin/music-graph?limit=1000"
+      aria-label="Graph API URL"
+    />
+
+    <select
+      id="layout"
+      aria-label="Graph layout"
+    >
+      <option value="cose">Organic</option>
+      <option value="concentric">Concentric</option>
+      <option value="circle">Circle</option>
+      <option value="grid">Grid</option>
+    </select>
+
+    <button id="reloadButton">
+      Reload graph
+    </button>
+
+    <button id="fitButton">
+      Fit graph
+    </button>
+
+    <span
+      id="stats"
+      class="stats"
+    >
+      Loading…
+    </span>
+  </div>
+
+  <div id="cy"></div>
+
+  <aside class="legend">
+    <strong>Node types</strong>
+    <div class="legend-row">
+      <span class="dot user"></span>
+      User
+    </div>
+    <div class="legend-row">
+      <span class="dot artist"></span>
+      Artist
+    </div>
+    <div class="legend-row">
+      <span class="dot album"></span>
+      Album
+    </div>
+    <div class="legend-row">
+      <span class="dot track"></span>
+      Song
+    </div>
+  </aside>
+
+  <script>
+    let cy = null;
+
+    const colors = {
+      user: "#8bd3dd",
+      artist: "#a07ac5",
+      album: "#ff8f3d",
+      track: "#e5df7b",
+    };
+
+    async function loadGraph() {
+      const apiUrl =
+        document
+          .getElementById("apiUrl")
+          .value
+          .trim();
+
+      const stats =
+        document.getElementById("stats");
+
+      stats.textContent = "Loading…";
+
+      try {
+        const response =
+          await fetch(apiUrl);
+
+        const data =
+          await response.json();
+
+        if (!response.ok || !data.ok) {
+          throw new Error(
+            data.error ||
+            `HTTP ${response.status}`
+          );
+        }
+
+        const elements = [
+          ...data.nodes.map((node) => ({
+            data: {
+              ...node,
+              color:
+                colors[node.type] ||
+                "#aaaaaa",
+            },
+          })),
+
+          ...data.edges.map((edge) => ({
+            data: {
+              id: edge.id,
+              source: edge.source,
+              target: edge.target,
+              label:
+                edge.relationship,
+              weight:
+                edge.weight || 1,
+            },
+          })),
+        ];
+
+        if (cy) {
+          cy.destroy();
+        }
+
+        cy = cytoscape({
+          container:
+            document.getElementById("cy"),
+
+          elements,
+
+          style: [
+            {
+              selector: "node",
+              style: {
+                "background-color":
+                  "data(color)",
+                label:
+                  "data(label)",
+                color:
+                  "#f4f4f4",
+                "font-size":
+                  9,
+                "text-wrap":
+                  "wrap",
+                "text-max-width":
+                  90,
+                "text-valign":
+                  "bottom",
+                "text-margin-y":
+                  7,
+                width:
+                  22,
+                height:
+                  22,
+                "border-width":
+                  1,
+                "border-color":
+                  "#777",
+              },
+            },
+            {
+              selector:
+                'node[type = "user"]',
+              style: {
+                width: 34,
+                height: 34,
+              },
+            },
+            {
+              selector:
+                'node[type = "artist"]',
+              style: {
+                width: 30,
+                height: 30,
+              },
+            },
+            {
+              selector: "edge",
+              style: {
+                width:
+                  "mapData(weight, 1, 8, 1, 5)",
+                "line-color":
+                  "#6f6f72",
+                "target-arrow-color":
+                  "#6f6f72",
+                "target-arrow-shape":
+                  "triangle",
+                "curve-style":
+                  "bezier",
+                label:
+                  "data(label)",
+                color:
+                  "#c9c9ca",
+                "font-size":
+                  7,
+                "text-rotation":
+                  "autorotate",
+                "text-background-color":
+                  "#111",
+                "text-background-opacity":
+                  0.7,
+                "text-background-padding":
+                  2,
+              },
+            },
+            {
+              selector: ":selected",
+              style: {
+                "border-width": 4,
+                "border-color": "#00aeef",
+                "line-color": "#00aeef",
+                "target-arrow-color": "#00aeef",
+              },
+            },
+          ],
+
+          layout: {
+            name:
+              document
+                .getElementById("layout")
+                .value,
+            animate: false,
+            fit: true,
+            padding: 30,
+            nodeRepulsion: 9000,
+            idealEdgeLength: 80,
+          },
+        });
+
+        stats.textContent =
+          `${data.counts.nodes} nodes · ` +
+          `${data.counts.edges} edges`;
+      } catch (error) {
+        console.error(error);
+        stats.textContent =
+          `Unable to load: ${error.message}`;
+      }
+    }
+
+    document
+      .getElementById("reloadButton")
+      .addEventListener(
+        "click",
+        loadGraph
+      );
+
+    document
+      .getElementById("fitButton")
+      .addEventListener(
+        "click",
+        () => cy?.fit(undefined, 30)
+      );
+
+    document
+      .getElementById("layout")
+      .addEventListener(
+        "change",
+        () => {
+          if (!cy) return;
+
+          cy.layout({
+            name:
+              document
+                .getElementById("layout")
+                .value,
+            animate: true,
+            fit: true,
+            padding: 30,
+          }).run();
+        }
+      );
+
+    loadGraph();
+  </script>
+</body>
+</html>
