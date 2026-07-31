@@ -77,6 +77,21 @@ export default function FollowersList({
         ? 3
         : 2;
 
+  /*
+   * Use an exact width so incomplete final rows
+   * cannot stretch their cards wider.
+   */
+  const userTileWidth =
+    Platform.OS === "web"
+      ? `calc((100% - ${
+          (gridColumns - 1) * 14
+        }px) / ${gridColumns})`
+      : gridColumns === 2
+        ? "48%"
+        : gridColumns === 3
+          ? "31.5%"
+          : "23.5%";
+
   const [
     followersList,
     setFollowersList,
@@ -1035,9 +1050,13 @@ export default function FollowersList({
 
         return (
           <TouchableOpacity
-            style={
-              styles.userCard
-            }
+            style={[
+              styles.userCard,
+              {
+                width: userTileWidth,
+                maxWidth: userTileWidth,
+              },
+            ]}
             activeOpacity={0.82}
             onPress={() =>
               navigation.navigate(
@@ -1240,18 +1259,32 @@ export default function FollowersList({
             styles.mobilePageHeader,
         ]}
       >
+        {isMobileWeb ? (
+          <View
+            style={
+              styles.mobileHamburgerSpace
+            }
+          />
+        ) : null}
+
         <View
-          style={
-            styles.searchContainer
-          }
+          style={[
+            styles.searchContainer,
+
+            isMobileWeb &&
+              styles.mobileSearchContainer,
+          ]}
         >
           <SearchBar />
         </View>
 
         <TouchableOpacity
-          style={
-            styles.notificationsButton
-          }
+          style={[
+            styles.notificationsButton,
+
+            isMobileWeb &&
+              styles.mobileNotificationsButton,
+          ]}
           onPress={() =>
             navigation.navigate(
               "Notifications"
@@ -1552,11 +1585,36 @@ const styles =
 
       paddingTop: 20,
       paddingBottom: 10,
+
+      paddingLeft: 12,
+      paddingRight: 12,
+    },
+
+    /*
+     * Sidebar.js positions the hamburger at the
+     * left edge. Reserve a fixed column for it.
+     */
+    mobileHamburgerSpace: {
+      width: 54,
+      flexShrink: 0,
     },
 
     searchContainer: {
       flex: 1,
       minWidth: 0,
+    },
+
+    mobileSearchContainer: {
+      marginLeft: 8,
+    },
+
+    mobileNotificationsButton: {
+      width: 44,
+      height: 44,
+
+      marginLeft: 8,
+
+      borderRadius: 22,
     },
 
     notificationsButton: {
@@ -1819,9 +1877,11 @@ const styles =
     },
 
     userCard: {
-      flex: 1,
+      flexGrow: 0,
+      flexShrink: 0,
+
       minWidth: 0,
-      maxWidth: 270,
+      minHeight: 232,
 
       alignItems: "center",
 
@@ -1874,9 +1934,12 @@ const styles =
     userInformation: {
       width: "100%",
       minWidth: 0,
+      minHeight: 48,
+
+      flexGrow: 1,
 
       alignItems: "center",
-      justifyContent: "center",
+      justifyContent: "flex-start",
 
       marginBottom: 14,
     },
@@ -1923,6 +1986,8 @@ const styles =
       width: "100%",
       minHeight: 39,
 
+      marginTop: "auto",
+
       alignItems: "center",
       justifyContent: "center",
 
@@ -1967,6 +2032,8 @@ const styles =
     youBadge: {
       width: "100%",
       minHeight: 37,
+
+      marginTop: "auto",
 
       alignItems: "center",
       justifyContent: "center",

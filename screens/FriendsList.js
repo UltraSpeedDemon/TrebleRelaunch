@@ -70,6 +70,21 @@ export default function FriendsList({
         ? 3
         : 2;
 
+  /*
+   * Use an exact width so incomplete final rows
+   * cannot stretch their cards wider.
+   */
+  const userTileWidth =
+    Platform.OS === "web"
+      ? `calc((100% - ${
+          (gridColumns - 1) * 14
+        }px) / ${gridColumns})`
+      : gridColumns === 2
+        ? "48%"
+        : gridColumns === 3
+          ? "31.5%"
+          : "23.5%";
+
   const isCompact =
     width < 600;
 
@@ -672,7 +687,13 @@ export default function FriendsList({
 
         return (
           <TouchableOpacity
-            style={styles.userCard}
+            style={[
+              styles.userCard,
+              {
+                width: userTileWidth,
+                maxWidth: userTileWidth,
+              },
+            ]}
             activeOpacity={0.82}
             onPress={() =>
               navigation.navigate(
@@ -1193,7 +1214,7 @@ const styles = StyleSheet.create({
    * field cannot slide underneath it.
    */
   mobileHamburgerSpace: {
-    width: 58,
+    width: 54,
     flexShrink: 0,
   },
 
@@ -1201,16 +1222,16 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
 
-    marginLeft: 12,
+    marginLeft: 8,
   },
 
   mobileNotificationsButton: {
-    width: 46,
-    height: 46,
+    width: 44,
+    height: 44,
 
-    marginLeft: 12,
+    marginLeft: 8,
 
-    borderRadius: 23,
+    borderRadius: 22,
   },
 
   notificationsButton: {
@@ -1487,9 +1508,11 @@ const styles = StyleSheet.create({
   },
 
   userCard: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 0,
+
     minWidth: 0,
-    maxWidth: 270,
+    minHeight: 232,
 
     alignItems: "center",
 
@@ -1563,8 +1586,12 @@ const styles = StyleSheet.create({
 
   userInformation: {
     width: "100%",
+    minHeight: 48,
+
+    flexGrow: 1,
 
     alignItems: "center",
+    justifyContent: "flex-start",
 
     marginBottom: 14,
   },
@@ -1598,6 +1625,8 @@ const styles = StyleSheet.create({
   followButton: {
     width: "100%",
     minHeight: 39,
+
+    marginTop: "auto",
 
     alignItems: "center",
     justifyContent: "center",
