@@ -24,9 +24,9 @@ import {
 import { auth } from "../utils/firebase";
 import colours from "../styles/colours";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 12;
 const MAX_LOAD_ATTEMPTS = 4;
-const MINIMUM_DECK_SIZE = 12;
+const MINIMUM_DECK_SIZE = 6;
 
 const MusicSwiperTest = () => {
   const [songs, setSongs] = useState([]);
@@ -40,11 +40,6 @@ const MusicSwiperTest = () => {
   const offsetRef = useRef(0);
   const loadingRef = useRef(false);
   const usedIdsRef = useRef(new Set());
-  const songsRef = useRef([]);
-
-  useEffect(() => {
-    songsRef.current = songs;
-  }, [songs]);
 
   const parseResponse = useCallback(async (response) => {
     if (!response) {
@@ -76,17 +71,10 @@ const MusicSwiperTest = () => {
 
   const fetchFreshTrack = useCallback(async (id) => {
     try {
-      let response = await getSongFromDeezer(String(id), {
+      const response = await getSongFromDeezer(String(id), {
         refresh: true,
-        forceRefresh: false,
+        forceRefresh: true,
       });
-
-      if (!response?.ok) {
-        response = await getSongFromDeezer(String(id), {
-          refresh: true,
-          forceRefresh: true,
-        });
-      }
 
       if (!response?.ok) {
         return null;
@@ -114,33 +102,33 @@ const MusicSwiperTest = () => {
 
       if (!id) return null;
 
-      let previewUrl =
+      /*
+       * Always request a fresh Deezer record before adding a song to
+       * Music Swipe. Permanent catalog entries can contain an expired
+       * preview URL even though the metadata itself is still valid.
+       */
+      const hydrated = await fetchFreshTrack(id);
+
+      if (hydrated) {
+        itemInfo = {
+          ...itemInfo,
+          ...hydrated,
+          album: hydrated.album || itemInfo.album,
+          artist: hydrated.artist || itemInfo.artist,
+        };
+      }
+
+      const previewUrl =
+        hydrated?.preview ||
+        hydrated?.previewUrl ||
+        hydrated?.playbackUrl ||
         itemInfo?.preview ||
         itemInfo?.audioUrl ||
         itemInfo?.previewUrl ||
         itemInfo?.playbackUrl ||
         "";
 
-      if (!previewUrl) {
-        const hydrated = await fetchFreshTrack(id);
-
-        if (hydrated) {
-          itemInfo = {
-            ...itemInfo,
-            ...hydrated,
-            album: hydrated.album || itemInfo.album,
-            artist: hydrated.artist || itemInfo.artist,
-          };
-
-          previewUrl =
-            hydrated.preview ||
-            hydrated.previewUrl ||
-            hydrated.playbackUrl ||
-            "";
-        }
-      }
-
-      // Music Swipe only displays cards that can actually play audio.
+      // Never display a silent Music Swipe card.
       if (!previewUrl) return null;
 
       const rawArtist = itemInfo?.artist || item?.artist || null;
@@ -320,7 +308,7 @@ const MusicSwiperTest = () => {
 
         setLoadError(error.message || "Unable to load music.");
 
-        if (reset && songsRef.current.length === 0) {
+        if (reset && songs.length === 0) {
           const message =
             `Unable to load recommendations: ${error.message}`;
 
