@@ -2675,7 +2675,7 @@ export default function Feed({ navigation }) {
                     styles.mobileHeaderDescription,
                   ]}
                 >
-                  Your tracks, recommendations, and friends activity. 
+                  Personalized music recommendations, and friend activity.
                 </Text>
               </View>
 

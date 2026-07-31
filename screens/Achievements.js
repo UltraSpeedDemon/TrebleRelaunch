@@ -196,13 +196,18 @@ export default function Achievements({
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
         <ScrollView
-          contentContainerStyle={
-            styles.scrollContent
-          }
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isCompact &&
+              styles.scrollContentCompact,
+          ]}
           showsVerticalScrollIndicator={
             false
           }
           bounces={false}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.headerRow}>
             <TouchableOpacity
@@ -510,6 +515,21 @@ const styles = StyleSheet.create({
         : undefined,
 
     backgroundColor: colours.darkblue,
+    overflow: "hidden",
+  },
+
+  scrollView: {
+    flex: 1,
+    width: "100%",
+
+    ...(Platform.OS === "web"
+      ? {
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling:
+            "touch",
+        }
+      : {}),
   },
 
   scrollContent: {
@@ -520,7 +540,13 @@ const styles = StyleSheet.create({
 
     paddingHorizontal: 24,
     paddingTop: 28,
-    paddingBottom: 60,
+    paddingBottom: 100,
+  },
+
+  scrollContentCompact: {
+    paddingHorizontal: 16,
+    paddingTop: 82,
+    paddingBottom: 150,
   },
 
   headerRow: {

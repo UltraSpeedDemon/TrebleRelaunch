@@ -22,28 +22,41 @@ import colours from "../styles/colours";
 
 const CREDITS = [
   {
-    role: "Creator & Developer",
     name: "Ethan Curtis",
+    studentNumber: "1166648",
+    featured: true,
+    role:
+      "Revived Treble and published its 2026 relaunch with major improvements. Redesigned and remodelled the full app experience, rebuilt existing features, added new functionality, and completed front-end and back-end development. Same app, new look.",
   },
   {
-    role: "Creator & Developer",
     name: "Connor McElroy",
+    studentNumber: "1152990",
+    role:
+      "Front-End and Back-End Development",
   },
   {
-    role: "Contributor",
     name: "Aleks Zheleznov",
+    studentNumber: "1166794",
+    role:
+      "Frontend UI/UX and Swiping Recommendation Feature",
   },
   {
-    role: "Contributor",
     name: "Tuany Van",
+    studentNumber: "1162209",
+    role:
+      "Back-End Development, Reviews, and Album/Artist Feature",
   },
   {
-    role: "Contributor",
     name: "Paul Molczanski",
+    studentNumber: "1169713",
+    role:
+      "Back-End Development and Commenting/Posting",
   },
   {
-    role: "Contributor",
     name: "Yama Kamal",
+    studentNumber: "1118270",
+    role:
+      "Song Playback and Frontend UI",
   },
 ];
 
@@ -57,7 +70,7 @@ export default function Credits({
 
   const rise = useRef(
     new Animated.Value(
-      Math.max(height * 0.45, 260)
+      Math.max(height * 0.35, 220)
     )
   ).current;
 
@@ -83,7 +96,7 @@ export default function Credits({
 
       Animated.timing(rise, {
         toValue: 0,
-        duration: 1350,
+        duration: 1200,
         easing: Easing.out(
           Easing.cubic
         ),
@@ -101,7 +114,7 @@ export default function Credits({
     const glowLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(glow, {
-          toValue: 0.55,
+          toValue: 0.48,
           duration: 1500,
           useNativeDriver: true,
         }),
@@ -153,6 +166,7 @@ export default function Credits({
         </TouchableOpacity>
 
         <ScrollView
+          style={styles.scrollView}
           contentContainerStyle={[
             styles.scrollContent,
             isCompact &&
@@ -162,10 +176,14 @@ export default function Credits({
             false
           }
           bounces={false}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
         >
           <Animated.View
             style={[
               styles.creditsCard,
+              isCompact &&
+                styles.creditsCardCompact,
               {
                 opacity: fade,
                 transform: [
@@ -219,7 +237,7 @@ export default function Credits({
             <View style={styles.divider} />
 
             <View
-              style={styles.creditsGrid}
+              style={styles.creditsList}
             >
               {CREDITS.map(
                 (credit, index) => (
@@ -227,16 +245,50 @@ export default function Credits({
                     key={`${credit.name}-${index}`}
                     style={[
                       styles.creditRow,
-                      !isCompact &&
-                        styles.creditRowDesktop,
+                      credit.featured &&
+                        styles.featuredCredit,
                     ]}
                   >
-                    <Text style={styles.role}>
-                      {credit.role}
-                    </Text>
+                    {credit.featured ? (
+                      <View
+                        style={
+                          styles.featuredPill
+                        }
+                      >
+                        <Icon
+                          name="star"
+                          size={14}
+                          color="#ffffff"
+                        />
+
+                        <Text
+                          style={
+                            styles.featuredPillText
+                          }
+                        >
+                          RELAUNCH LEAD
+                        </Text>
+                      </View>
+                    ) : null}
 
                     <Text style={styles.name}>
                       {credit.name}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.studentNumber
+                      }
+                    >
+                      Student #{credit.studentNumber}
+                    </Text>
+
+                    <Text style={styles.roleLabel}>
+                      ROLE
+                    </Text>
+
+                    <Text style={styles.roleText}>
+                      {credit.role}
                     </Text>
                   </Animated.View>
                 )
@@ -293,6 +345,20 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 
+  scrollView: {
+    flex: 1,
+    width: "100%",
+
+    ...(Platform.OS === "web"
+      ? {
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling:
+            "touch",
+        }
+      : {}),
+  },
+
   backgroundOrbOne: {
     position: "absolute",
 
@@ -332,7 +398,6 @@ const styles = StyleSheet.create({
         : 14,
 
     left: 20,
-
     zIndex: 5,
 
     width: 44,
@@ -360,24 +425,25 @@ const styles = StyleSheet.create({
 
     paddingHorizontal: 28,
     paddingVertical: 80,
+    paddingBottom: 110,
   },
 
   scrollContentCompact: {
     justifyContent: "flex-start",
 
-    paddingTop: 92,
-    paddingHorizontal: 16,
-    paddingBottom: 60,
+    paddingTop: 88,
+    paddingHorizontal: 14,
+    paddingBottom: 150,
   },
 
   creditsCard: {
     width: "100%",
-    maxWidth: 760,
+    maxWidth: 820,
 
     alignItems: "center",
 
-    paddingHorizontal: 28,
-    paddingVertical: 42,
+    paddingHorizontal: 34,
+    paddingVertical: 44,
 
     borderRadius: 28,
 
@@ -390,10 +456,16 @@ const styles = StyleSheet.create({
       "rgba(255,255,255,0.10)",
   },
 
+  creditsCardCompact: {
+    paddingHorizontal: 16,
+    paddingVertical: 30,
+    borderRadius: 20,
+  },
+
   logoGlow: {
     position: "absolute",
 
-    top: 24,
+    top: 27,
 
     width: 150,
     height: 150,
@@ -407,8 +479,7 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 116,
     height: 116,
-
-    marginBottom: 10,
+    marginBottom: 24,
   },
 
   kicker: {
@@ -419,7 +490,7 @@ const styles = StyleSheet.create({
 
     letterSpacing: 2.6,
 
-    marginBottom: 10,
+    marginBottom: 12,
   },
 
   title: {
@@ -445,7 +516,7 @@ const styles = StyleSheet.create({
   },
 
   divider: {
-    width: "72%",
+    width: "78%",
     height: 1,
 
     backgroundColor:
@@ -454,39 +525,61 @@ const styles = StyleSheet.create({
     marginVertical: 30,
   },
 
-  creditsGrid: {
+  creditsList: {
     width: "100%",
-
-    flexDirection: "row",
-    flexWrap: "wrap",
-
-    alignItems: "flex-start",
-    justifyContent: "center",
+    gap: 16,
   },
 
   creditRow: {
     width: "100%",
 
+    paddingHorizontal: 20,
+    paddingVertical: 21,
+
+    borderRadius: 18,
+
+    backgroundColor:
+      "rgba(255,255,255,0.035)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.07)",
+  },
+
+  featuredCredit: {
+    backgroundColor:
+      "rgba(0,180,255,0.09)",
+
+    borderColor:
+      "rgba(0,190,255,0.28)",
+  },
+
+  featuredPill: {
+    alignSelf: "flex-start",
+
+    flexDirection: "row",
     alignItems: "center",
 
-    marginVertical: 14,
-    paddingHorizontal: 10,
+    gap: 5,
+
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+
+    borderRadius: 9,
+
+    backgroundColor:
+      colours.secondaryblue,
+
+    marginBottom: 11,
   },
 
-  creditRowDesktop: {
-    width: "50%",
-  },
+  featuredPillText: {
+    color: "#ffffff",
 
-  role: {
-    color: colours.lightblue,
+    fontSize: 8,
+    fontWeight: "900",
 
-    fontSize: 11,
-    fontWeight: "800",
-
-    letterSpacing: 1.3,
-    textTransform: "uppercase",
-
-    marginBottom: 5,
+    letterSpacing: 0.8,
   },
 
   name: {
@@ -496,7 +589,36 @@ const styles = StyleSheet.create({
     lineHeight: 32,
 
     fontWeight: "800",
-    textAlign: "center",
+  },
+
+  studentNumber: {
+    color:
+      "rgba(255,255,255,0.48)",
+
+    fontSize: 11,
+    lineHeight: 17,
+
+    marginTop: 2,
+  },
+
+  roleLabel: {
+    color: colours.lightblue,
+
+    fontSize: 10,
+    fontWeight: "900",
+
+    letterSpacing: 1.4,
+
+    marginTop: 15,
+    marginBottom: 5,
+  },
+
+  roleText: {
+    color:
+      "rgba(255,255,255,0.70)",
+
+    fontSize: 13,
+    lineHeight: 21,
   },
 
   placeholderTitle: {
