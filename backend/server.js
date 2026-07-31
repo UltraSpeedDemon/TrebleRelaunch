@@ -3859,7 +3859,7 @@ app.get("/search/getSongFromDeezer", async (req, res) => {
       });
     }
 
-    const forceRefresh =
+    const refreshRequested =
       String(
         req.query.refresh ||
         req.query.force_refresh ||
@@ -3867,22 +3867,52 @@ app.get("/search/getSongFromDeezer", async (req, res) => {
       ).toLowerCase() === "true";
 
     /*
-     * Deezer preview URLs can expire even when the track metadata
-     * itself is still valid. Playback callers can request a fresh
-     * track directly from Deezer and bypass every cache layer.
+     * Always try Treble's memory, permanent catalog, and Firestore
+     * cache first. The mobile app previously sent refresh=true on
+     * every playback request, which bypassed all caches and consumed
+     * the Deezer quota.
      */
-    const track = await fetchDeezer(
+    let track = await fetchDeezer(
       `/track/${encodeURIComponent(trackId)}`,
       {
-        forceRefresh,
+        forceRefresh: false,
         ttl: DEEZER_CACHE_TTL.track,
       }
     );
 
+    let previewRefreshed = false;
+
+    const cachedPreview =
+      track?.preview ||
+      track?.previewUrl ||
+      track?.playbackUrl ||
+      "";
+
+    /*
+     * Only perform a true Deezer refresh when the cached record has
+     * no playable preview. A normal refresh=true request no longer
+     * forces a network call when Treble already has a preview.
+     */
+    if (
+      refreshRequested &&
+      !cachedPreview
+    ) {
+      track = await fetchDeezer(
+        `/track/${encodeURIComponent(trackId)}`,
+        {
+          forceRefresh: true,
+          ttl: DEEZER_CACHE_TTL.track,
+        }
+      );
+
+      previewRefreshed = true;
+    }
+
     return res.json({
       ...normalizeDeezerTrack(track),
-      previewRefreshed:
-        forceRefresh,
+      previewRefreshed,
+      servedFromTrebleCache:
+        !previewRefreshed,
     });
   } catch (error) {
     console.error("GET /search/getSongFromDeezer error:", error);

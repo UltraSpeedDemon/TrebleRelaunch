@@ -317,13 +317,13 @@ async function syncRelationshipGroup({
     UNWIND $edges AS edge
 
     MATCH (
-      source:TrebleEntity {
+      source {
         graphId: edge.source
       }
     )
 
     MATCH (
-      target:TrebleEntity {
+      target {
         graphId: edge.target
       }
     )
