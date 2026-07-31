@@ -1424,7 +1424,7 @@ export default function Profile({
         <Text
           style={styles.loadingText}
         >
-          Loading reviews...
+          Loading Profile...
         </Text>
       </View>
     );

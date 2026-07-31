@@ -3,6 +3,11 @@ const cors = require("cors");
 require("dotenv").config();
 
 const {
+  verifyNeo4jConnection,
+  closeNeo4j,
+} = require("./providers/neo4j");
+
+const {
   initializeApp,
   cert,
   getApps,
@@ -8307,7 +8312,6 @@ app.post(
   }
 );
 
-const server = 
 /* =========================================================
    MUSIC CATALOG + GRAPH API
 ========================================================= */
@@ -8987,26 +8991,95 @@ app.get(
 );
 
 
-app.listen(port, "0.0.0.0", () => {
-  console.log(`Treble backend running at http://localhost:${port}`);
-});
+const server = app.listen(
+  port,
+  "0.0.0.0",
+  async () => {
+    console.log(
+      `Treble backend running at http://localhost:${port}`
+    );
+
+    try {
+      await verifyNeo4jConnection();
+    } catch (error) {
+      /*
+       * Keep the API online if Neo4j is temporarily unavailable.
+       * The failure will be visible in DigitalOcean Runtime Logs.
+       */
+      console.error(
+        "[Neo4j] Startup connection failed:",
+        error
+      );
+    }
+  }
+);
 
 server.on("error", (error) => {
-  console.error("Treble backend server error:", error);
+  console.error(
+    "Treble backend server error:",
+    error
+  );
 });
 
-process.on("SIGINT", () => {
-  console.log("Stopping Treble backend...");
+let isShuttingDown = false;
 
-  server.close(() => {
+async function shutdown(signal) {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+
+  console.log(
+    `[Server] ${signal} received. Stopping Treble backend...`
+  );
+
+  try {
+    await closeNeo4j();
+
+    console.log(
+      "[Neo4j] Driver closed."
+    );
+  } catch (error) {
+    console.error(
+      "[Neo4j] Driver close failed:",
+      error
+    );
+  }
+
+  server.close((error) => {
+    if (error) {
+      console.error(
+        "[Server] Shutdown error:",
+        error
+      );
+
+      process.exit(1);
+      return;
+    }
+
+    console.log(
+      "[Server] Treble backend stopped."
+    );
+
     process.exit(0);
   });
-});
 
-process.on("SIGTERM", () => {
-  console.log("Stopping Treble backend...");
+  setTimeout(() => {
+    console.error(
+      "[Server] Forced shutdown after timeout."
+    );
 
-  server.close(() => {
-    process.exit(0);
-  });
-});
+    process.exit(1);
+  }, 10000).unref();
+}
+
+process.on(
+  "SIGINT",
+  () => shutdown("SIGINT")
+);
+
+process.on(
+  "SIGTERM",
+  () => shutdown("SIGTERM")
+);
