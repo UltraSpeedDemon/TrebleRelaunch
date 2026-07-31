@@ -86,38 +86,552 @@ if (getApps().length === 0) {
   });
 }
 
+const crypto = require("crypto");
+
 const db = getFirestore();
 const DEEZER_API_BASE = "https://api.deezer.com";
 
-async function fetchDeezer(path) {
-  const url = `${DEEZER_API_BASE}${path}`;
+/*
+ * =========================================================
+ * DEEZER HYBRID CACHE
+ * =========================================================
+ *
+ * Request order:
+ *
+ * 1. Check memory cache.
+ * 2. Check persistent Firestore cache.
+ * 3. Call Deezer only when no valid cache exists.
+ * 4. Save successful Deezer data to memory and Firestore.
+ * 5. Use expired cached data if Deezer is unavailable.
+ *
+ * This automatically works across the whole site because
+ * all Deezer requests use fetchDeezer().
+ */
 
-  console.log(`[DEEZER] GET ${url}`);
+const deezerMemoryCache = new Map();
 
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": "TrebleRelaunch/1.0",
-    },
-  });
+const deezerRequestsInFlight = new Map();
 
-  if (!response.ok) {
-    const responseText = await response.text();
+const DEEZER_CACHE_COLLECTION =
+  "deezerApiCache";
 
-    throw new Error(
-      `Deezer returned HTTP ${response.status}: ${responseText}`
+const DEEZER_MEMORY_CACHE_MAX_ITEMS =
+  1500;
+
+/*
+ * Cache expiration times.
+ *
+ * Tracks, albums, and artists rarely change, so they can
+ * remain cached for seven days.
+ *
+ * Charts and search results change more frequently.
+ */
+const DEEZER_CACHE_TTL = {
+  track:
+    7 * 24 * 60 * 60 * 1000,
+
+  album:
+    7 * 24 * 60 * 60 * 1000,
+
+  artist:
+    7 * 24 * 60 * 60 * 1000,
+
+  artistTop:
+    6 * 60 * 60 * 1000,
+
+  chart:
+    15 * 60 * 1000,
+
+  search:
+    60 * 60 * 1000,
+
+  default:
+    60 * 60 * 1000,
+};
+
+/*
+ * Determine how long each Deezer request should remain
+ * fresh in the cache.
+ */
+function getDeezerCacheTtl(path) {
+  if (
+    /^\/track\/[^/?]+/i.test(path)
+  ) {
+    return DEEZER_CACHE_TTL.track;
+  }
+
+  if (
+    /^\/album\/[^/?]+/i.test(path)
+  ) {
+    return DEEZER_CACHE_TTL.album;
+  }
+
+  if (
+    /^\/artist\/[^/?]+\/top/i.test(
+      path
+    )
+  ) {
+    return DEEZER_CACHE_TTL.artistTop;
+  }
+
+  if (
+    /^\/artist\/[^/?]+/i.test(path)
+  ) {
+    return DEEZER_CACHE_TTL.artist;
+  }
+
+  if (
+    /^\/chart\//i.test(path)
+  ) {
+    return DEEZER_CACHE_TTL.chart;
+  }
+
+  if (
+    /^\/search/i.test(path)
+  ) {
+    return DEEZER_CACHE_TTL.search;
+  }
+
+  return DEEZER_CACHE_TTL.default;
+}
+
+/*
+ * Firestore document IDs cannot contain forward slashes.
+ * Convert each Deezer path into a safe SHA-256 document ID.
+ */
+function getDeezerCacheDocumentId(
+  path
+) {
+  return crypto
+    .createHash("sha256")
+    .update(path)
+    .digest("hex");
+}
+
+/*
+ * Convert Firestore timestamps, JavaScript Dates, or date
+ * strings into milliseconds.
+ */
+function getTimestampMilliseconds(
+  value
+) {
+  if (!value) {
+    return 0;
+  }
+
+  if (
+    typeof value.toMillis ===
+    "function"
+  ) {
+    return value.toMillis();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  const parsed =
+    new Date(value).getTime();
+
+  return Number.isFinite(parsed)
+    ? parsed
+    : 0;
+}
+
+/*
+ * Save data to the fast in-memory cache.
+ *
+ * A maximum item count prevents the cache from growing
+ * forever while the server stays online.
+ */
+function saveToDeezerMemoryCache(
+  cacheKey,
+  data,
+  expiresAt
+) {
+  deezerMemoryCache.set(
+    cacheKey,
+    {
+      data,
+      expiresAt,
+      lastAccessedAt:
+        Date.now(),
+    }
+  );
+
+  if (
+    deezerMemoryCache.size >
+    DEEZER_MEMORY_CACHE_MAX_ITEMS
+  ) {
+    const oldestEntry = [
+      ...deezerMemoryCache.entries(),
+    ].sort(
+      (first, second) =>
+        first[1].lastAccessedAt -
+        second[1].lastAccessedAt
+    )[0];
+
+    if (oldestEntry) {
+      deezerMemoryCache.delete(
+        oldestEntry[0]
+      );
+    }
+  }
+}
+
+/*
+ * Fetch Deezer data with:
+ *
+ * - Memory caching
+ * - Firestore caching
+ * - Duplicate-request prevention
+ * - Expiration times
+ * - Stale-cache fallback
+ */
+async function fetchDeezer(
+  path,
+  options = {}
+) {
+  const normalizedPath =
+    path.startsWith("/")
+      ? path
+      : `/${path}`;
+
+  const cacheKey =
+    normalizedPath;
+
+  const cacheDocumentId =
+    getDeezerCacheDocumentId(
+      cacheKey
+    );
+
+  const ttl =
+    Number(options.ttl) > 0
+      ? Number(options.ttl)
+      : getDeezerCacheTtl(
+          normalizedPath
+        );
+
+  const forceRefresh =
+    options.forceRefresh ===
+    true;
+
+  const now =
+    Date.now();
+
+  const memoryEntry =
+    deezerMemoryCache.get(
+      cacheKey
+    );
+
+  /*
+   * Keep expired memory data available as an emergency
+   * fallback if Deezer is down or quota-limited.
+   */
+  let staleData =
+    memoryEntry?.data ||
+    null;
+
+  /*
+   * MEMORY CACHE HIT
+   *
+   * Return instantly without Firestore or Deezer.
+   */
+  if (
+    !forceRefresh &&
+    memoryEntry &&
+    memoryEntry.expiresAt > now
+  ) {
+    memoryEntry.lastAccessedAt =
+      now;
+
+    console.log(
+      `[DEEZER CACHE] MEMORY HIT ${normalizedPath}`
+    );
+
+    return memoryEntry.data;
+  }
+
+  /*
+   * DUPLICATE REQUEST PREVENTION
+   *
+   * If several parts of the page request the same track
+   * simultaneously, only one request is performed.
+   *
+   * All other callers wait for the existing request.
+   */
+  if (
+    !forceRefresh &&
+    deezerRequestsInFlight.has(
+      cacheKey
+    )
+  ) {
+    console.log(
+      `[DEEZER CACHE] WAITING FOR EXISTING REQUEST ${normalizedPath}`
+    );
+
+    return deezerRequestsInFlight.get(
+      cacheKey
     );
   }
 
-  const data = await response.json();
+  const requestPromise =
+    (async () => {
+      const cacheRef = db
+        .collection(
+          DEEZER_CACHE_COLLECTION
+        )
+        .doc(cacheDocumentId);
 
-  if (data?.error) {
-    throw new Error(
-      `Deezer API error: ${data.error.message || "Unknown Deezer error"}`
+      /*
+       * FIRESTORE CACHE CHECK
+       *
+       * This allows cached data to survive DigitalOcean
+       * restarts and deployments.
+       */
+      try {
+        const cacheSnapshot =
+          await cacheRef.get();
+
+        if (
+          cacheSnapshot.exists
+        ) {
+          const storedCache =
+            cacheSnapshot.data() ||
+            {};
+
+          const storedExpiresAt =
+            getTimestampMilliseconds(
+              storedCache.expiresAt
+            );
+
+          if (
+            storedCache.data
+          ) {
+            staleData =
+              storedCache.data;
+          }
+
+          if (
+            !forceRefresh &&
+            storedCache.data &&
+            storedExpiresAt >
+              Date.now()
+          ) {
+            saveToDeezerMemoryCache(
+              cacheKey,
+              storedCache.data,
+              storedExpiresAt
+            );
+
+            console.log(
+              `[DEEZER CACHE] FIRESTORE HIT ${normalizedPath}`
+            );
+
+            return storedCache.data;
+          }
+        }
+      } catch (
+        cacheReadError
+      ) {
+        /*
+         * A Firestore cache failure should not prevent
+         * Deezer from being used.
+         */
+        console.warn(
+          `[DEEZER CACHE] Firestore read failed for ${normalizedPath}:`,
+          cacheReadError.message
+        );
+      }
+
+      const url =
+        `${DEEZER_API_BASE}${normalizedPath}`;
+
+      /*
+       * No valid cache was found.
+       * Call Deezer.
+       */
+      try {
+        console.log(
+          `[DEEZER] GET ${url}`
+        );
+
+        const response =
+          await fetch(
+            url,
+            {
+              method: "GET",
+
+              headers: {
+                Accept:
+                  "application/json",
+
+                "User-Agent":
+                  "TrebleRelaunch/1.0",
+
+                "Accept-Language":
+                  "en-US,en;q=0.9",
+              },
+
+              redirect:
+                "follow",
+            }
+          );
+
+        /*
+         * Read the body as text first.
+         *
+         * Deezer sometimes returns an HTML error page
+         * instead of JSON.
+         */
+        const responseText =
+          await response.text();
+
+        let data = {};
+
+        try {
+          data = responseText
+            ? JSON.parse(
+                responseText
+              )
+            : {};
+        } catch {
+          throw new Error(
+            `Deezer returned invalid JSON: ${responseText.slice(
+              0,
+              500
+            )}`
+          );
+        }
+
+        if (!response.ok) {
+          throw new Error(
+            `Deezer returned HTTP ${response.status}: ${responseText.slice(
+              0,
+              500
+            )}`
+          );
+        }
+
+        if (data?.error) {
+          throw new Error(
+            `Deezer API error: ${
+              data.error.message ||
+              "Unknown Deezer error"
+            }`
+          );
+        }
+
+        const expiresAt =
+          Date.now() + ttl;
+
+        /*
+         * Save immediately to memory.
+         */
+        saveToDeezerMemoryCache(
+          cacheKey,
+          data,
+          expiresAt
+        );
+
+        /*
+         * Save persistently to Firestore.
+         */
+        try {
+          await cacheRef.set(
+            {
+              path:
+                normalizedPath,
+
+              data,
+
+              cachedAt:
+                new Date(),
+
+              expiresAt:
+                new Date(
+                  expiresAt
+                ),
+
+              ttl,
+            },
+            {
+              merge: true,
+            }
+          );
+
+          console.log(
+            `[DEEZER CACHE] SAVED ${normalizedPath}`
+          );
+        } catch (
+          cacheWriteError
+        ) {
+          /*
+           * The request should still succeed if the
+           * Firestore cache write fails.
+           */
+          console.warn(
+            `[DEEZER CACHE] Firestore write failed for ${normalizedPath}:`,
+            cacheWriteError.message
+          );
+        }
+
+        return data;
+      } catch (
+        deezerError
+      ) {
+        /*
+         * STALE CACHE FALLBACK
+         *
+         * When Deezer returns:
+         *
+         * - Quota limit exceeded
+         * - HTTP 403
+         * - HTTP 429
+         * - Temporary network failure
+         *
+         * use previously cached data instead of breaking
+         * the page.
+         */
+        if (staleData) {
+          const temporaryExpiresAt =
+            Date.now() +
+            5 * 60 * 1000;
+
+          saveToDeezerMemoryCache(
+            cacheKey,
+            staleData,
+            temporaryExpiresAt
+          );
+
+          console.warn(
+            `[DEEZER CACHE] USING STALE DATA ${normalizedPath}:`,
+            deezerError.message
+          );
+
+          return staleData;
+        }
+
+        throw deezerError;
+      }
+    })();
+
+  /*
+   * Store the active Promise so duplicate requests share
+   * the same Deezer or Firestore operation.
+   */
+  deezerRequestsInFlight.set(
+    cacheKey,
+    requestPromise
+  );
+
+  try {
+    return await requestPromise;
+  } finally {
+    deezerRequestsInFlight.delete(
+      cacheKey
     );
   }
-
-  return data;
 }
 
 function normalizeDeezerTrack(track) {
