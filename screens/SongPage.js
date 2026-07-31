@@ -661,50 +661,78 @@ export default function SongPage({ route, navigation }) {
   const rawArtist =
     track?.artist;
 
-  const normalizedArtist =
+  const artistObject =
     typeof rawArtist === "object" &&
     rawArtist !== null
-      ? {
-          ...rawArtist,
+      ? rawArtist
+      : {};
 
-          id:
-            rawArtist.id ||
-            rawArtist.artistId ||
-            rawArtist.artist_id ||
-            track?.artistId ||
-            track?.artist_id ||
-            "",
+  const normalizedArtistId = String(
+    artistObject.id ||
+      artistObject.artistId ||
+      artistObject.artist_id ||
+      track?.artistId ||
+      track?.artist_id ||
+      ""
+  );
 
-          name:
-            rawArtist.name ||
-            artistName ||
-            "Unknown Artist",
+  const normalizedArtistName =
+    artistObject.name ||
+    track?.artistName ||
+    track?.artist_name ||
+    artistName ||
+    (typeof rawArtist === "string"
+      ? rawArtist
+      : "") ||
+    "Unknown Artist";
 
-          picture:
-            rawArtist.picture_xl ||
-            rawArtist.picture_big ||
-            rawArtist.picture_medium ||
-            rawArtist.picture ||
-            "",
-        }
-      : {
-          id:
-            track?.artistId ||
-            track?.artist_id ||
-            "",
+  /*
+   * Deezer can return the artist image under several
+   * different properties depending on the endpoint.
+   */
+  const normalizedArtistImage =
+    artistObject.picture_xl ||
+    artistObject.picture_big ||
+    artistObject.picture_medium ||
+    artistObject.picture_small ||
+    artistObject.picture ||
+    artistObject.image ||
+    artistObject.imageUrl ||
+    artistObject.photoURL ||
+    track?.artistPicture ||
+    track?.artist_picture ||
+    track?.artistImage ||
+    track?.artist_image ||
+    "";
 
-          name:
-            artistName ||
-            String(rawArtist || "") ||
-            "Unknown Artist",
+  const normalizedArtist = {
+    ...artistObject,
 
-          picture:
-            "",
-        };
+    id: normalizedArtistId,
+    artistId: normalizedArtistId,
+    artist_id: normalizedArtistId,
+
+    name: normalizedArtistName,
+    title: normalizedArtistName,
+
+    picture: normalizedArtistImage,
+    picture_xl:
+      artistObject.picture_xl ||
+      normalizedArtistImage,
+    picture_big:
+      artistObject.picture_big ||
+      normalizedArtistImage,
+    picture_medium:
+      artistObject.picture_medium ||
+      normalizedArtistImage,
+    image: normalizedArtistImage,
+    imageUrl: normalizedArtistImage,
+  };
 
   if (
-    !normalizedArtist.name ||
-    normalizedArtist.name ===
+    !normalizedArtistId ||
+    !normalizedArtistName ||
+    normalizedArtistName ===
       "Unknown Artist"
   ) {
     Alert.alert(
@@ -716,16 +744,27 @@ export default function SongPage({ route, navigation }) {
   }
 
   navigation.navigate(
-    "ArtistListenables",
+    "ArtistPage",
     {
-      artist:
-        normalizedArtist,
+      artist: normalizedArtist,
 
-      artistId:
-        normalizedArtist.id,
+      artistId: normalizedArtistId,
+      artist_id: normalizedArtistId,
 
       artistName:
-        normalizedArtist.name,
+        normalizedArtistName,
+
+      artistImage:
+        normalizedArtistImage,
+
+      artistPicture:
+        normalizedArtistImage,
+
+      picture:
+        normalizedArtistImage,
+
+      image:
+        normalizedArtistImage,
     }
   );
 };
@@ -1567,20 +1606,9 @@ const handlePlayPreview = async () => {
                   <TouchableOpacity
                     activeOpacity={0.7}
                     onPress={(event) => {
-                      event?.stopPropagation?.();
-
-                      navigation.navigate("ArtistPage", {
-                        artistId:
-                          track.artist?.id ||
-                          track.artistId,
-
-                        artistName:
-                          artistName,
-
-                        artist:
-                          track.artist,
-                      });
-                    }}
+                        event?.stopPropagation?.();
+                        openArtistPage();
+                      }}
                   >
                     <Text
                       style={styles.artist}

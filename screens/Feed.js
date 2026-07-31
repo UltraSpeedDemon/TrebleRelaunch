@@ -2675,7 +2675,7 @@ export default function Feed({ navigation }) {
                     styles.mobileHeaderDescription,
                   ]}
                 >
-                  Music selected for you and activity from your friends.
+                  Your tracks, recommendations, and friends activity. 
                 </Text>
               </View>
 
@@ -2729,7 +2729,7 @@ export default function Feed({ navigation }) {
             </View>
 
             <Text style={styles.headerDescription}>
-              Music selected for you and activity from your friends.
+              Personalized music recommendations, and friend activity.
             </Text>
 
             <Text style={styles.refreshHint}>
