@@ -55,7 +55,7 @@ import {
 const PAGE_SIZE = 10;
 const DOUBLE_TAP_DELAY = 300;
 
-const FEED_CACHE_KEY = "treble_feed_cache_v2";
+const FEED_CACHE_KEY = "treble_feed_cache_v3";
 const FEED_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 
 const DESKTOP_BREAKPOINT = 768;
@@ -760,12 +760,16 @@ export default function Feed({ navigation }) {
             cached.savedAt || 0
           );
 
-        setCombinedFeed(
-          cached.items
+        const safeCachedItems = cached.items.filter(
+          (item) =>
+            item?.liked !== true &&
+            item?.item_info?.liked !== true
         );
 
+        setCombinedFeed(safeCachedItems);
+
         setTimelineOffset(
-          cached.items.length
+          safeCachedItems.length
         );
 
         setHasMore(true);
@@ -1170,6 +1174,15 @@ export default function Feed({ navigation }) {
         }
 
         if (nextLiked) {
+          setCombinedFeed((items) => {
+            const updated = items.filter(
+              (feedItem) =>
+                String(getItemId(feedItem)) !== String(itemId)
+            );
+
+            saveFeedCache(updated).catch(() => {});
+            return updated;
+          });
           /*
            * The like is already complete. Saving a recommendation
            * seed should not keep the heart button loading.
@@ -1222,6 +1235,7 @@ export default function Feed({ navigation }) {
       getItemType,
       getLikedStatus,
       likeLoading,
+      saveFeedCache,
       updateLikedState,
     ]
   );
@@ -1459,6 +1473,38 @@ export default function Feed({ navigation }) {
         item?.origin ||
         item?.item_info?.origin;
 
+      if (origin?.type === "friends") {
+        return {
+          heading:
+            origin?.friendCount > 1
+              ? `Popular With ${origin.friendCount} Friends`
+              : "Liked By A Friend",
+          description:
+            "Recommended from your music circle",
+        };
+      }
+
+      if (origin?.type === "similar") {
+        return {
+          heading: "Similar To Music You Like",
+          description: [
+            origin?.title,
+            origin?.artist,
+          ]
+            .filter(Boolean)
+            .join(" by "),
+        };
+      }
+
+      if (origin?.type === "genre") {
+        return {
+          heading: "From A Genre You Enjoy",
+          description:
+            origin?.title ||
+            "Based on your listening taste",
+        };
+      }
+
       if (origin?.type === "like") {
         return {
           heading: "Because You Like",
@@ -1512,7 +1558,7 @@ export default function Feed({ navigation }) {
       ) {
         return {
           heading:
-            "Discover Something New",
+            "Fresh Discovery",
           description:
             "Recommended for your taste",
         };
@@ -1535,10 +1581,7 @@ export default function Feed({ navigation }) {
         return "#31c46c";
       }
 
-      if (
-        item?.class ===
-        "following_review"
-      ) {
+      if (item?.class === "following_review") {
         return "#3ca8ff";
       }
 
@@ -1553,18 +1596,47 @@ export default function Feed({ navigation }) {
         item?.origin ||
         item?.item_info?.origin;
 
-      if (
-        origin?.type === "like" ||
-        origin?.type === "favourite" ||
-        origin?.type === "high-rating"
-      ) {
-        return "#ff334f";
-      }
-
-      return "#31c46c";
+      return ({
+        friends: "#f0c419",
+        similar: "#a970ff",
+        genre: "#ff8a3d",
+        favourite: "#ff334f",
+        "high-rating": "#ff5fa2",
+        like: "#31c46c",
+        discovery: "#35afe5",
+        feed: "#35afe5",
+      })[origin?.type] || "#35afe5";
     },
     []
   );
+
+  const getSourceIcon = useCallback(
+    (item) => {
+      if (
+        item?.class === "share" ||
+        item?.shared_by
+      ) {
+        return "people";
+      }
+
+      const origin =
+        item?.origin ||
+        item?.item_info?.origin;
+
+      return ({
+        friends: "people",
+        similar: "hub",
+        genre: "graphic-eq",
+        favourite: "favorite",
+        "high-rating": "star",
+        like: "favorite-border",
+        discovery: "explore",
+        feed: "auto-awesome",
+      })[origin?.type] || "auto-awesome";
+    },
+    []
+  );
+
 
   const renderStars = useCallback(
     (rating = 0) => {
@@ -1763,14 +1835,33 @@ export default function Feed({ navigation }) {
                 styles.compactCard,
               {
                 borderColor: cardAccent,
+                shadowColor: cardAccent,
               },
             ]}
           >
             <View style={styles.cardHeader}>
               <View style={styles.contextContainer}>
-                <Text style={styles.contextHeading}>
-                  {context.heading}
-                </Text>
+                <View style={styles.contextHeadingRow}>
+                  <View
+                    style={[
+                      styles.sourceIconCircle,
+                      {
+                        borderColor: cardAccent,
+                        backgroundColor: `${cardAccent}20`,
+                      },
+                    ]}
+                  >
+                    <Icon
+                      name={getSourceIcon(item)}
+                      size={15}
+                      color={cardAccent}
+                    />
+                  </View>
+
+                  <Text style={styles.contextHeading}>
+                    {context.heading}
+                  </Text>
+                </View>
 
                 {context.description ? (
                   <Text
@@ -1944,6 +2035,7 @@ export default function Feed({ navigation }) {
       getLikedStatus,
       getPreviewUrl,
       getRecommendationContext,
+      getSourceIcon,
       handleItemTap,
       handleLikeSong,
       handlePlayItem,
@@ -2977,6 +3069,22 @@ desktopBottomNavBar: {
     alignItems: "flex-start",
     justifyContent: "space-between",
     marginBottom: 18,
+  },
+
+  contextHeadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    marginBottom: 4,
+  },
+
+  sourceIconCircle: {
+    width: 29,
+    height: 29,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   contextContainer: {

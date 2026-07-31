@@ -1167,6 +1167,24 @@ function isPermanentEntityUsable(
     return false;
   }
 
+  if (request.type === "album") {
+    const tracks =
+      data.raw?.tracks?.data ||
+      data.tracks?.data ||
+      data.tracks ||
+      [];
+
+    /*
+     * Album search results contain artwork and title but usually
+     * do not include the album's track list. Do not treat those
+     * partial records as a complete /album/:id response.
+     */
+    return (
+      Array.isArray(tracks) &&
+      tracks.length > 0
+    );
+  }
+
   if (request.type !== "track") {
     return true;
   }
@@ -2960,6 +2978,156 @@ async function getTracksFromSeed(seed, limit = 12) {
   }
 }
 
+async function getRadioTracksFromSeed(seed, limit = 12) {
+  const seedTrack = seed.track || {};
+  const artistId = seedTrack.artist?.id;
+
+  if (!artistId) return [];
+
+  try {
+    const result = await fetchDeezer(
+      `/artist/${encodeURIComponent(artistId)}/radio?limit=${limit}`
+    );
+
+    return (result.data || []).map((track) => ({
+      track,
+      score: 6,
+      origin: {
+        type: "similar",
+        id: String(seedTrack.id || ""),
+        title:
+          seedTrack.title ||
+          seedTrack.title_short ||
+          seed.savedName ||
+          "music you enjoy",
+        artist:
+          seedTrack.artist?.name ||
+          seed.savedArtistName ||
+          "",
+      },
+    }));
+  } catch (error) {
+    console.warn(
+      `[Recommendations] Unable to load artist radio for ${artistId}:`,
+      error.message
+    );
+    return [];
+  }
+}
+
+function recommendationOriginPriority(origin) {
+  return ({
+    friends: 100,
+    favourite: 90,
+    "high-rating": 85,
+    similar: 75,
+    like: 70,
+    genre: 65,
+    discovery: 30,
+  })[String(origin?.type || "discovery")] || 20;
+}
+
+function diversifyRecommendationCandidates(
+  candidates,
+  { limit, excludedTrackIds }
+) {
+  const buckets = new Map();
+  const uniqueIds = new Set();
+
+  for (const candidate of candidates) {
+    const trackId = String(candidate?.track?.id || "");
+
+    if (
+      !trackId ||
+      excludedTrackIds.has(trackId) ||
+      uniqueIds.has(trackId)
+    ) {
+      continue;
+    }
+
+    uniqueIds.add(trackId);
+
+    const type = String(candidate.origin?.type || "discovery");
+
+    if (!buckets.has(type)) buckets.set(type, []);
+
+    buckets.get(type).push({
+      ...candidate,
+      score:
+        Number(candidate.score || candidate.origin?.score || 0) +
+        recommendationOriginPriority(candidate.origin),
+    });
+  }
+
+  for (const bucket of buckets.values()) {
+    bucket.sort((a, b) => b.score - a.score);
+  }
+
+  const order = [
+    "friends",
+    "similar",
+    "favourite",
+    "high-rating",
+    "like",
+    "genre",
+    "discovery",
+  ];
+
+  const output = [];
+  const artistCounts = new Map();
+  const albumCounts = new Map();
+  let madeProgress = true;
+
+  while (output.length < limit && madeProgress) {
+    madeProgress = false;
+
+    for (const type of order) {
+      const bucket = buckets.get(type) || [];
+
+      while (bucket.length > 0) {
+        const candidate = bucket.shift();
+        const artistId = String(
+          candidate.track?.artist?.id ||
+          candidate.track?.artist?.name ||
+          ""
+        );
+        const albumId = String(candidate.track?.album?.id || "");
+
+        if (
+          (artistId && (artistCounts.get(artistId) || 0) >= 2) ||
+          (albumId && (albumCounts.get(albumId) || 0) >= 1)
+        ) {
+          continue;
+        }
+
+        output.push(candidate);
+
+        if (artistId) {
+          artistCounts.set(
+            artistId,
+            (artistCounts.get(artistId) || 0) + 1
+          );
+        }
+
+        if (albumId) {
+          albumCounts.set(
+            albumId,
+            (albumCounts.get(albumId) || 0) + 1
+          );
+        }
+
+        madeProgress = true;
+        break;
+      }
+
+      if (output.length >= limit) break;
+    }
+  }
+
+  return output;
+}
+
+
 async function buildPersonalizedRecommendations({
   userId,
   limit,
@@ -2967,282 +3135,159 @@ async function buildPersonalizedRecommendations({
   refresh,
 }) {
   const [
-  likedTrackIdList,
-  recentlyServedTrackIds,
-  seedTracks,
-] = await Promise.all([
-  getUserLikedTrackIds(userId),
-  getRecentlyServedTrackIds(userId),
-  getRecommendationSeedTracks(
-    userId
-  ),
-]);
+    likedTrackIdList,
+    recentlyServedTrackIds,
+    seedTracks,
+  ] = await Promise.all([
+    getUserLikedTrackIds(userId),
+    getRecentlyServedTrackIds(userId),
+    getRecommendationSeedTracks(userId),
+  ]);
 
-const likedTrackIds = new Set(
-  likedTrackIdList
-);
+  const likedTrackIds = new Set(
+    likedTrackIdList.map(String)
+  );
 
-const excludedTrackIds = new Set([
-  ...likedTrackIds,
-  ...recentlyServedTrackIds,
-]);
+  const excludedTrackIds = new Set([
+    ...likedTrackIds,
+    ...recentlyServedTrackIds,
+  ]);
 
-const friendCandidates =
-  await getFriendCatalogRecommendations(
-    userId,
+  const selectedSeeds = (
+    refresh ? shuffleArray(seedTracks) : seedTracks
+  ).slice(0, 6);
+
+  const [
+    friendCandidates,
+    topTrackGroups,
+    radioTrackGroups,
+  ] = await Promise.all([
+    getFriendCatalogRecommendations(userId, {
+      limit: Math.max(limit * 2, 20),
+      excludedTrackIds,
+    }),
+
+    Promise.all(
+      selectedSeeds.map((seed) =>
+        getTracksFromSeed(seed, 10)
+      )
+    ),
+
+    Promise.all(
+      selectedSeeds.map((seed) =>
+        getRadioTracksFromSeed(seed, 10)
+      )
+    ),
+  ]);
+
+  const discovery = await fetchDeezer(
+    `/chart/0/tracks?limit=${Math.max(limit * 4, 40)}&index=${
+      refresh ? Math.floor(Math.random() * 120) : 20 + offset
+    }`
+  );
+
+  const allCandidates = [
+    ...friendCandidates.map((candidate) => ({
+      ...candidate,
+      score: Number(candidate.origin?.score || 0) + 10,
+    })),
+
+    ...radioTrackGroups.flat(),
+
+    ...topTrackGroups.flat().map((candidate) => ({
+      ...candidate,
+      score:
+        candidate.origin?.type === "favourite"
+          ? 9
+          : candidate.origin?.type === "high-rating"
+            ? 8
+            : 6,
+    })),
+
+    ...(discovery.data || []).map((track) => ({
+      track,
+      score: 1,
+      origin: {
+        type: "discovery",
+        title: "Trending outside your usual mix",
+        artist: "",
+      },
+    })),
+  ];
+
+  const diversified = diversifyRecommendationCandidates(
+    refresh ? shuffleArray(allCandidates) : allCandidates,
     {
-      limit:
-        Math.max(
-          limit + offset,
-          20
-        ),
+      limit: offset + limit,
       excludedTrackIds,
     }
   );
 
-  /*
-   * New users still receive a fallback feed.
-   */
-  if (
-    seedTracks.length === 0 &&
-    friendCandidates.length > 0
-  ) {
-    const friendPage =
-      friendCandidates.slice(
-        offset,
-        offset + limit
-      );
+  let page = diversified.slice(offset, offset + limit);
 
-    const recommendations =
-      await Promise.all(
-        friendPage.map(
-          ({ track, origin }) =>
-            createFeedItem(
-              track,
-              "friend-recommendation",
-              userId,
-              origin,
-              likedTrackIds
-            )
-        )
-      );
-
-    setImmediate(() => {
-      markFeedItemsServed(
-        userId,
-        recommendations,
-        "friend-recommendation"
-      ).catch((error) => {
-        console.warn(
-          "[Recommendations] Unable to mark friend recommendations served:",
-          error.message
-        );
-      });
-    });
-
-    return recommendations;
-  }
-
-  if (seedTracks.length === 0) {
-    const fallbackOffset =
-      offset + (refresh ? 40 : 20);
-
-    const chart = await fetchDeezer(
-      `/chart/0/tracks?limit=${limit}&index=${fallbackOffset}`
-    );
-
-    return Promise.all(
-      (chart.data || []).map((track) =>
-        createFeedItem(
-          track,
-          "recommendation",
-          userId,
-          {
-            type: "discovery",
-            title: "Popular on Deezer",
-            artist: "",
-          }
-        )
-      )
-    );
-  }
-
-  const seedResults = await Promise.all(
-    seedTracks.map((seed) =>
-      getTracksFromSeed(
-        seed,
-        Math.max(limit, 10)
-      )
-    )
-  );
-
-  let candidates = [
-    ...friendCandidates,
-    ...seedResults.flat(),
-  ];
-
-  /*
-   * Refresh changes the order of personalized results.
-   */
-  if (refresh) {
-    candidates = shuffleArray(candidates);
-  }
-
-  const uniqueCandidates = [];
-  const usedRecommendationIds = new Set();
-
-  for (const candidate of candidates) {
-    const candidateId = String(
-      candidate.track?.id || ""
-    );
-
-    if (!candidateId) {
-      continue;
-    }
-
-    /*
-     * Exclude songs the user has already liked.
-     */
-    if (
-      excludedTrackIds.has(candidateId)
-    ) {
-      continue;
-    }
-
-    if (usedRecommendationIds.has(candidateId)) {
-      continue;
-    }
-
-    usedRecommendationIds.add(candidateId);
-    uniqueCandidates.push(candidate);
-  }
-
-  const page = uniqueCandidates.slice(
-    offset,
-    offset + limit
-  );
-
-  /*
-   * Fill shortages with Deezer chart tracks.
-   */
   if (page.length < limit) {
-    const fallback = await fetchDeezer(
-      `/chart/0/tracks?limit=${
-        limit * 2
-      }&index=${20 + offset}`
+    const fill = await fetchDeezer(
+      `/chart/0/tracks?limit=100&index=${
+        140 + Math.floor(Math.random() * 100)
+      }`
     );
 
-    for (const track of fallback.data || []) {
-      const trackId = String(track.id);
+    const usedIds = new Set(
+      page.map((candidate) => String(candidate.track?.id || ""))
+    );
+
+    for (const track of fill.data || []) {
+      const trackId = String(track.id || "");
 
       if (
-        excludedTrackIds.has(trackId) ||
-        usedRecommendationIds.has(trackId)
+        !trackId ||
+        likedTrackIds.has(trackId) ||
+        recentlyServedTrackIds.has(trackId) ||
+        usedIds.has(trackId)
       ) {
         continue;
       }
 
-      usedRecommendationIds.add(trackId);
+      usedIds.add(trackId);
 
       page.push({
         track,
         origin: {
           type: "discovery",
-          title: "Popular on Deezer",
+          title: "Fresh discovery",
           artist: "",
         },
       });
 
-      if (page.length >= limit) {
-        break;
-      }
+      if (page.length >= limit) break;
     }
   }
 
-  /*
- * Final safety fallback:
- * cooldown can be relaxed, but liked songs remain excluded.
- */
-if (page.length < limit) {
-  const emergencyChart =
-    await fetchDeezer(
-      `/chart/0/tracks?limit=100&index=${
-        Math.floor(Math.random() * 100)
-      }`
-    );
-
-  for (
-    const track of emergencyChart.data || []
-  ) {
-    const trackId = String(
-      track.id || ""
-    );
-
-    if (
-      !trackId ||
-      likedTrackIds.has(trackId) ||
-      usedRecommendationIds.has(trackId)
-    ) {
-      continue;
-    }
-
-    usedRecommendationIds.add(trackId);
-
-    page.push({
-      track,
-      origin: {
-        type: "discovery",
-        title: "New music for you",
-        artist: "",
-      },
-    });
-
-    if (page.length >= limit) {
-      break;
-    }
-  }
-}
-
-/*
- * Absolute fallback. Recommendations should never be empty,
- * even when the user has exhausted every filtered candidate.
- */
-if (page.length === 0) {
-  const emergencyChart =
-    await fetchDeezer(
-      `/chart/0/tracks?limit=${limit}&index=0`
-    );
-
-  for (
-    const track of emergencyChart.data || []
-  ) {
-    page.push({
-      track,
-      origin: {
-        type: "discovery",
-        title: "Recommended for you",
-        artist: "",
-      },
-    });
-  }
-}
-
-  const recommendations =
-    await Promise.all(
-      page.map(({ track, origin }) =>
-        createFeedItem(
-          track,
-          "recommendation",
-          userId,
-          origin
-        )
+  const recommendations = await Promise.all(
+    page.map(({ track, origin }) =>
+      createFeedItem(
+        track,
+        origin?.type === "friends"
+          ? "friend-recommendation"
+          : "recommendation",
+        userId,
+        origin,
+        likedTrackIds
       )
-    );
+    )
+  );
+
+  const safeRecommendations = recommendations.filter(
+    (item) =>
+      !likedTrackIds.has(
+        String(item.id || item.listenable_id || "")
+      )
+  );
 
   setImmediate(() => {
     markFeedItemsServed(
       userId,
-      recommendations,
+      safeRecommendations,
       "recommendation"
     ).catch((error) => {
       console.warn(
@@ -3252,8 +3297,8 @@ if (page.length === 0) {
     });
   });
 
-  return recommendations;
-  }
+  return safeRecommendations;
+}
 
 app.get("/test", (req, res) => {
   res.json({
@@ -3299,344 +3344,99 @@ app.post("/users", async (req, res) => {
 
 app.get("/users/timeline", async (req, res) => {
   try {
-    const {
-      limit,
-      offset,
-    } = getPagination(req);
-
-    const userId =
-      String(
-        req.query.user_id ||
-        ""
-      ).trim();
-
+    const { limit, offset } = getPagination(req);
+    const userId = String(req.query.user_id || "").trim();
     const refresh =
-      String(
-        req.query.refresh ||
-        "false"
-      ) === "true";
+      String(req.query.refresh || "false") === "true";
 
-    /*
-     * Likes and recently-served tracks are loaded together.
-     * Shared items are loaded immediately after likes are
-     * available so they can reuse the same Set and avoid
-     * one Firestore read per shared song.
-     */
-    const [
-      likedTrackIdList,
-      recentlyServedTrackIds,
-    ] = await Promise.all([
-      userId
-        ? getUserLikedTrackIds(
-            userId
-          )
-        : Promise.resolve([]),
+    if (!userId) {
+      return res.status(400).json({
+        ok: false,
+        timeline: [],
+        error: "user_id is required.",
+      });
+    }
 
-      userId
-        ? getRecentlyServedTrackIds(
-            userId
-          )
-        : Promise.resolve(
-            new Set()
-          ),
-    ]);
-
-    const likedTrackIds =
-      new Set(
-        likedTrackIdList
-      );
-
-    const excludedTrackIds =
-      new Set([
-        ...likedTrackIds,
-        ...recentlyServedTrackIds,
-      ]);
-
-    const sharedTimelinePromise =
-      userId
-        ? getSharedFeedItems(
-            userId,
-            {
-              limit:
-                Math.min(
-                  limit,
-                  5
-                ),
-              offset: 0,
-              likedTrackIds,
-              excludeMusicIds:
-                excludedTrackIds,
-              markSeen: true,
-            }
-          )
-        : Promise.resolve([]);
-
-    /*
-     * One chart request is normally enough. The old endpoint
-     * could make four chart requests sequentially, which was
-     * the largest feed-loading delay.
-     */
-    const chartOffset =
-      refresh
-        ? Math.floor(
-            Math.random() * 100
-          )
-        : offset;
-
-    const chartPromise =
-      fetchDeezer(
-        `/chart/0/tracks?limit=${Math.max(
-          limit * 4,
-          50
-        )}&index=${chartOffset}`
-      );
+    const likedTrackIds = new Set(
+      (await getUserLikedTrackIds(userId)).map(String)
+    );
 
     const [
       sharedTimelineItems,
-      chart,
+      personalizedItems,
     ] = await Promise.all([
-      sharedTimelinePromise,
-      chartPromise,
+      getSharedFeedItems(userId, {
+        limit: Math.min(3, limit),
+        offset: 0,
+        likedTrackIds,
+        excludeMusicIds: likedTrackIds,
+        markSeen: true,
+      }),
+
+      buildPersonalizedRecommendations({
+        userId,
+        limit: limit + 4,
+        offset,
+        refresh,
+      }),
     ]);
 
-    const selectedTracks = [];
-    const selectedTrackIds =
-      new Set(
-        sharedTimelineItems.map(
-          (item) =>
-            String(item.id)
-        )
-      );
+    const timeline = [];
+    const usedIds = new Set();
 
-    for (
-      const track of
-        chart.data || []
-    ) {
-      const trackId =
-        String(track.id || "");
+    const addItem = (item) => {
+      const trackId = String(
+        item?.id ||
+        item?.listenable_id ||
+        item?.item_info?.id ||
+        ""
+      );
 
       if (
         !trackId ||
-        excludedTrackIds.has(
-          trackId
-        ) ||
-        selectedTrackIds.has(
-          trackId
-        )
+        likedTrackIds.has(trackId) ||
+        usedIds.has(trackId)
       ) {
-        continue;
+        return;
       }
 
-      selectedTracks.push(
-        track
-      );
+      usedIds.add(trackId);
+      timeline.push(item);
+    };
 
-      selectedTrackIds.add(
-        trackId
-      );
-
-      if (
-        selectedTracks.length >=
-        Math.max(
-          limit -
-            sharedTimelineItems.length,
-          0
-        )
-      ) {
-        break;
-      }
-    }
-
-    /*
-     * Only one additional request is allowed if the first
-     * chart page could not fill the feed.
-     */
-    if (
-      selectedTracks.length <
-      Math.max(
-        limit -
-          sharedTimelineItems.length,
-        0
-      )
-    ) {
-      const fallback =
-        await fetchDeezer(
-          `/chart/0/tracks?limit=50&index=${
-            100 +
-            Math.floor(
-              Math.random() * 100
-            )
-          }`
-        );
-
-      for (
-        const track of
-          fallback.data || []
-      ) {
-        const trackId =
-          String(
-            track.id || ""
-          );
-
-        if (
-          !trackId ||
-          likedTrackIds.has(
-            trackId
-          ) ||
-          selectedTrackIds.has(
-            trackId
-          )
-        ) {
-          continue;
-        }
-
-        selectedTracks.push(
-          track
-        );
-
-        selectedTrackIds.add(
-          trackId
-        );
-
-        if (
-          selectedTracks.length >=
-          Math.max(
-            limit -
-              sharedTimelineItems.length,
-            0
-          )
-        ) {
-          break;
-        }
-      }
-    }
-
-    const generatedTimeline =
-      await Promise.all(
-        selectedTracks.map(
-          (track) =>
-            createFeedItem(
-              track,
-              "timeline",
-              userId,
-              {
-                type: "feed",
-                title:
-                  "Recommended for you",
-                artist: "",
-              },
-              likedTrackIds
-            )
-        )
-      );
-
-    const timeline = [
-      ...sharedTimelineItems,
-      ...generatedTimeline,
-    ].slice(0, limit);
-
-    /*
-     * Do not delay the response while recording served songs.
-     */
-    setImmediate(() => {
-      markFeedItemsServed(
-        userId,
-        timeline,
-        "timeline"
-      ).catch((error) => {
-        console.warn(
-          "[Timeline] Unable to mark feed items served:",
-          error.message
-        );
-      });
-    });
-
-    console.log(
-      `[Timeline] Returning ${timeline.length} items (${sharedTimelineItems.length} new shared)`
+    const maxLength = Math.max(
+      sharedTimelineItems.length,
+      personalizedItems.length
     );
+
+    for (let index = 0; index < maxLength; index += 1) {
+      if (personalizedItems[index]) {
+        addItem(personalizedItems[index]);
+      }
+
+      if (index < 3 && sharedTimelineItems[index]) {
+        addItem(sharedTimelineItems[index]);
+      }
+
+      if (timeline.length >= limit) break;
+    }
 
     return res.status(200).json({
       ok: true,
-      timeline,
+      timeline: timeline.slice(0, limit),
       limit,
       offset,
       refresh,
+      personalized: true,
     });
   } catch (error) {
-    console.error(
-      "GET /users/timeline error:",
-      error
-    );
+    console.error("GET /users/timeline error:", error);
 
-    try {
-      const { limit } =
-        getPagination(req);
-
-      const emergencyChart =
-        await fetchDeezer(
-          `/chart/0/tracks?limit=${limit}&index=0`
-        );
-
-      const timeline =
-        (emergencyChart.data || [])
-          .slice(0, limit)
-          .map((track) => {
-            const normalized =
-              normalizeDeezerTrack(
-                track
-              );
-
-            return {
-              record_id:
-                `deezer-timeline-${normalized.id}`,
-              id:
-                normalized.id,
-              listenable_id:
-                normalized.id,
-              type: "track",
-              liked: false,
-              source:
-                "timeline",
-              origin: {
-                type: "feed",
-                title:
-                  "Recommended for you",
-                artist: "",
-              },
-              item_info:
-                normalized,
-              title:
-                normalized.title,
-              name:
-                normalized.name,
-              artist:
-                normalized.artist,
-              album:
-                normalized.album,
-              image:
-                normalized.image,
-              coverArt:
-                normalized.coverArt,
-              preview:
-                normalized.preview,
-            };
-          });
-
-      return res.status(200).json({
-        ok: true,
-        timeline,
-        fallback: true,
-      });
-    } catch (
-      fallbackError
-    ) {
-      return res.status(502).json({
-        ok: false,
-        timeline: [],
-        error:
-          fallbackError.message,
-      });
-    }
+    return res.status(502).json({
+      ok: false,
+      timeline: [],
+      error: error.message,
+    });
   }
 });
 
@@ -5772,79 +5572,248 @@ app.get("/album/songs", async (req, res) => {
       return res.status(400).json({
         ok: false,
         songs: [],
-        error: "listenable_id is required.",
+        error:
+          "listenable_id is required.",
       });
     }
 
-    const albumData = await fetchDeezer(
-      `/album/${encodeURIComponent(albumId)}`
-    );
+    /*
+     * Force a complete album lookup. A catalog record originally
+     * saved from a search result may only contain title/artwork.
+     */
+    let albumData =
+      await fetchDeezer(
+        `/album/${encodeURIComponent(
+          albumId
+        )}`,
+        {
+          forceRefresh: true,
+        }
+      );
 
-    const tracks =
-      albumData?.tracks?.data || [];
+    let tracks =
+      albumData?.tracks?.data ||
+      [];
+
+    /*
+     * Some album responses or stale cached records may not include
+     * tracks. Deezer exposes a dedicated tracks endpoint, so use it
+     * as the reliable fallback.
+     */
+    if (
+      !Array.isArray(tracks) ||
+      tracks.length === 0
+    ) {
+      const tracksData =
+        await fetchDeezer(
+          `/album/${encodeURIComponent(
+            albumId
+          )}/tracks?limit=100`,
+          {
+            forceRefresh: true,
+          }
+        );
+
+      tracks =
+        tracksData?.data ||
+        tracksData?.tracks?.data ||
+        [];
+    }
+
+    /*
+     * Final database fallback for albums whose tracks were already
+     * saved into Treble's permanent catalog.
+     */
+    if (
+      (!Array.isArray(tracks) ||
+        tracks.length === 0)
+    ) {
+      const catalogSnapshot =
+        await db
+          .collection(
+            MUSIC_TRACKS_COLLECTION
+          )
+          .where(
+            "albumId",
+            "==",
+            albumId
+          )
+          .limit(100)
+          .get();
+
+      tracks =
+        catalogSnapshot.docs.map(
+          (document) => {
+            const data =
+              document.data() || {};
+
+            return (
+              data.raw || {
+                id:
+                  document.id,
+                title:
+                  data.title ||
+                  data.name ||
+                  "Unknown Track",
+                title_short:
+                  data.title ||
+                  data.name ||
+                  "Unknown Track",
+                artist:
+                  data.artist ||
+                  null,
+                album:
+                  data.album ||
+                  null,
+                preview:
+                  data.preview ||
+                  data.previewUrl ||
+                  data.playbackUrl ||
+                  "",
+                duration:
+                  Number(
+                    data.duration || 0
+                  ),
+              }
+            );
+          }
+        );
+    }
 
     const albumImage =
-      albumData.cover_xl ||
-      albumData.cover_big ||
-      albumData.cover_medium ||
-      albumData.cover ||
+      albumData?.cover_xl ||
+      albumData?.cover_big ||
+      albumData?.cover_medium ||
+      albumData?.cover ||
+      albumData?.image ||
+      albumData?.coverArt ||
       "";
 
-    const songs = tracks.map((track) => {
-      const normalized =
-        normalizeDeezerTrack(track);
+    const songs =
+      (Array.isArray(tracks)
+        ? tracks
+        : []
+      ).map((track) => {
+        const trackWithAlbum = {
+          ...track,
+          album: {
+            ...(track.album || {}),
+            id:
+              String(
+                track.album?.id ||
+                albumData?.id ||
+                albumId
+              ),
+            title:
+              track.album?.title ||
+              albumData?.title ||
+              "Unknown Album",
+            cover:
+              track.album?.cover ||
+              albumImage,
+            cover_medium:
+              track.album
+                ?.cover_medium ||
+              albumImage,
+            cover_big:
+              track.album
+                ?.cover_big ||
+              albumImage,
+            cover_xl:
+              track.album
+                ?.cover_xl ||
+              albumImage,
+          },
+          artist:
+            track.artist ||
+            albumData?.artist ||
+            null,
+        };
 
-      return {
-        ...normalized,
+        const normalized =
+          normalizeDeezerTrack(
+            trackWithAlbum
+          );
 
-        id: String(track.id),
-        listenableId: String(track.id),
-        listenable_id: String(track.id),
-        type: "track",
-
-        title:
-          track.title ||
-          track.title_short ||
-          "Unknown Track",
-
-        name:
-          track.title ||
-          track.title_short ||
-          "Unknown Track",
-
-        artist:
-          track.artist ||
-          albumData.artist ||
-          null,
-
-        artistName:
-          track.artist?.name ||
-          albumData.artist?.name ||
-          "Unknown Artist",
-
-        album: {
-          id: String(albumData.id),
+        return {
+          ...normalized,
+          id:
+            String(track.id),
+          listenableId:
+            String(track.id),
+          listenable_id:
+            String(track.id),
+          type: "track",
           title:
-            albumData.title ||
-            "Unknown Album",
-          cover: albumImage,
-          coverArt: albumImage,
-          cover_xl: albumImage,
-          cover_big: albumImage,
+            track.title ||
+            track.title_short ||
+            "Unknown Track",
+          name:
+            track.title ||
+            track.title_short ||
+            "Unknown Track",
+          artist:
+            track.artist ||
+            albumData?.artist ||
+            null,
+          artistName:
+            track.artist?.name ||
+            albumData?.artist?.name ||
+            "",
+          album: {
+            id:
+              String(
+                albumData?.id ||
+                albumId
+              ),
+            title:
+              albumData?.title ||
+              track.album?.title ||
+              "Unknown Album",
+            cover:
+              albumImage ||
+              track.album?.cover ||
+              "",
+            coverArt:
+              albumImage ||
+              track.album?.cover ||
+              "",
+            cover_xl:
+              albumImage ||
+              track.album?.cover_xl ||
+              "",
+            cover_big:
+              albumImage ||
+              track.album?.cover_big ||
+              "",
+          },
+          image:
+            normalized.image ||
+            albumImage,
+          coverArt:
+            normalized.coverArt ||
+            albumImage,
+          preview:
+            track.preview || "",
+          previewUrl:
+            track.preview || "",
+          playbackUrl:
+            track.preview || "",
+        };
+      });
+
+    /*
+     * Save the now-complete album and its songs in the background.
+     */
+    scheduleCatalogPersistence(
+      `/album/${albumId}`,
+      {
+        ...albumData,
+        tracks: {
+          data: tracks,
         },
-
-        image:
-          normalized.image ||
-          albumImage,
-
-        coverArt:
-          normalized.coverArt ||
-          albumImage,
-
-        preview:
-          track.preview || "",
-      };
-    });
+      }
+    );
 
     console.log(
       `[Album Songs] ${albumId}: ${songs.length}`
@@ -5853,6 +5822,8 @@ app.get("/album/songs", async (req, res) => {
     return res.status(200).json({
       ok: true,
       songs,
+      count:
+        songs.length,
     });
   } catch (error) {
     console.error(
@@ -5863,7 +5834,8 @@ app.get("/album/songs", async (req, res) => {
     return res.status(502).json({
       ok: false,
       songs: [],
-      error: error.message,
+      error:
+        error.message,
     });
   }
 });
