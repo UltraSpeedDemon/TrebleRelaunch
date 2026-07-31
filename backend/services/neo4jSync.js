@@ -206,10 +206,12 @@ async function syncNodeBatch(
     UNWIND $nodes AS node
 
     MERGE (
-      entity:TrebleEntity {
+      entity {
         graphId: node.id
       }
     )
+
+    REMOVE entity:TrebleEntity
 
     SET entity.rawId =
           node.rawId,
@@ -454,15 +456,11 @@ async function removeStaleGraphData(
     await driver.executeQuery(
       `
       MATCH (
-        entity:TrebleEntity
+        entity
       )
 
-      WHERE (
-        entity.managedBy =
+      WHERE entity.managedBy =
           'treble-sync'
-        OR entity.managedBy
-          IS NULL
-      )
       AND (
         entity.lastSyncId <>
           $syncId
