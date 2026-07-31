@@ -28,6 +28,7 @@ import { auth } from "../utils/firebase";
 import {
   getFollowRequests,
   getNotifications,
+  getSharedItems,
   getUser,
   markNotificationsRead,
   respondFollowRequest,
@@ -585,12 +586,17 @@ export default function Notifications({
           const [
             notificationResponse,
             requestResponse,
+            sharedItemsResponse,
           ] = await Promise.all([
             getNotifications(
               currentUserId
             ),
 
             getFollowRequests(
+              currentUserId
+            ),
+
+            getSharedItems(
               currentUserId
             ),
           ]);
@@ -659,6 +665,99 @@ export default function Notifications({
                   )
               );
           }
+
+          let sharedItems = [];
+
+          if (sharedItemsResponse?.ok) {
+            try {
+              const sharedData =
+                await parseResponse(
+                  sharedItemsResponse,
+                  "Unable to load shared music."
+                );
+
+              sharedItems = normalizeArray(
+                sharedData,
+                ["sharedItems", "items", "results"]
+              );
+            } catch (sharedError) {
+              console.warn(
+                "[Notifications] Unable to enrich shared music:",
+                sharedError
+              );
+            }
+          }
+
+          const sharedItemsById = new Map();
+
+          sharedItems.forEach((sharedItem) => {
+            const shareId = String(
+              sharedItem?.shareId ||
+              sharedItem?.share_id ||
+              ""
+            );
+
+            if (shareId) {
+              sharedItemsById.set(shareId, sharedItem);
+            }
+          });
+
+          notificationItems = notificationItems.map(
+            (notification) => {
+              if (
+                notification.type !==
+                NOTIFICATION_TYPES.MUSIC_SHARED
+              ) {
+                return notification;
+              }
+
+              const legacyShareId = String(
+                notification.shareId ||
+                notification.targetId ||
+                ""
+              );
+
+              const sharedItem =
+                sharedItemsById.get(legacyShareId);
+
+              if (!sharedItem) {
+                return notification;
+              }
+
+              const itemData =
+                sharedItem.item_info ||
+                sharedItem.itemData ||
+                sharedItem;
+
+              return {
+                ...notification,
+                shareId:
+                  sharedItem.shareId ||
+                  legacyShareId,
+                targetId: String(
+                  itemData?.id ||
+                  itemData?.listenableId ||
+                  sharedItem?.id ||
+                  notification.targetId ||
+                  ""
+                ),
+                itemType:
+                  itemData?.type ||
+                  sharedItem?.type ||
+                  notification.itemType ||
+                  "track",
+                itemData,
+                songTitle:
+                  itemData?.title ||
+                  itemData?.name ||
+                  notification.songTitle,
+                comment:
+                  sharedItem?.comment ||
+                  notification.comment ||
+                  "",
+              };
+            }
+          );
 
           const mergedItems =
             removeDuplicates([
@@ -1060,6 +1159,42 @@ export default function Notifications({
       );
     }, []);
 
+  const getSharedMusicImage =
+    useCallback((item) => {
+      const music = item?.itemData || {};
+
+      return (
+        music?.image ||
+        music?.coverArt ||
+        music?.album?.cover_xl ||
+        music?.album?.cover_big ||
+        music?.album?.cover_medium ||
+        ""
+      );
+    }, []);
+
+  const getSharedMusicArtist =
+    useCallback((item) => {
+      const music = item?.itemData || {};
+
+      return String(
+        music?.artist?.name ||
+        music?.artistName ||
+        ""
+      );
+    }, []);
+
+  const getSharedMusicAlbum =
+    useCallback((item) => {
+      const music = item?.itemData || {};
+
+      return String(
+        music?.album?.title ||
+        music?.albumTitle ||
+        ""
+      );
+    }, []);
+
   /*
    * Notification message.
    */
@@ -1196,6 +1331,19 @@ export default function Notifications({
             ]
           );
 
+        const isMusicShare =
+          item.type ===
+          NOTIFICATION_TYPES.MUSIC_SHARED;
+
+        const musicImage =
+          getSharedMusicImage(item);
+
+        const musicArtist =
+          getSharedMusicArtist(item);
+
+        const musicAlbum =
+          getSharedMusicAlbum(item);
+
         return (
           <View
             style={[
@@ -1227,16 +1375,27 @@ export default function Notifications({
                 )
               }
             >
-              <Image
-                source={
-                  getAvatarSource(
-                    item.avatar
-                  )
-                }
-                style={
-                  styles.avatar
-                }
-              />
+              <View style={styles.notificationImageWrap}>
+                <Image
+                  source={
+                    isMusicShare && musicImage
+                      ? { uri: musicImage }
+                      : getAvatarSource(item.avatar)
+                  }
+                  style={[
+                    styles.avatar,
+                    isMusicShare &&
+                      styles.musicThumbnail,
+                  ]}
+                />
+
+                {isMusicShare ? (
+                  <Image
+                    source={getAvatarSource(item.avatar)}
+                    style={styles.senderAvatarBadge}
+                  />
+                ) : null}
+              </View>
 
               <View
                 style={
@@ -1263,8 +1422,19 @@ export default function Notifications({
                   )}
                 </Text>
 
-                {item.type ===
-                  NOTIFICATION_TYPES.MUSIC_SHARED &&
+                {isMusicShare &&
+                (musicArtist || musicAlbum) ? (
+                  <Text
+                    style={styles.sharedMusicMeta}
+                    numberOfLines={1}
+                  >
+                    {[musicArtist, musicAlbum]
+                      .filter(Boolean)
+                      .join(" • ")}
+                  </Text>
+                ) : null}
+
+                {isMusicShare &&
                 item.comment ? (
                   <Text style={styles.sharedComment}>
                     “{item.comment}”
@@ -1391,6 +1561,9 @@ export default function Notifications({
         formatUsername,
         getAvatarSource,
         getNotificationText,
+        getSharedMusicAlbum,
+        getSharedMusicArtist,
+        getSharedMusicImage,
         handleNotificationPress,
         handleResponse,
         isCompact,
@@ -1938,6 +2111,29 @@ const styles =
       alignItems: "center",
     },
 
+    notificationImageWrap: {
+      position: "relative",
+      flexShrink: 0,
+      marginRight: 13,
+    },
+
+    musicThumbnail: {
+      borderRadius: 10,
+      marginRight: 0,
+    },
+
+    senderAvatarBadge: {
+      position: "absolute",
+      right: -5,
+      bottom: -5,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: colours.darkblue,
+      backgroundColor: colours.darkblue,
+    },
+
     avatar: {
       width: 56,
       height: 56,
@@ -1946,7 +2142,7 @@ const styles =
 
       borderRadius: 28,
 
-      marginRight: 13,
+      marginRight: 0,
 
       backgroundColor:
         "rgba(255,255,255,0.08)",
@@ -1973,6 +2169,13 @@ const styles =
       fontSize: 16,
       lineHeight: 22,
       fontWeight: "800",
+    },
+
+    sharedMusicMeta: {
+      color: "rgba(255,255,255,0.58)",
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 3,
     },
 
     sharedComment: {

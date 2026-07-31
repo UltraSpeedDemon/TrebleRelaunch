@@ -2117,7 +2117,7 @@ export default function Feed({ navigation }) {
                 <Animated.View
                   style={[
                     styles.modalContent,
-                    isWeb && styles.webModalContent,
+                    isDesktopWeb && styles.webModalContent,
                     {
                       transform: [
                         {
@@ -2161,17 +2161,37 @@ export default function Feed({ navigation }) {
                     data={friendsList}
                     renderItem={renderFriendItem}
                     keyExtractor={(item, index) =>
-                      String(item?.userId || index)
+                      String(
+                        item?.userId ||
+                        item?.uid ||
+                        item?.id ||
+                        index
+                      )
                     }
-                    numColumns={isCompact ? 3 : 4}
+                    numColumns={
+                      width < 390
+                        ? 2
+                        : isCompact
+                          ? 3
+                          : 4
+                    }
                     key={
-                      isCompact
-                        ? "compact-friends"
-                        : "large-friends"
+                      width < 390
+                        ? "small-mobile-friends"
+                        : isCompact
+                          ? "compact-friends"
+                          : "large-friends"
                     }
-                    contentContainerStyle={styles.friendList}
+                    style={styles.friendsFlatList}
+                    contentContainerStyle={
+                      styles.friendList
+                    }
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
                     ListEmptyComponent={
-                      <Text style={styles.noFriendsText}>
+                      <Text
+                        style={styles.noFriendsText}
+                      >
                         No friends were found.
                       </Text>
                     }
@@ -2904,40 +2924,58 @@ desktopBottomNavBar: {
   ========================================================= */
 
   modalKeyboardView: {
-    flex: 1,
-  },
+  flex: 1,
+  width: "100%",
+},
 
-  modalOverlay: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 18,
-    backgroundColor: "rgba(0,0,0,0.76)",
-  },
+modalOverlay: {
+  flex: 1,
+  width: "100%",
+  alignItems: "center",
+  justifyContent: "center",
 
-  modalContent: {
-    width: "100%",
-    maxHeight: "82%",
-    padding: 18,
-    borderRadius: 20,
-    backgroundColor: colours.background,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    shadowColor: "#000000",
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.45,
-    shadowRadius: 18,
-    elevation: 12,
-  },
+  paddingHorizontal: 14,
+  paddingVertical: 18,
 
-  webModalContent: {
-    width: 520,
-    maxHeight: 650,
-    padding: 22,
+  backgroundColor:
+    "rgba(0,0,0,0.76)",
+},
+
+modalContent: {
+  width: "100%",
+  maxWidth: 430,
+  maxHeight: "85%",
+
+  paddingHorizontal: 16,
+  paddingTop: 17,
+  paddingBottom: 16,
+
+  borderRadius: 20,
+
+  backgroundColor:
+    colours.background,
+
+  borderWidth: 1,
+  borderColor:
+    "rgba(255,255,255,0.1)",
+
+  shadowColor: "#000000",
+  shadowOffset: {
+    width: 0,
+    height: 8,
   },
+  shadowOpacity: 0.45,
+  shadowRadius: 18,
+
+  elevation: 12,
+},
+
+webModalContent: {
+  width: 520,
+  maxWidth: 520,
+  maxHeight: 650,
+  padding: 22,
+},
 
   modalHeader: {
     flexDirection: "row",
@@ -2981,19 +3019,30 @@ desktopBottomNavBar: {
     marginBottom: 10,
   },
 
-  friendList: {
-    paddingBottom: 10,
-  },
+  friendsFlatList: {
+  width: "100%",
+  maxHeight: 230,
+},
 
-  friendItem: {
-    flex: 1,
-    minWidth: 75,
-    maxWidth: 110,
-    alignItems: "center",
-    padding: 8,
-    margin: 3,
-    borderRadius: 13,
-  },
+friendList: {
+  width: "100%",
+  paddingBottom: 10,
+},
+
+    friendItem: {
+      flex: 1,
+      minWidth: 0,
+      maxWidth: 110,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+      margin: 3,
+
+      borderRadius: 13,
+    },
 
   selectedFriendItem: {
     backgroundColor: "rgba(33,150,243,0.2)",

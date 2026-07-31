@@ -54,7 +54,7 @@ const BOTTOM_NAV_HEIGHT = 72;
 
 function DraggableProfileRow({
   children,
-  isWeb,
+  useNativeScroll,
   contentStyle,
 }) {
   const webScrollRef = useRef(null);
@@ -68,7 +68,7 @@ function DraggableProfileRow({
   const [dragging, setDragging] =
     useState(false);
 
-  if (!isWeb) {
+  if (useNativeScroll) {
     return (
       <ScrollView
         horizontal
@@ -76,7 +76,11 @@ function DraggableProfileRow({
         showsHorizontalScrollIndicator={false}
         directionalLockEnabled
         keyboardShouldPersistTaps="handled"
+        scrollEnabled
+        bounces
+        alwaysBounceHorizontal={false}
         contentContainerStyle={contentStyle}
+        style={styles.mobileHorizontalScroller}
       >
         {children}
       </ScrollView>
@@ -1150,7 +1154,7 @@ export default function Profile({
             </View>
           ) : (
             <DraggableProfileRow
-              isWeb={isWeb}
+              useNativeScroll={!isDesktopWeb}
               contentStyle={
                 styles.horizontalLikedList
               }
@@ -1318,7 +1322,7 @@ export default function Profile({
             </View>
           ) : (
             <DraggableProfileRow
-              isWeb={isWeb}
+              useNativeScroll={!isDesktopWeb}
               contentStyle={
                 styles.horizontalReviewList
               }
@@ -1848,6 +1852,11 @@ desktopBottomNavBar: {
   left: DESKTOP_SIDEBAR_WIDTH,
   right: 0,
 },
+  mobileHorizontalScroller: {
+    width: "100%",
+    flexGrow: 0,
+  },
+
   container: {
     flex: 1,
     minHeight: 0,

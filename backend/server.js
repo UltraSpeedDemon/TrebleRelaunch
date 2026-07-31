@@ -878,8 +878,13 @@ app.post("/users/share", async (req, res) => {
       type: "music_share",
       fromUserId,
       toUserId,
-      targetId: shareRef.id,
-      songTitle: item.title || item.name || "music",
+      shareId: shareRef.id,
+      targetId: itemId,
+      itemId,
+      itemType: type,
+      itemData: item,
+      songTitle: item.title || item.name || "Shared music",
+      comment,
     });
 
     console.log(

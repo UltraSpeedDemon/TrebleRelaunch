@@ -64,6 +64,137 @@ const SPOTIFY_LOGO =
 const ADMIN_BADGE =
   require("../images/adminBadge.png");
 
+function DraggableProfileRow({
+  children,
+  useNativeScroll,
+  contentStyle,
+}) {
+  const webScrollRef = React.useRef(null);
+  const dragRef = React.useRef({
+    active: false,
+    startX: 0,
+    startScrollLeft: 0,
+    moved: false,
+  });
+
+  const [dragging, setDragging] =
+    React.useState(false);
+
+  if (useNativeScroll) {
+    return (
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        directionalLockEnabled
+        scrollEnabled
+        bounces
+        alwaysBounceHorizontal={false}
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={contentStyle}
+        style={styles.mobileHorizontalScroller}
+      >
+        {children}
+      </ScrollView>
+    );
+  }
+
+  const stopDragging = () => {
+    dragRef.current.active = false;
+    setDragging(false);
+
+    window.setTimeout(() => {
+      dragRef.current.moved = false;
+    }, 60);
+  };
+
+  return React.createElement(
+    "div",
+    {
+      ref: webScrollRef,
+
+      onPointerDown: (event) => {
+        const node = webScrollRef.current;
+
+        if (!node) {
+          return;
+        }
+
+        node.setPointerCapture?.(
+          event.pointerId
+        );
+
+        dragRef.current = {
+          active: true,
+          startX: event.clientX,
+          startScrollLeft:
+            node.scrollLeft,
+          moved: false,
+        };
+
+        setDragging(true);
+      },
+
+      onPointerMove: (event) => {
+        const node = webScrollRef.current;
+
+        if (
+          !node ||
+          !dragRef.current.active
+        ) {
+          return;
+        }
+
+        const movement =
+          event.clientX -
+          dragRef.current.startX;
+
+        if (Math.abs(movement) > 5) {
+          dragRef.current.moved = true;
+
+          node.scrollLeft =
+            dragRef.current.startScrollLeft -
+            movement;
+
+          event.preventDefault();
+        }
+      },
+
+      onPointerUp: stopDragging,
+      onPointerCancel: stopDragging,
+      onPointerLeave: stopDragging,
+
+      onClickCapture: (event) => {
+        if (dragRef.current.moved) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      },
+
+      style: {
+        width: "100%",
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "stretch",
+        overflowX: "auto",
+        overflowY: "hidden",
+        paddingRight: 12,
+        boxSizing: "border-box",
+        cursor:
+          dragging
+            ? "grabbing"
+            : "grab",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        touchAction: "pan-y",
+        scrollbarWidth: "none",
+        msOverflowStyle: "none",
+      },
+    },
+    children
+  );
+}
+
 export default function UserProfiles({
   navigation,
 }) {
@@ -1455,110 +1586,107 @@ const finalButtonLabel =
               </Text>
             </View>
           ) : (
-            <FlatList
-              data={likedSongs}
-              horizontal
-              showsHorizontalScrollIndicator={
-                false
+            <DraggableProfileRow
+              useNativeScroll={
+                !isDesktopWeb
               }
-              keyExtractor={(
-                song,
-                index
-              ) =>
-                `liked-song-${song?.id || index}`
-              }
-              contentContainerStyle={
+              contentStyle={
                 styles.horizontalLikedList
               }
-              renderItem={({
-                item: song,
-              }) => {
-                const imageUri =
-                  song?.image ||
-                  song?.coverArt ||
-                  song?.album?.cover_xl ||
-                  song?.album?.cover_big ||
-                  song?.album?.cover_medium ||
-                  "";
+            >
+              {likedSongs.map(
+                (song, index) => {
+                  const imageUri =
+                    song?.image ||
+                    song?.coverArt ||
+                    song?.album?.cover_xl ||
+                    song?.album?.cover_big ||
+                    song?.album?.cover_medium ||
+                    "";
 
-                return (
-                  <TouchableOpacity
-                    style={
-                      styles.likedSongCard
-                    }
-                    activeOpacity={0.82}
-                    onPress={() =>
-                      openLikedSong(song)
-                    }
-                  >
-                    {imageUri ? (
-                      <Image
-                        source={{
-                          uri: imageUri,
-                        }}
-                        style={
-                          styles.likedSongImage
-                        }
-                      />
-                    ) : (
+                  return (
+                    <TouchableOpacity
+                      key={
+                        `liked-song-${song?.id || index}`
+                      }
+                      style={
+                        styles.likedSongCard
+                      }
+                      activeOpacity={0.82}
+                      onPress={() =>
+                        openLikedSong(song)
+                      }
+                    >
+                      {imageUri ? (
+                        <Image
+                          source={{
+                            uri: imageUri,
+                          }}
+                          style={
+                            styles.likedSongImage
+                          }
+                        />
+                      ) : (
+                        <View
+                          style={
+                            styles.likedSongPlaceholder
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.likedSongPlaceholderText
+                            }
+                          >
+                            ♪
+                          </Text>
+                        </View>
+                      )}
+
                       <View
                         style={
-                          styles.likedSongPlaceholder
+                          styles.likedSongHeart
                         }
                       >
                         <Text
                           style={
-                            styles.likedSongPlaceholderText
+                            styles.likedSongHeartText
                           }
                         >
-                          ♪
+                          ♥
                         </Text>
                       </View>
-                    )}
 
-                    <View
-                      style={
-                        styles.likedSongHeart
-                      }
-                    >
                       <Text
                         style={
-                          styles.likedSongHeartText
+                          styles.likedSongTitle
                         }
+                        numberOfLines={1}
                       >
-                        ♥
+                        {song?.title ||
+                          song?.name ||
+                          "Unknown Track"}
                       </Text>
-                    </View>
 
-                    <Text
-                      style={
-                        styles.likedSongTitle
-                      }
-                      numberOfLines={1}
-                    >
-                      {song?.title ||
-                        song?.name ||
-                        "Unknown Track"}
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.likedSongArtist
-                      }
-                      numberOfLines={1}
-                    >
-                      {song?.artistName ||
-                        song?.artist?.name ||
-                        "Unknown Artist"}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              }}
-            />
+                      <Text
+                        style={
+                          styles.likedSongArtist
+                        }
+                        numberOfLines={1}
+                      >
+                        {song?.artistName ||
+                          song?.artist?.name ||
+                          "Unknown Artist"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }
+              )}
+            </DraggableProfileRow>
           )}
         </View>
       ),
       [
+        isDesktopWeb,
         likedSongs,
         openLikedSong,
       ]
@@ -1613,55 +1741,49 @@ const finalButtonLabel =
               </Text>
             </View>
           ) : (
-            <FlatList
-              data={
-                reviews
+            <DraggableProfileRow
+              useNativeScroll={
+                !isDesktopWeb
               }
-              horizontal
-              keyExtractor={(
-                item,
-                index
-              ) =>
-                `${title}-${item?.id || index}`
-              }
-              showsHorizontalScrollIndicator={
-                false
-              }
-              contentContainerStyle={
+              contentStyle={
                 styles.horizontalReviewList
               }
-              renderItem={({
-                item,
-              }) => (
-                <View
-                  style={
-                    styles.reviewSnippetCard
-                  }
-                >
-                  <ReviewCard
-                    item={
-                      item
+            >
+              {reviews.map(
+                (item, index) => (
+                  <View
+                    key={
+                      `${title}-${item?.id || index}`
                     }
-                    avatar={
-                      avatar ||
-                      FALLBACK_AVATAR
+                    style={
+                      styles.reviewSnippetCard
                     }
-                    handleUpvote={
-                      handleUpvote
-                    }
-                    handleDelete={
-                      handleDelete
-                    }
-                    navigation={
-                      navigation
-                    }
-                    showReplyInput={false}
-                    showComments={false}
-                    profileReviewMode
-                  />
-                </View>
+                  >
+                    <ReviewCard
+                      item={
+                        item
+                      }
+                      avatar={
+                        avatar ||
+                        FALLBACK_AVATAR
+                      }
+                      handleUpvote={
+                        handleUpvote
+                      }
+                      handleDelete={
+                        handleDelete
+                      }
+                      navigation={
+                        navigation
+                      }
+                      showReplyInput={false}
+                      showComments={false}
+                      profileReviewMode
+                    />
+                  </View>
+                )
               )}
-            />
+            </DraggableProfileRow>
           )}
         </View>
       ),
@@ -1669,6 +1791,7 @@ const finalButtonLabel =
         avatar,
         handleDelete,
         handleUpvote,
+        isDesktopWeb,
         navigation,
       ]
     );
@@ -2314,6 +2437,11 @@ const styles =
 
   marginTop: 8,
 },
+    mobileHorizontalScroller: {
+      width: "100%",
+      flexGrow: 0,
+    },
+
     container: {
       flex: 1,
       minHeight: 0,
