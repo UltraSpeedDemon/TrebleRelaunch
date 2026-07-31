@@ -9,7 +9,6 @@ import React, {
 import {
   ActivityIndicator,
   Animated,
-  Image,
   PanResponder,
   Platform,
   StyleSheet,
@@ -19,6 +18,7 @@ import {
   View,
 } from "react-native";
 
+import { Audio } from "expo-av";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -35,11 +35,28 @@ import {
 import { auth } from "../utils/firebase";
 import colours from "../styles/colours";
 import { SongCardSwipe } from "./SongCardSwipe";
-import { usePlayablePreview } from "../hooks/usePlayablePreview";
 
 const SWIPE_THRESHOLD = 105;
 const SWIPE_DISTANCE = 520;
-const LOAD_MORE_THRESHOLD = 3;
+
+/*
+ * Start loading another page while several cards still remain.
+ * This prevents the user from reaching the end of the current deck.
+ */
+const LOAD_MORE_THRESHOLD = 6;
+
+/*
+ * Wait briefly after a card changes before starting its audio.
+ * This prevents fast state changes from creating and destroying
+ * multiple sounds in rapid succession.
+ */
+const AUTOPLAY_SETTLE_MS = 180;
+const LOAD_MORE_WAIT_MS = 5000;
+
+const sleep = (milliseconds) =>
+  new Promise((resolve) =>
+    setTimeout(resolve, milliseconds)
+  );
 
 export function MusicSwiper({
   songs = [],
@@ -56,41 +73,59 @@ export function MusicSwiper({
 
   const [currentIndex, setCurrentIndex] =
     useState(0);
-
   const [isDragging, setIsDragging] =
     useState(false);
-
   const [actionLoading, setActionLoading] =
     useState(false);
 
+  const [previewPlaying, setPreviewPlaying] =
+    useState(false);
+  const [loadingSound, setLoadingSound] =
+    useState(false);
+  const [audioError, setAudioError] =
+    useState("");
+
+  /*
+   * Native apps may autoplay immediately. Mobile browsers require
+   * one direct user tap before audible playback is permitted.
+   */
+  const [audioUnlocked, setAudioUnlocked] =
+    useState(!isWeb);
+
   const translateX =
     useRef(new Animated.Value(0)).current;
-
   const leftOpacity =
     useRef(new Animated.Value(0)).current;
-
   const rightOpacity =
     useRef(new Animated.Value(0)).current;
 
+  const soundRef = useRef(null);
+  const playRequestRef = useRef(0);
+  const loadMorePromiseRef = useRef(null);
+  const songsRef = useRef(songs);
+  const currentIndexRef = useRef(currentIndex);
+  const mountedRef = useRef(true);
+
+  songsRef.current = songs;
+  currentIndexRef.current = currentIndex;
+
   const currentSong =
     songs[currentIndex] || null;
-
   const nextSong =
     songs[currentIndex + 1] || null;
 
-  const {
-    playing: previewPlaying,
-    loading: loadingSound,
-    error: audioError,
-    play: playCurrentPreview,
-    stop: stopCurrentPreview,
-  } = usePlayablePreview(currentSong, {
-    loop: true,
-    autoPlay: true,
-  });
-
-  const audioNeedsTap = isWeb && !previewPlaying && Boolean(currentSong);
-
+  const getPreviewUrl = useCallback((song) => {
+    return (
+      song?.audioUrl ||
+      song?.preview ||
+      song?.previewUrl ||
+      song?.playbackUrl ||
+      song?.item_info?.preview ||
+      song?.item_info?.previewUrl ||
+      song?.item_info?.playbackUrl ||
+      ""
+    );
+  }, []);
 
   const cardWidth =
     Math.min(
@@ -140,32 +175,370 @@ export function MusicSwiper({
       extrapolate: "clamp",
     });
 
-  const stopSound = stopCurrentPreview;
+  const unloadSound = useCallback(async () => {
+    playRequestRef.current += 1;
 
-  const loadAndPlayPreview = useCallback(
-    async () => playCurrentPreview({ userInitiated: true }),
-    [playCurrentPreview]
+    const activeSound = soundRef.current;
+    soundRef.current = null;
+
+    if (mountedRef.current) {
+      setPreviewPlaying(false);
+    }
+
+    if (!activeSound) {
+      return;
+    }
+
+    try {
+      activeSound.setOnPlaybackStatusUpdate(null);
+      await activeSound.unloadAsync();
+    } catch (error) {
+      console.warn(
+        "[MusicSwiper] Could not unload preview:",
+        error
+      );
+    }
+  }, []);
+
+  const playSong = useCallback(
+    async (
+      song,
+      {
+        userInitiated = false,
+        restart = true,
+      } = {}
+    ) => {
+      const previewUrl = getPreviewUrl(song);
+
+      if (!song?.id || !previewUrl) {
+        setAudioError(
+          "This recommendation does not contain a playable preview."
+        );
+        return false;
+      }
+
+      if (
+        isWeb &&
+        !audioUnlocked &&
+        !userInitiated
+      ) {
+        return false;
+      }
+
+      if (userInitiated && isWeb) {
+        setAudioUnlocked(true);
+      }
+
+      const requestId =
+        playRequestRef.current + 1;
+      playRequestRef.current = requestId;
+
+      setLoadingSound(true);
+      setAudioError("");
+
+      try {
+        await unloadSound();
+
+        /*
+         * Configure native audio once before creating the sound.
+         * No microphone permission is requested.
+         */
+        if (!isWeb) {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+            shouldDuckAndroid: true,
+            playThroughEarpieceAndroid: false,
+          });
+        }
+
+        const separator =
+          previewUrl.includes("?")
+            ? "&"
+            : "?";
+
+        /*
+         * The timestamp prevents an expired preview response from
+         * being reused by a browser or device media cache.
+         */
+        const playableUrl =
+          `${previewUrl}${separator}treble_swipe=${Date.now()}`;
+
+        const created =
+          await Audio.Sound.createAsync(
+            {
+              uri: playableUrl,
+            },
+            {
+              shouldPlay: true,
+              isLooping: true,
+              volume: 0.68,
+              positionMillis: restart ? 0 : undefined,
+              progressUpdateIntervalMillis: 250,
+            },
+            undefined,
+            true
+          );
+
+        if (
+          !mountedRef.current ||
+          requestId !== playRequestRef.current
+        ) {
+          await created.sound
+            .unloadAsync()
+            .catch(() => {});
+          return false;
+        }
+
+        soundRef.current = created.sound;
+
+        created.sound.setOnPlaybackStatusUpdate(
+          (status) => {
+            if (!mountedRef.current) {
+              return;
+            }
+
+            if (!status.isLoaded) {
+              if (status?.error) {
+                console.warn(
+                  "[MusicSwiper] Playback status error:",
+                  status.error
+                );
+              }
+              return;
+            }
+
+            setPreviewPlaying(
+              Boolean(status.isPlaying)
+            );
+          }
+        );
+
+        setPreviewPlaying(true);
+        return true;
+      } catch (error) {
+        console.error(
+          "[MusicSwiper] Preview playback failed:",
+          error
+        );
+
+        await unloadSound();
+
+        const message =
+          String(
+            error?.message ||
+            error ||
+            ""
+          );
+
+        if (
+          isWeb &&
+          /not allowed|user agent|platform|permission|denied/i.test(
+            message
+          )
+        ) {
+          setAudioUnlocked(false);
+          setAudioError(
+            "Tap the play button once to allow music, then every following card will autoplay."
+          );
+        } else {
+          setAudioError(
+            "This preview could not start. Tap Play to retry."
+          );
+        }
+
+        return false;
+      } finally {
+        if (mountedRef.current) {
+          setLoadingSound(false);
+        }
+      }
+    },
+    [
+      audioUnlocked,
+      getPreviewUrl,
+      isWeb,
+      unloadSound,
+    ]
   );
+
+  const unlockAndPlay = useCallback(async () => {
+    setAudioUnlocked(true);
+
+    const played = await playSong(
+      currentSong,
+      {
+        userInitiated: true,
+        restart: true,
+      }
+    );
+
+    if (!played && isWeb) {
+      setAudioUnlocked(false);
+    }
+  }, [
+    currentSong,
+    isWeb,
+    playSong,
+  ]);
+
+  const stopCurrentPreview =
+    useCallback(async () => {
+      await unloadSound();
+      setAudioError("");
+    }, [unloadSound]);
+
+  const loadAndPlayPreview =
+    useCallback(async () => {
+      if (previewPlaying) {
+        await stopCurrentPreview();
+        return;
+      }
+
+      await unlockAndPlay();
+    }, [
+      previewPlaying,
+      stopCurrentPreview,
+      unlockAndPlay,
+    ]);
+
+  /*
+   * Start the new card only after React has settled on that card.
+   * This removes the rapid load/unload loop that made some songs
+   * appear to regenerate immediately.
+   */
+  useEffect(() => {
+    if (
+      !currentSong ||
+      (isWeb && !audioUnlocked)
+    ) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const timer = setTimeout(() => {
+      if (!cancelled) {
+        playSong(currentSong, {
+          userInitiated: false,
+          restart: true,
+        });
+      }
+    }, AUTOPLAY_SETTLE_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    audioUnlocked,
+    currentSong?.id,
+    getPreviewUrl(currentSong),
+    isWeb,
+    playSong,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
       return () => {
-        stopSound();
+        unloadSound();
       };
-    }, [stopSound])
+    }, [unloadSound])
   );
 
   useEffect(() => {
-    if (songs.length === 0) {
-      setCurrentIndex(0);
-      return;
-    }
+    return () => {
+      mountedRef.current = false;
+      unloadSound();
+    };
+  }, [unloadSound]);
 
-    if (currentIndex >= songs.length) {
-      setCurrentIndex(0);
+  /*
+   * Never reset the deck back to song zero merely because another
+   * page is still loading. The old implementation did that and made
+   * cards appear to regenerate too quickly.
+   */
+  useEffect(() => {
+    if (
+      songs.length > 0 &&
+      currentIndex >= songs.length
+    ) {
+      setCurrentIndex(
+        Math.max(0, songs.length - 1)
+      );
     }
-  }, [currentIndex, songs.length]);
+  }, [
+    currentIndex,
+    songs.length,
+  ]);
 
+  const requestMoreSongs =
+    useCallback(async () => {
+      if (
+        !hasMore ||
+        typeof onLoadMore !== "function"
+      ) {
+        return false;
+      }
+
+      if (loadMorePromiseRef.current) {
+        return loadMorePromiseRef.current;
+      }
+
+      const startingLength =
+        songsRef.current.length;
+
+      const requestPromise =
+        Promise.resolve(onLoadMore())
+          .catch((error) => {
+            console.warn(
+              "[MusicSwiper] Could not load more songs:",
+              error
+            );
+            return false;
+          })
+          .then(async () => {
+            const startedAt = Date.now();
+
+            while (
+              mountedRef.current &&
+              Date.now() - startedAt <
+                LOAD_MORE_WAIT_MS
+            ) {
+              if (
+                songsRef.current.length >
+                startingLength
+              ) {
+                return true;
+              }
+
+              await sleep(100);
+            }
+
+            return (
+              songsRef.current.length >
+              startingLength
+            );
+          })
+          .finally(() => {
+            loadMorePromiseRef.current =
+              null;
+          });
+
+      loadMorePromiseRef.current =
+        requestPromise;
+
+      return requestPromise;
+    }, [
+      hasMore,
+      onLoadMore,
+    ]);
+
+  /*
+   * Quietly prefetch before the visible deck is close to empty.
+   * The promise guard ensures only one page request is active.
+   */
   useEffect(() => {
     const remaining =
       songs.length - currentIndex - 1;
@@ -173,27 +546,26 @@ export function MusicSwiper({
     if (
       remaining <= LOAD_MORE_THRESHOLD &&
       hasMore &&
-      !loadingMore &&
-      typeof onLoadMore === "function"
+      !loadingMore
     ) {
-      onLoadMore();
+      requestMoreSongs();
     }
   }, [
     currentIndex,
     hasMore,
     loadingMore,
-    onLoadMore,
+    requestMoreSongs,
     songs.length,
   ]);
 
   const markSongHandled =
     useCallback(
-      async (direction) => {
+      async (song, direction) => {
         const user = auth.currentUser;
 
         if (
           !user?.uid ||
-          !currentSong?.id
+          !song?.id
         ) {
           return;
         }
@@ -201,9 +573,9 @@ export function MusicSwiper({
         try {
           await setRecommendationServed(
             user.uid,
-            currentSong.recommendationId ||
-              currentSong.recordId ||
-              currentSong.id
+            song.recommendationId ||
+              song.recordId ||
+              song.id
           );
         } catch (error) {
           console.warn(
@@ -220,7 +592,7 @@ export function MusicSwiper({
           const likeResponse =
             await like(
               user.uid,
-              String(currentSong.id),
+              String(song.id),
               "track"
             );
 
@@ -235,10 +607,12 @@ export function MusicSwiper({
 
           await postRecommendations(
             user.uid,
-            String(currentSong.id),
+            String(song.id),
             "track",
-            currentSong.title || "",
-            currentSong.artist || "",
+            song.title || "",
+            typeof song.artist === "string"
+              ? song.artist
+              : song.artist?.name || "",
             "like"
           );
         } catch (error) {
@@ -248,7 +622,7 @@ export function MusicSwiper({
           );
         }
       },
-      [currentSong]
+      []
     );
 
   const resetPosition =
@@ -258,19 +632,27 @@ export function MusicSwiper({
         {
           toValue: 0,
           useNativeDriver: true,
-          friction: 6,
-          tension: 80,
+          friction: 7,
+          tension: 75,
         }
       ).start();
-    }, [translateX]);
+
+      leftOpacity.setValue(0);
+      rightOpacity.setValue(0);
+    }, [
+      leftOpacity,
+      rightOpacity,
+      translateX,
+    ]);
 
   const moveToNext =
     useCallback(() => {
       setCurrentIndex((index) => {
-        const nextIndex = index + 1;
+        const latestLength =
+          songsRef.current.length;
 
-        if (nextIndex < songs.length) {
-          return nextIndex;
+        if (index + 1 < latestLength) {
+          return index + 1;
         }
 
         return index;
@@ -282,9 +664,30 @@ export function MusicSwiper({
     }, [
       leftOpacity,
       rightOpacity,
-      songs.length,
       translateX,
     ]);
+
+  const ensureNextSong =
+    useCallback(async () => {
+      const index =
+        currentIndexRef.current;
+
+      if (
+        index + 1 <
+        songsRef.current.length
+      ) {
+        return true;
+      }
+
+      const loaded =
+        await requestMoreSongs();
+
+      return (
+        loaded &&
+        currentIndexRef.current + 1 <
+          songsRef.current.length
+      );
+    }, [requestMoreSongs]);
 
   const handleSwipe =
     useCallback(
@@ -296,30 +699,31 @@ export function MusicSwiper({
           return;
         }
 
-        const hasNextSong =
-          currentIndex + 1 <
-          songs.length;
-
-        if (
-          !hasNextSong &&
-          hasMore &&
-          typeof onLoadMore === "function"
-        ) {
-          await onLoadMore();
-
-          if (
-            currentIndex + 1 >=
-            songs.length
-          ) {
-            resetPosition();
-            return;
-          }
-        }
-
         setActionLoading(true);
         setIsDragging(false);
 
-        markSongHandled(direction);
+        /*
+         * Do not throw the visible card away until the following
+         * card is ready. This produces an endless, smooth deck
+         * instead of briefly showing an empty/loading screen.
+         */
+        const hasNextSong =
+          await ensureNextSong();
+
+        if (!hasNextSong) {
+          setActionLoading(false);
+          resetPosition();
+          return;
+        }
+
+        const handledSong = currentSong;
+
+        await unloadSound();
+
+        markSongHandled(
+          handledSong,
+          direction
+        );
 
         const target =
           direction === "left"
@@ -336,7 +740,7 @@ export function MusicSwiper({
             translateX,
             {
               toValue: target,
-              duration: 240,
+              duration: 285,
               useNativeDriver: true,
             }
           ),
@@ -346,7 +750,7 @@ export function MusicSwiper({
               actionOpacity,
               {
                 toValue: 1,
-                duration: 110,
+                duration: 120,
                 useNativeDriver: true,
               }
             ),
@@ -355,29 +759,32 @@ export function MusicSwiper({
               actionOpacity,
               {
                 toValue: 0,
-                duration: 210,
+                duration: 220,
                 useNativeDriver: true,
               }
             ),
           ]),
         ]).start(() => {
           moveToNext();
-          setActionLoading(false);
+
+          requestAnimationFrame(() => {
+            if (mountedRef.current) {
+              setActionLoading(false);
+            }
+          });
         });
       },
       [
         actionLoading,
-        currentIndex,
         currentSong,
-        hasMore,
+        ensureNextSong,
         leftOpacity,
         markSongHandled,
         moveToNext,
-        onLoadMore,
         resetPosition,
         rightOpacity,
-        songs.length,
         translateX,
+        unloadSound,
       ]
     );
 
@@ -386,15 +793,15 @@ export function MusicSwiper({
       () =>
         PanResponder.create({
           onStartShouldSetPanResponder:
-            () => true,
+            () => !actionLoading,
 
           onMoveShouldSetPanResponder:
             (_, gestureState) =>
+              !actionLoading &&
               Math.abs(gestureState.dx) > 4,
 
           onPanResponderGrant: () => {
             setIsDragging(true);
-
             translateX.stopAnimation();
           },
 
@@ -440,6 +847,7 @@ export function MusicSwiper({
           },
         }),
       [
+        actionLoading,
         handleSwipe,
         resetPosition,
         translateX,
@@ -462,9 +870,13 @@ export function MusicSwiper({
         return;
       }
 
+      const key =
+        String(event.key || "")
+          .toLowerCase();
+
       if (
         event.key === "ArrowLeft" ||
-        event.key.toLowerCase() === "a"
+        key === "a"
       ) {
         event.preventDefault();
         handleSwipe("left");
@@ -472,17 +884,15 @@ export function MusicSwiper({
 
       if (
         event.key === "ArrowRight" ||
-        event.key.toLowerCase() === "d"
+        key === "d"
       ) {
         event.preventDefault();
         handleSwipe("right");
       }
 
-      if (
-        event.key.toLowerCase() === "m"
-      ) {
+      if (key === "m") {
         event.preventDefault();
-        previewPlaying ? stopCurrentPreview() : playCurrentPreview({ userInitiated: true });
+        loadAndPlayPreview();
       }
     };
 
@@ -497,7 +907,11 @@ export function MusicSwiper({
         handleKeyDown
       );
     };
-  }, [handleSwipe, isWeb]);
+  }, [
+    handleSwipe,
+    isWeb,
+    loadAndPlayPreview,
+  ]);
 
   if (!currentSong) {
     return (
@@ -603,6 +1017,39 @@ export function MusicSwiper({
           },
         ]}
       >
+        {isWeb && !audioUnlocked ? (
+          <TouchableOpacity
+            style={styles.audioUnlockOverlay}
+            onPress={unlockAndPlay}
+            activeOpacity={0.92}
+          >
+            <View style={styles.audioUnlockPanel}>
+              <View style={styles.audioUnlockIcon}>
+                {loadingSound ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <FontAwesome
+                    name="play"
+                    size={22}
+                    color="#ffffff"
+                  />
+                )}
+              </View>
+
+              <Text style={styles.audioUnlockTitle}>
+                Tap to Start Music Swipe
+              </Text>
+
+              <Text style={styles.audioUnlockText}>
+                Your mobile browser requires one tap before songs can play automatically.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
         {nextSong ? (
           <View
             style={[
@@ -779,9 +1226,9 @@ export function MusicSwiper({
         </TouchableOpacity>
       </View>
 
-      {audioNeedsTap || audioError ? (
+      {audioError ? (
         <Text style={styles.audioStatusText}>
-          {audioError || "Tap the play button to hear this preview."}
+          {audioError}
         </Text>
       ) : null}
 
@@ -1260,6 +1707,53 @@ const styles =
       textAlign: "center",
       marginTop: 9,
       paddingHorizontal: 18,
+    },
+
+    audioUnlockOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 200,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 22,
+      borderRadius: 25,
+      backgroundColor: "rgba(7,11,18,0.80)",
+    },
+
+    audioUnlockPanel: {
+      width: "100%",
+      maxWidth: 330,
+      alignItems: "center",
+      paddingHorizontal: 24,
+      paddingVertical: 24,
+      borderWidth: 1,
+      borderColor: "rgba(53,175,229,0.45)",
+      borderRadius: 22,
+      backgroundColor: "rgba(19,27,39,0.97)",
+    },
+
+    audioUnlockIcon: {
+      width: 54,
+      height: 54,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 27,
+      backgroundColor: colours.lightblue || "#35afe5",
+    },
+
+    audioUnlockTitle: {
+      color: "#ffffff",
+      fontSize: 20,
+      fontWeight: "900",
+      textAlign: "center",
+      marginTop: 14,
+    },
+
+    audioUnlockText: {
+      color: "rgba(255,255,255,0.68)",
+      fontSize: 13,
+      lineHeight: 19,
+      textAlign: "center",
+      marginTop: 8,
     },
 
     retryButton: {

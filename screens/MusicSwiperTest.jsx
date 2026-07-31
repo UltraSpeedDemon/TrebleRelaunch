@@ -357,7 +357,7 @@ const MusicSwiperTest = () => {
           color={colours.lightblue || "#35afe5"}
         />
         <Text style={styles.loadingText}>
-          Building your music deck...
+          Building your Music Deck...
         </Text>
       </View>
     );
