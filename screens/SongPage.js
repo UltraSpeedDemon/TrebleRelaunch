@@ -1693,9 +1693,9 @@ const handlePlayPreview = async () => {
                   >
                   <View
                       style={[
-                        styles.detailFavouriteZone,
+                        styles.detailHeartZone,
                         isCompact &&
-                          styles.detailFavouriteZoneCompact,
+                          styles.detailHeartZoneCompact,
                       ]}
                     >
                     <TouchableOpacity
@@ -1704,24 +1704,17 @@ const handlePlayPreview = async () => {
                         handleToggleFavourite();
                       }}
                     >
-                      <Icon
-                        name={
+                      <Image
+                        source={
                           favourite
-                            ? "bookmark"
-                            : "bookmark-border"
+                            ? require("../images/whiteFullHeart.png")
+                            : require("../images/whiteOpenHeart.png")
                         }
-                        size={31}
-                        color={
-                          favourite
-                            ? colours.lightblue
-                            : "#ffffff"
-                        }
+                        style={styles.detailHeartIcon}
                       />
                     </TouchableOpacity>
 
-                    <Text style={styles.detailFavouriteLabel}>
-                      Save
-                    </Text>
+                    
                   </View>
 
                   <View
@@ -1823,7 +1816,7 @@ const handlePlayPreview = async () => {
                 <View style={styles.reviewInputRow}>
                   <TextInput
                     style={styles.reviewInput}
-                    placeholder="Write a review — choose Save, stars, and a reaction first..."
+                    placeholder="Write a review"
                     placeholderTextColor="#888888"
                     value={review}
                     onChangeText={setReview}
@@ -3734,6 +3727,33 @@ artist: {
 
   detailReviewToolbarSpacing: {
     marginTop: 30,
+  },
+
+
+  /* =========================================================
+     HEART / STARS / REACTION TOOLBAR
+  ========================================================= */
+
+  detailHeartZone: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+  },
+
+  detailHeartZoneCompact: {
+    flex: 1,
+    flexBasis: 0,
+  },
+
+  detailHeartIcon: {
+    width: 36,
+    height: 36,
+
+    resizeMode: "contain",
   },
 
 });
