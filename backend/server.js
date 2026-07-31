@@ -288,6 +288,992 @@ function saveToDeezerMemoryCache(
  * - Expiration times
  * - Stale-cache fallback
  */
+
+/* =========================================================
+   TREBLE PERMANENT MUSIC CATALOG + KNOWLEDGE GRAPH
+========================================================= */
+
+const MUSIC_TRACKS_COLLECTION = "musicTracks";
+const MUSIC_ALBUMS_COLLECTION = "musicAlbums";
+const MUSIC_ARTISTS_COLLECTION = "musicArtists";
+const MUSIC_GRAPH_EDGES_COLLECTION = "musicGraphEdges";
+
+function cleanCatalogText(value) {
+  const text = String(value || "").trim();
+
+  if (
+    !text ||
+    text.toLowerCase() === "unknown" ||
+    text.toLowerCase() === "unknown artist"
+  ) {
+    return "";
+  }
+
+  return text;
+}
+
+function catalogTimestampToIso(value) {
+  if (!value) return null;
+
+  if (typeof value.toDate === "function") {
+    return value.toDate().toISOString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? null
+    : parsed.toISOString();
+}
+
+function buildGraphEdgeId({
+  fromType,
+  fromId,
+  relationship,
+  toType,
+  toId,
+}) {
+  return crypto
+    .createHash("sha256")
+    .update(
+      [
+        String(fromType || ""),
+        String(fromId || ""),
+        String(relationship || ""),
+        String(toType || ""),
+        String(toId || ""),
+      ].join("|")
+    )
+    .digest("hex");
+}
+
+async function upsertGraphEdge({
+  fromType,
+  fromId,
+  relationship,
+  toType,
+  toId,
+  weight = 1,
+  metadata = {},
+}) {
+  const cleanFromId = String(fromId || "").trim();
+  const cleanToId = String(toId || "").trim();
+  const cleanRelationship =
+    String(relationship || "").trim().toUpperCase();
+
+  if (
+    !fromType ||
+    !cleanFromId ||
+    !cleanRelationship ||
+    !toType ||
+    !cleanToId
+  ) {
+    return null;
+  }
+
+  const edgeId = buildGraphEdgeId({
+    fromType,
+    fromId: cleanFromId,
+    relationship: cleanRelationship,
+    toType,
+    toId: cleanToId,
+  });
+
+  const edgeRef = db
+    .collection(MUSIC_GRAPH_EDGES_COLLECTION)
+    .doc(edgeId);
+
+  await edgeRef.set(
+    {
+      id: edgeId,
+      fromType: String(fromType),
+      fromId: cleanFromId,
+      relationship: cleanRelationship,
+      toType: String(toType),
+      toId: cleanToId,
+      weight: Number(weight) || 1,
+      metadata: metadata || {},
+      firstSeenAt: FieldValue.serverTimestamp(),
+      lastSeenAt: FieldValue.serverTimestamp(),
+    },
+    {
+      merge: true,
+    }
+  );
+
+  return edgeId;
+}
+
+async function deleteGraphEdge({
+  fromType,
+  fromId,
+  relationship,
+  toType,
+  toId,
+}) {
+  if (!fromId || !toId) {
+    return;
+  }
+
+  const edgeId = buildGraphEdgeId({
+    fromType,
+    fromId,
+    relationship:
+      String(relationship || "").toUpperCase(),
+    toType,
+    toId,
+  });
+
+  await db
+    .collection(MUSIC_GRAPH_EDGES_COLLECTION)
+    .doc(edgeId)
+    .delete()
+    .catch(() => {});
+}
+
+function normalizeCatalogArtist(rawArtist) {
+  if (!rawArtist || typeof rawArtist !== "object") {
+    return null;
+  }
+
+  const id = String(rawArtist.id || "").trim();
+  if (!id) return null;
+
+  const name = cleanCatalogText(
+    rawArtist.name ||
+    rawArtist.title
+  );
+
+  return {
+    id,
+    type: "artist",
+    name,
+    title: name,
+    picture:
+      rawArtist.picture_xl ||
+      rawArtist.picture_big ||
+      rawArtist.picture_medium ||
+      rawArtist.picture ||
+      rawArtist.image ||
+      "",
+    link: rawArtist.link || "",
+    source: "deezer",
+    raw: rawArtist,
+  };
+}
+
+function normalizeCatalogAlbum(rawAlbum, fallbackArtist = null) {
+  if (!rawAlbum || typeof rawAlbum !== "object") {
+    return null;
+  }
+
+  const id = String(rawAlbum.id || "").trim();
+  if (!id) return null;
+
+  const artist =
+    normalizeCatalogArtist(rawAlbum.artist) ||
+    normalizeCatalogArtist(fallbackArtist);
+
+  const coverArt =
+    rawAlbum.cover_xl ||
+    rawAlbum.cover_big ||
+    rawAlbum.cover_medium ||
+    rawAlbum.cover ||
+    rawAlbum.image ||
+    rawAlbum.coverArt ||
+    "";
+
+  return {
+    id,
+    listenableId: id,
+    type: "album",
+    title:
+      rawAlbum.title ||
+      rawAlbum.name ||
+      "Unknown Album",
+    name:
+      rawAlbum.name ||
+      rawAlbum.title ||
+      "Unknown Album",
+    artistId: artist?.id || "",
+    artistName: artist?.name || "",
+    artist: artist
+      ? {
+          id: artist.id,
+          name: artist.name,
+          picture: artist.picture,
+        }
+      : null,
+    image: coverArt,
+    coverArt,
+    releaseDate:
+      rawAlbum.release_date ||
+      rawAlbum.releaseDate ||
+      "",
+    trackCount:
+      Number(
+        rawAlbum.nb_tracks ||
+        rawAlbum.trackCount ||
+        0
+      ),
+    duration:
+      Number(rawAlbum.duration || 0),
+    link: rawAlbum.link || "",
+    source: "deezer",
+    raw: rawAlbum,
+  };
+}
+
+function normalizeCatalogTrack(rawTrack) {
+  if (!rawTrack || typeof rawTrack !== "object") {
+    return null;
+  }
+
+  const id = String(rawTrack.id || "").trim();
+  if (!id) return null;
+
+  const artist =
+    normalizeCatalogArtist(rawTrack.artist);
+
+  const album =
+    normalizeCatalogAlbum(
+      rawTrack.album,
+      rawTrack.artist
+    );
+
+  const coverArt =
+    album?.coverArt ||
+    rawTrack.image ||
+    rawTrack.coverArt ||
+    "";
+
+  const preview =
+    rawTrack.preview ||
+    rawTrack.previewUrl ||
+    rawTrack.playbackUrl ||
+    "";
+
+  return {
+    id,
+    listenableId: id,
+    listenable_id: id,
+    type: "track",
+    title:
+      rawTrack.title ||
+      rawTrack.title_short ||
+      rawTrack.name ||
+      "Unknown Track",
+    name:
+      rawTrack.name ||
+      rawTrack.title ||
+      rawTrack.title_short ||
+      "Unknown Track",
+    artistId: artist?.id || "",
+    artistName: artist?.name || "",
+    artist: artist
+      ? {
+          id: artist.id,
+          name: artist.name,
+          picture: artist.picture,
+        }
+      : null,
+    albumId: album?.id || "",
+    albumTitle: album?.title || "",
+    album: album
+      ? {
+          id: album.id,
+          title: album.title,
+          cover: album.coverArt,
+          coverArt: album.coverArt,
+          cover_small:
+            rawTrack.album?.cover_small ||
+            album.coverArt,
+          cover_medium:
+            rawTrack.album?.cover_medium ||
+            album.coverArt,
+          cover_big:
+            rawTrack.album?.cover_big ||
+            album.coverArt,
+          cover_xl:
+            rawTrack.album?.cover_xl ||
+            album.coverArt,
+        }
+      : null,
+    image: coverArt,
+    coverArt,
+    preview,
+    previewUrl: preview,
+    playbackUrl: preview,
+    duration:
+      Number(rawTrack.duration || 0),
+    rank:
+      Number(rawTrack.rank || 0),
+    explicit:
+      Boolean(
+        rawTrack.explicit_lyrics ||
+        rawTrack.explicit
+      ),
+    link: rawTrack.link || "",
+    source: "deezer",
+    raw: rawTrack,
+  };
+}
+
+async function savePermanentArtist(rawArtist) {
+  const artist =
+    normalizeCatalogArtist(rawArtist);
+
+  if (!artist?.id) {
+    return null;
+  }
+
+  await db
+    .collection(MUSIC_ARTISTS_COLLECTION)
+    .doc(artist.id)
+    .set(
+      {
+        ...artist,
+        firstSeenAt:
+          FieldValue.serverTimestamp(),
+        lastSeenAt:
+          FieldValue.serverTimestamp(),
+      },
+      {
+        merge: true,
+      }
+    );
+
+  return artist;
+}
+
+async function savePermanentAlbum(
+  rawAlbum,
+  fallbackArtist = null
+) {
+  const album =
+    normalizeCatalogAlbum(
+      rawAlbum,
+      fallbackArtist
+    );
+
+  if (!album?.id) {
+    return null;
+  }
+
+  if (rawAlbum?.artist || fallbackArtist) {
+    await savePermanentArtist(
+      rawAlbum?.artist || fallbackArtist
+    );
+  }
+
+  await db
+    .collection(MUSIC_ALBUMS_COLLECTION)
+    .doc(album.id)
+    .set(
+      {
+        ...album,
+        firstSeenAt:
+          FieldValue.serverTimestamp(),
+        lastSeenAt:
+          FieldValue.serverTimestamp(),
+      },
+      {
+        merge: true,
+      }
+    );
+
+  if (album.artistId) {
+    await upsertGraphEdge({
+      fromType: "artist",
+      fromId: album.artistId,
+      relationship: "CREATED",
+      toType: "album",
+      toId: album.id,
+      metadata: {
+        artistName: album.artistName,
+        albumTitle: album.title,
+      },
+    });
+  }
+
+  return album;
+}
+
+async function savePermanentTrack(rawTrack) {
+  const track =
+    normalizeCatalogTrack(rawTrack);
+
+  if (!track?.id) {
+    return null;
+  }
+
+  if (rawTrack?.artist) {
+    await savePermanentArtist(
+      rawTrack.artist
+    );
+  }
+
+  if (rawTrack?.album) {
+    await savePermanentAlbum(
+      rawTrack.album,
+      rawTrack.artist
+    );
+  }
+
+  await db
+    .collection(MUSIC_TRACKS_COLLECTION)
+    .doc(track.id)
+    .set(
+      {
+        ...track,
+        firstSeenAt:
+          FieldValue.serverTimestamp(),
+        lastSeenAt:
+          FieldValue.serverTimestamp(),
+      },
+      {
+        merge: true,
+      }
+    );
+
+  if (track.artistId) {
+    await upsertGraphEdge({
+      fromType: "artist",
+      fromId: track.artistId,
+      relationship: "PERFORMED",
+      toType: "track",
+      toId: track.id,
+      metadata: {
+        artistName: track.artistName,
+        trackTitle: track.title,
+      },
+    });
+  }
+
+  if (track.albumId) {
+    await upsertGraphEdge({
+      fromType: "album",
+      fromId: track.albumId,
+      relationship: "CONTAINS",
+      toType: "track",
+      toId: track.id,
+      metadata: {
+        albumTitle: track.albumTitle,
+        trackTitle: track.title,
+      },
+    });
+  }
+
+  return track;
+}
+
+function collectDeezerEntities(
+  value,
+  entities = {
+    tracks: new Map(),
+    albums: new Map(),
+    artists: new Map(),
+  },
+  seen = new Set()
+) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return entities;
+  }
+
+  if (typeof value !== "object") {
+    return entities;
+  }
+
+  if (seen.has(value)) {
+    return entities;
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item) =>
+      collectDeezerEntities(
+        item,
+        entities,
+        seen
+      )
+    );
+
+    return entities;
+  }
+
+  const looksLikeTrack =
+    value.id &&
+    (
+      value.preview !== undefined ||
+      value.duration !== undefined ||
+      value.title_short !== undefined
+    ) &&
+    (
+      value.artist ||
+      value.album
+    );
+
+  const looksLikeAlbum =
+    value.id &&
+    (
+      value.cover !== undefined ||
+      value.cover_big !== undefined ||
+      value.cover_xl !== undefined ||
+      value.nb_tracks !== undefined
+    ) &&
+    !looksLikeTrack;
+
+  const looksLikeArtist =
+    value.id &&
+    (
+      value.picture !== undefined ||
+      value.picture_big !== undefined ||
+      value.picture_xl !== undefined
+    ) &&
+    !looksLikeTrack &&
+    !looksLikeAlbum;
+
+  if (looksLikeTrack) {
+    entities.tracks.set(
+      String(value.id),
+      value
+    );
+  }
+
+  if (looksLikeAlbum) {
+    entities.albums.set(
+      String(value.id),
+      value
+    );
+  }
+
+  if (looksLikeArtist) {
+    entities.artists.set(
+      String(value.id),
+      value
+    );
+  }
+
+  if (
+    value.artist &&
+    typeof value.artist === "object" &&
+    value.artist.id
+  ) {
+    entities.artists.set(
+      String(value.artist.id),
+      value.artist
+    );
+  }
+
+  if (
+    value.album &&
+    typeof value.album === "object" &&
+    value.album.id
+  ) {
+    entities.albums.set(
+      String(value.album.id),
+      {
+        ...value.album,
+        artist:
+          value.album.artist ||
+          value.artist ||
+          null,
+      }
+    );
+  }
+
+  Object.values(value).forEach((child) => {
+    collectDeezerEntities(
+      child,
+      entities,
+      seen
+    );
+  });
+
+  return entities;
+}
+
+async function persistDeezerPayload(
+  path,
+  payload
+) {
+  try {
+    const entities =
+      collectDeezerEntities(payload);
+
+    for (
+      const artist of entities.artists.values()
+    ) {
+      await savePermanentArtist(artist);
+    }
+
+    for (
+      const album of entities.albums.values()
+    ) {
+      await savePermanentAlbum(
+        album,
+        album.artist
+      );
+    }
+
+    for (
+      const track of entities.tracks.values()
+    ) {
+      await savePermanentTrack(track);
+    }
+
+    if (
+      entities.tracks.size ||
+      entities.albums.size ||
+      entities.artists.size
+    ) {
+      console.log(
+        `[CATALOG] ${path}: saved ${entities.tracks.size} tracks, ${entities.albums.size} albums, ${entities.artists.size} artists`
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `[CATALOG] Unable to persist ${path}:`,
+      error.message
+    );
+  }
+}
+
+function getPermanentEntityRequest(path) {
+  const trackMatch =
+    path.match(/^\/track\/([^/?]+)/i);
+
+  if (trackMatch) {
+    return {
+      collection:
+        MUSIC_TRACKS_COLLECTION,
+      id: decodeURIComponent(
+        trackMatch[1]
+      ),
+      type: "track",
+    };
+  }
+
+  const albumMatch =
+    path.match(/^\/album\/([^/?]+)/i);
+
+  if (albumMatch) {
+    return {
+      collection:
+        MUSIC_ALBUMS_COLLECTION,
+      id: decodeURIComponent(
+        albumMatch[1]
+      ),
+      type: "album",
+    };
+  }
+
+  const artistMatch =
+    path.match(/^\/artist\/([^/?]+)$/i);
+
+  if (artistMatch) {
+    return {
+      collection:
+        MUSIC_ARTISTS_COLLECTION,
+      id: decodeURIComponent(
+        artistMatch[1]
+      ),
+      type: "artist",
+    };
+  }
+
+  return null;
+}
+
+function permanentEntityToDeezerShape(
+  type,
+  data
+) {
+  if (!data) return null;
+
+  if (data.raw) {
+    const raw = {
+      ...data.raw,
+    };
+
+    if (
+      type === "track" &&
+      data.preview &&
+      !raw.preview
+    ) {
+      raw.preview = data.preview;
+    }
+
+    return raw;
+  }
+
+  if (type === "track") {
+    return {
+      id: data.id,
+      title: data.title,
+      title_short: data.title,
+      duration: data.duration,
+      preview:
+        data.preview ||
+        data.previewUrl ||
+        data.playbackUrl ||
+        "",
+      link: data.link || "",
+      artist: data.artist || null,
+      album: data.album || null,
+    };
+  }
+
+  return data;
+}
+
+async function getPermanentEntity(
+  request
+) {
+  if (!request?.id) {
+    return null;
+  }
+
+  const snapshot = await db
+    .collection(request.collection)
+    .doc(String(request.id))
+    .get();
+
+  if (!snapshot.exists) {
+    return null;
+  }
+
+  return permanentEntityToDeezerShape(
+    request.type,
+    snapshot.data()
+  );
+}
+
+async function getPermanentTrack(
+  trackId
+) {
+  const snapshot = await db
+    .collection(MUSIC_TRACKS_COLLECTION)
+    .doc(String(trackId))
+    .get();
+
+  return snapshot.exists
+    ? snapshot.data()
+    : null;
+}
+
+async function getMutualFriendIds(userId) {
+  if (!userId) return [];
+
+  const [
+    followingSnapshot,
+    followersSnapshot,
+  ] = await Promise.all([
+    db
+      .collection("follows")
+      .where("followerId", "==", String(userId))
+      .get(),
+    db
+      .collection("follows")
+      .where("followedId", "==", String(userId))
+      .get(),
+  ]);
+
+  const following = new Set(
+    followingSnapshot.docs.map(
+      (document) =>
+        String(
+          document.data()?.followedId ||
+          ""
+        )
+    )
+  );
+
+  const followers = new Set(
+    followersSnapshot.docs.map(
+      (document) =>
+        String(
+          document.data()?.followerId ||
+          ""
+        )
+    )
+  );
+
+  return [...following].filter(
+    (id) =>
+      id &&
+      followers.has(id)
+  );
+}
+
+async function getFriendCatalogRecommendations(
+  userId,
+  {
+    limit = 20,
+    excludedTrackIds = new Set(),
+  } = {}
+) {
+  const friendIds =
+    await getMutualFriendIds(userId);
+
+  if (friendIds.length === 0) {
+    return [];
+  }
+
+  const scores = new Map();
+
+  const addScore = (
+    trackId,
+    score,
+    friendId,
+    reason
+  ) => {
+    const id = String(trackId || "");
+    if (
+      !id ||
+      excludedTrackIds.has(id)
+    ) {
+      return;
+    }
+
+    const current =
+      scores.get(id) || {
+        trackId: id,
+        score: 0,
+        friendIds: new Set(),
+        reasons: new Set(),
+      };
+
+    current.score += score;
+    current.friendIds.add(friendId);
+    current.reasons.add(reason);
+    scores.set(id, current);
+  };
+
+  for (const friendId of friendIds) {
+    const [
+      likesSnapshot,
+      reviewsSnapshot,
+    ] = await Promise.all([
+      db
+        .collection("likes")
+        .where("userId", "==", friendId)
+        .get(),
+      db
+        .collection("reviews")
+        .where("userId", "==", friendId)
+        .get(),
+    ]);
+
+    likesSnapshot.docs.forEach(
+      (document) => {
+        const like =
+          document.data() || {};
+
+        if (
+          String(like.type || "track")
+            .toLowerCase() === "track"
+        ) {
+          addScore(
+            like.musicId,
+            3,
+            friendId,
+            "friend-like"
+          );
+        }
+      }
+    );
+
+    reviewsSnapshot.docs.forEach(
+      (document) => {
+        const review =
+          document.data() || {};
+
+        if (
+          String(review.type || "track")
+            .toLowerCase() !== "track"
+        ) {
+          return;
+        }
+
+        const rating =
+          Number(review.rating || 0);
+
+        if (review.hearted === true) {
+          addScore(
+            review.listenableId,
+            5,
+            friendId,
+            "friend-favourite"
+          );
+        } else if (rating >= 4) {
+          addScore(
+            review.listenableId,
+            rating === 5 ? 4 : 2,
+            friendId,
+            "friend-review"
+          );
+        }
+      }
+    );
+  }
+
+  const ranked = [...scores.values()]
+    .sort((a, b) =>
+      b.score - a.score
+    )
+    .slice(0, limit * 3);
+
+  const results = [];
+
+  for (const candidate of ranked) {
+    const track =
+      await getPermanentTrack(
+        candidate.trackId
+      );
+
+    if (!track) {
+      continue;
+    }
+
+    results.push({
+      track:
+        track.raw ||
+        permanentEntityToDeezerShape(
+          "track",
+          track
+        ),
+      origin: {
+        type: "friends",
+        title:
+          candidate.friendIds.size === 1
+            ? "Liked by a friend"
+            : `Liked by ${candidate.friendIds.size} friends`,
+        artist:
+          track.artistName || "",
+        score: candidate.score,
+        friendCount:
+          candidate.friendIds.size,
+        reasons:
+          [...candidate.reasons],
+      },
+    });
+
+    if (results.length >= limit) {
+      break;
+    }
+  }
+
+  return results;
+}
+
 async function fetchDeezer(
   path,
   options = {}
@@ -296,6 +1282,36 @@ async function fetchDeezer(
     path.startsWith("/")
       ? path
       : `/${path}`;
+
+  const permanentRequest =
+    getPermanentEntityRequest(
+      normalizedPath
+    );
+
+  if (
+    !options.forceRefresh &&
+    permanentRequest
+  ) {
+    try {
+      const permanentEntity =
+        await getPermanentEntity(
+          permanentRequest
+        );
+
+      if (permanentEntity) {
+        console.log(
+          `[CATALOG] PERMANENT HIT ${normalizedPath}`
+        );
+
+        return permanentEntity;
+      }
+    } catch (error) {
+      console.warn(
+        `[CATALOG] Permanent lookup failed for ${normalizedPath}:`,
+        error.message
+      );
+    }
+  }
 
   const cacheKey =
     normalizedPath;
@@ -426,6 +1442,11 @@ async function fetchDeezer(
 
             console.log(
               `[DEEZER CACHE] FIRESTORE HIT ${normalizedPath}`
+            );
+
+            await persistDeezerPayload(
+              normalizedPath,
+              storedCache.data
             );
 
             return storedCache.data;
@@ -575,6 +1596,11 @@ async function fetchDeezer(
             cacheWriteError.message
           );
         }
+
+        await persistDeezerPayload(
+          normalizedPath,
+          data
+        );
 
         return data;
       } catch (
@@ -885,6 +1911,33 @@ app.post("/users/share", async (req, res) => {
       itemData: item,
       songTitle: item.title || item.name || "Shared music",
       comment,
+    });
+
+    await upsertGraphEdge({
+      fromType: "user",
+      fromId: fromUserId,
+      relationship: "SHARED",
+      toType: type === "track" ? "track" : type,
+      toId: itemId,
+      weight: 3,
+      metadata: {
+        toUserId,
+        shareId: shareRef.id,
+        comment,
+      },
+    });
+
+    await upsertGraphEdge({
+      fromType: "user",
+      fromId: toUserId,
+      relationship: "RECEIVED",
+      toType: type === "track" ? "track" : type,
+      toId: itemId,
+      weight: 1,
+      metadata: {
+        fromUserId,
+        shareId: shareRef.id,
+      },
     });
 
     console.log(
@@ -1422,9 +2475,54 @@ const excludedTrackIds = new Set([
   ...recentlyServedTrackIds,
 ]);
 
+const friendCandidates =
+  await getFriendCatalogRecommendations(
+    userId,
+    {
+      limit:
+        Math.max(
+          limit + offset,
+          20
+        ),
+      excludedTrackIds,
+    }
+  );
+
   /*
    * New users still receive a fallback feed.
    */
+  if (
+    seedTracks.length === 0 &&
+    friendCandidates.length > 0
+  ) {
+    const friendPage =
+      friendCandidates.slice(
+        offset,
+        offset + limit
+      );
+
+    const recommendations =
+      await Promise.all(
+        friendPage.map(
+          ({ track, origin }) =>
+            createFeedItem(
+              track,
+              "friend-recommendation",
+              userId,
+              origin
+            )
+        )
+      );
+
+    await markFeedItemsServed(
+      userId,
+      recommendations,
+      "friend-recommendation"
+    );
+
+    return recommendations;
+  }
+
   if (seedTracks.length === 0) {
     const fallbackOffset =
       offset + (refresh ? 40 : 20);
@@ -1458,7 +2556,10 @@ const excludedTrackIds = new Set([
     )
   );
 
-  let candidates = seedResults.flat();
+  let candidates = [
+    ...friendCandidates,
+    ...seedResults.flat(),
+  ];
 
   /*
    * Refresh changes the order of personalized results.
@@ -2177,6 +3278,23 @@ app.post("/users/like", async (req, res) => {
       { merge: true }
     );
 
+    await upsertGraphEdge({
+      fromType: "user",
+      fromId: String(user_id),
+      relationship: "LIKED",
+      toType:
+        String(type || "track").toLowerCase() === "track"
+          ? "track"
+          : String(type || "track").toLowerCase(),
+      toId: String(music_id),
+      weight: 5,
+      metadata: {
+        name: String(name || ""),
+        artistName:
+          String(artist_name || ""),
+      },
+    });
+
     return res.status(201).json({
       ok: true,
       liked: true,
@@ -2209,6 +3327,17 @@ app.post("/users/unlike", async (req, res) => {
     const likeId = `${user_id}_${type}_${music_id}`;
 
     await db.collection("likes").doc(likeId).delete();
+
+    await deleteGraphEdge({
+      fromType: "user",
+      fromId: String(user_id),
+      relationship: "LIKED",
+      toType:
+        String(type || "track").toLowerCase() === "track"
+          ? "track"
+          : String(type || "track").toLowerCase(),
+      toId: String(music_id),
+    });
 
     return res.status(200).json({
       ok: true,
@@ -2628,6 +3757,37 @@ app.post("/review", async (req, res) => {
 
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    await upsertGraphEdge({
+      fromType: "user",
+      fromId: userId,
+      relationship: "REVIEWED",
+      toType:
+        String(type || "track").toLowerCase() === "track"
+          ? "track"
+          : String(type || "track").toLowerCase(),
+      toId: String(musicId),
+      weight:
+        Boolean(hearted)
+          ? 8
+          : Math.max(
+              1,
+              Number(rating || 0)
+            ),
+      metadata: {
+        reviewId,
+        rating:
+          Math.min(
+            Math.max(
+              Number(rating) || 0,
+              0
+            ),
+            5
+          ),
+        hearted:
+          Boolean(hearted),
+      },
     });
 
     return res.status(201).json({
@@ -3417,6 +4577,51 @@ app.post("/users/recently-viewed", async (req, res) => {
         },
         { merge: true }
       );
+
+    const viewedItem = {
+      id: itemId,
+      type: itemType,
+      name:
+        String(name || title || "Unknown Item"),
+      title:
+        String(title || name || "Unknown Item"),
+      artist: artist || null,
+      album: album || null,
+      image:
+        String(image || coverArt || ""),
+      coverArt:
+        String(coverArt || image || ""),
+      preview:
+        String(preview || ""),
+    };
+
+    if (itemType === "track") {
+      await savePermanentTrack(
+        viewedItem
+      );
+    } else if (itemType === "album") {
+      await savePermanentAlbum(
+        viewedItem,
+        viewedItem.artist
+      );
+    } else if (itemType === "artist") {
+      await savePermanentArtist(
+        viewedItem
+      );
+    }
+
+    await upsertGraphEdge({
+      fromType: "user",
+      fromId: userId,
+      relationship: "VIEWED",
+      toType: itemType,
+      toId: itemId,
+      weight: 1,
+      metadata: {
+        title:
+          viewedItem.title,
+      },
+    });
 
     return res.status(201).json({
       ok: true,
@@ -6190,7 +7395,364 @@ app.post(
   }
 );
 
-const server = app.listen(port, "0.0.0.0", () => {
+const server = 
+/* =========================================================
+   MUSIC CATALOG + GRAPH API
+========================================================= */
+
+app.get("/catalog/stats", async (req, res) => {
+  try {
+    const [
+      tracks,
+      albums,
+      artists,
+      edges,
+    ] = await Promise.all([
+      db
+        .collection(MUSIC_TRACKS_COLLECTION)
+        .count()
+        .get(),
+      db
+        .collection(MUSIC_ALBUMS_COLLECTION)
+        .count()
+        .get(),
+      db
+        .collection(MUSIC_ARTISTS_COLLECTION)
+        .count()
+        .get(),
+      db
+        .collection(MUSIC_GRAPH_EDGES_COLLECTION)
+        .count()
+        .get(),
+    ]);
+
+    return res.json({
+      ok: true,
+      tracks:
+        tracks.data().count,
+      albums:
+        albums.data().count,
+      artists:
+        artists.data().count,
+      edges:
+        edges.data().count,
+    });
+  } catch (error) {
+    console.error(
+      "GET /catalog/stats error:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+});
+
+app.get("/catalog/tracks/:id", async (req, res) => {
+  try {
+    const id =
+      String(req.params.id || "").trim();
+
+    const snapshot = await db
+      .collection(MUSIC_TRACKS_COLLECTION)
+      .doc(id)
+      .get();
+
+    if (!snapshot.exists) {
+      return res.status(404).json({
+        ok: false,
+        error:
+          "Track is not in the Treble catalog yet.",
+      });
+    }
+
+    return res.json({
+      ok: true,
+      track: snapshot.data(),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+});
+
+app.get("/users/:uid/friend-recommendations", async (req, res) => {
+  try {
+    const userId =
+      String(req.params.uid || "").trim();
+
+    const { limit } =
+      getPagination(req);
+
+    const likedTrackIds =
+      new Set(
+        await getUserLikedTrackIds(
+          userId
+        )
+      );
+
+    const candidates =
+      await getFriendCatalogRecommendations(
+        userId,
+        {
+          limit,
+          excludedTrackIds:
+            likedTrackIds,
+        }
+      );
+
+    const recommendations =
+      await Promise.all(
+        candidates.map(
+          ({ track, origin }) =>
+            createFeedItem(
+              track,
+              "friend-recommendation",
+              userId,
+              origin
+            )
+        )
+      );
+
+    return res.json({
+      ok: true,
+      recommendations,
+      friendBased: true,
+    });
+  } catch (error) {
+    console.error(
+      "GET friend recommendations error:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+      recommendations: [],
+      error: error.message,
+    });
+  }
+});
+
+app.get("/admin/music-graph", async (req, res) => {
+  try {
+    const parsedLimit =
+      Number.parseInt(
+        req.query.limit,
+        10
+      );
+
+    const limit =
+      Math.min(
+        Math.max(
+          Number.isNaN(parsedLimit)
+            ? 1000
+            : parsedLimit,
+          1
+        ),
+        5000
+      );
+
+    const includeUsers =
+      String(
+        req.query.includeUsers ||
+        "true"
+      ) !== "false";
+
+    const [
+      tracksSnapshot,
+      albumsSnapshot,
+      artistsSnapshot,
+      usersSnapshot,
+      edgesSnapshot,
+    ] = await Promise.all([
+      db
+        .collection(MUSIC_TRACKS_COLLECTION)
+        .limit(limit)
+        .get(),
+      db
+        .collection(MUSIC_ALBUMS_COLLECTION)
+        .limit(limit)
+        .get(),
+      db
+        .collection(MUSIC_ARTISTS_COLLECTION)
+        .limit(limit)
+        .get(),
+      includeUsers
+        ? db
+            .collection("users")
+            .limit(limit)
+            .get()
+        : Promise.resolve({
+            docs: [],
+          }),
+      db
+        .collection(MUSIC_GRAPH_EDGES_COLLECTION)
+        .limit(limit * 5)
+        .get(),
+    ]);
+
+    const nodes = [];
+
+    artistsSnapshot.docs.forEach(
+      (document) => {
+        const data =
+          document.data() || {};
+
+        nodes.push({
+          id:
+            `artist:${document.id}`,
+          rawId:
+            document.id,
+          type:
+            "artist",
+          label:
+            data.name ||
+            "Artist",
+          image:
+            data.picture || "",
+        });
+      }
+    );
+
+    albumsSnapshot.docs.forEach(
+      (document) => {
+        const data =
+          document.data() || {};
+
+        nodes.push({
+          id:
+            `album:${document.id}`,
+          rawId:
+            document.id,
+          type:
+            "album",
+          label:
+            data.title ||
+            "Album",
+          image:
+            data.image || "",
+        });
+      }
+    );
+
+    tracksSnapshot.docs.forEach(
+      (document) => {
+        const data =
+          document.data() || {};
+
+        nodes.push({
+          id:
+            `track:${document.id}`,
+          rawId:
+            document.id,
+          type:
+            "track",
+          label:
+            data.title ||
+            "Song",
+          image:
+            data.image || "",
+        });
+      }
+    );
+
+    usersSnapshot.docs.forEach(
+      (document) => {
+        const data =
+          document.data() || {};
+
+        nodes.push({
+          id:
+            `user:${document.id}`,
+          rawId:
+            document.id,
+          type:
+            "user",
+          label:
+            data.username ||
+            data.displayName ||
+            "User",
+          image:
+            data.avatar ||
+            data.profilePicture ||
+            "",
+        });
+      }
+    );
+
+    const nodeIds =
+      new Set(
+        nodes.map(
+          (node) => node.id
+        )
+      );
+
+    const edges =
+      edgesSnapshot.docs
+        .map((document) => {
+          const data =
+            document.data() || {};
+
+          return {
+            id:
+              document.id,
+            source:
+              `${data.fromType}:${data.fromId}`,
+            target:
+              `${data.toType}:${data.toId}`,
+            relationship:
+              data.relationship ||
+              "RELATED",
+            weight:
+              Number(
+                data.weight || 1
+              ),
+            metadata:
+              data.metadata || {},
+          };
+        })
+        .filter(
+          (edge) =>
+            nodeIds.has(
+              edge.source
+            ) &&
+            nodeIds.has(
+              edge.target
+            )
+        );
+
+    return res.json({
+      ok: true,
+      nodes,
+      edges,
+      counts: {
+        nodes:
+          nodes.length,
+        edges:
+          edges.length,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "GET /admin/music-graph error:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+      nodes: [],
+      edges: [],
+      error: error.message,
+    });
+  }
+});
+
+
+app.listen(port, "0.0.0.0", () => {
   console.log(`Treble backend running at http://localhost:${port}`);
 });
 
