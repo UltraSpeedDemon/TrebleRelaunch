@@ -18,7 +18,6 @@ import {
 
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
-import MusicCard from "../components/MusicCard";
 
 import {
   getArtistTracks,
@@ -53,6 +52,89 @@ const cleanArtistName = (value) => {
 
   return name;
 };
+
+
+function ResultTile({
+  item,
+  type,
+  onPress,
+}) {
+  const image =
+    item?.image ||
+    item?.coverArt ||
+    item?.picture_xl ||
+    item?.picture_big ||
+    item?.picture ||
+    "";
+
+  const title =
+    item?.title ||
+    item?.name ||
+    item?.username ||
+    "Unknown";
+
+  const subtitle =
+    type === "artist"
+      ? "Artist"
+      : item?.artistName ||
+        item?.artist?.name ||
+        item?.albumName ||
+        item?.album?.title ||
+        "";
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.82}
+      style={styles.resultTile}
+    >
+      <View style={styles.tileImageWrap}>
+        {image ? (
+          <Image
+            source={{ uri: image }}
+            style={[
+              styles.tileImage,
+              type === "artist" &&
+                styles.artistTileImage,
+            ]}
+          />
+        ) : (
+          <View style={styles.tileImageFallback}>
+            <Text style={styles.tileFallbackText}>
+              ♪
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.tileTypeBadge}>
+          <Text style={styles.tileTypeText}>
+            {type === "track"
+              ? "SONG"
+              : String(type || "").toUpperCase()}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.tileBody}>
+        <Text
+          style={styles.tileTitle}
+          numberOfLines={2}
+        >
+          {title}
+        </Text>
+
+        {subtitle ? (
+          <Text
+            style={styles.tileSubtitle}
+            numberOfLines={1}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 export default function ArtistListenables({
   navigation,
@@ -514,101 +596,23 @@ export default function ArtistListenables({
 
   const renderListenableItem =
     useCallback(
-      ({ item }) => {
-        if (
-          item?.type === "track"
-        ) {
-          const trackArtistName =
-            item?.artistName ||
-            item?.artist?.name ||
-            artistName;
-
-          const albumTitle =
-            item?.albumName ||
-            item?.album?.title ||
-            "";
-
-          return (
-            <View
-              style={
-                styles.cardWrapper
-              }
-            >
-              <MusicCard
-                id={
-                  item.id
-                }
-                image={
-                  item.image
-                }
-                name={
-                  item.title
-                }
-                artist={
-                  cleanArtistName(
-                    trackArtistName
-                  ) || undefined
-                }
-                album={
-                  albumTitle
-                }
-                onPressCard={() =>
-                  navigation.navigate(
-                    "SongPage",
-                    {
-                      track:
-                        item,
-                    }
-                  )
-                }
-              />
-            </View>
-          );
-        }
-
-        const albumArtistName =
-          item?.artistName ||
-          item?.artist?.name ||
-          artistName;
-
-        return (
-          <View
-            style={
-              styles.cardWrapper
-            }
-          >
-            <MusicCard
-              id={
-                item.id
-              }
-              image={
-                item.image
-              }
-              name={
-                item.title
-              }
-              artist={
-                cleanArtistName(
-                  albumArtistName
-                ) || undefined
-              }
-              onPressCard={() =>
-                navigation.navigate(
-                  "AlbumPage",
-                  {
-                    album:
-                      item,
-                  }
-                )
-              }
-            />
-          </View>
-        );
-      },
-      [
-        artistName,
-        navigation,
-      ]
+      ({ item }) => (
+        <ResultTile
+          item={item}
+          type={item?.type || type}
+          onPress={() =>
+            navigation.navigate(
+              item?.type === "album"
+                ? "AlbumPage"
+                : "SongPage",
+              item?.type === "album"
+                ? { album: item }
+                : { track: item }
+            )
+          }
+        />
+      ),
+      [navigation, type]
     );
 
   const keyExtractor =
@@ -1323,4 +1327,90 @@ const styles =
 
       right: 0,
     },
+  
+    tileRow: {
+      gap: 14,
+      paddingHorizontal: 2,
+    },
+
+    resultTile: {
+      flex: 1,
+      minWidth: 0,
+      maxWidth: 250,
+      marginBottom: 14,
+      overflow: "hidden",
+      borderRadius: 18,
+      backgroundColor: "rgba(255,255,255,0.045)",
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.075)",
+    },
+
+    tileImageWrap: {
+      position: "relative",
+      width: "100%",
+      aspectRatio: 1,
+      overflow: "hidden",
+      backgroundColor: "rgba(255,255,255,0.05)",
+    },
+
+    tileImage: {
+      width: "100%",
+      height: "100%",
+      resizeMode: "cover",
+    },
+
+    artistTileImage: {
+      borderRadius: 999,
+      transform: [{ scale: 0.82 }],
+    },
+
+    tileImageFallback: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    tileFallbackText: {
+      color: "rgba(255,255,255,0.24)",
+      fontSize: 52,
+      fontWeight: "800",
+    },
+
+    tileTypeBadge: {
+      position: "absolute",
+      top: 10,
+      left: 10,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: 8,
+      backgroundColor: "rgba(0,0,0,0.68)",
+    },
+
+    tileTypeText: {
+      color: colours.lightblue,
+      fontSize: 8,
+      fontWeight: "900",
+      letterSpacing: 0.8,
+    },
+
+    tileBody: {
+      paddingHorizontal: 13,
+      paddingTop: 12,
+      paddingBottom: 14,
+    },
+
+    tileTitle: {
+      color: "#ffffff",
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: "900",
+    },
+
+    tileSubtitle: {
+      color: "rgba(255,255,255,0.50)",
+      fontSize: 12,
+      lineHeight: 17,
+      marginTop: 4,
+    },
+
   });

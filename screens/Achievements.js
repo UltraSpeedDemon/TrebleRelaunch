@@ -196,7 +196,11 @@ export default function Achievements({
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
         <ScrollView
-          style={styles.scrollView}
+          style={[
+            styles.scrollView,
+            Platform.OS === "web" &&
+              styles.webScrollView,
+          ]}
           contentContainerStyle={[
             styles.scrollContent,
             isCompact &&
@@ -503,11 +507,11 @@ export default function Achievements({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colours.darkblue,
-  },
 
-  screen: {
-    flex: 1,
+    height:
+      Platform.OS === "web"
+        ? "100dvh"
+        : undefined,
 
     minHeight:
       Platform.OS === "web"
@@ -515,21 +519,39 @@ const styles = StyleSheet.create({
         : undefined,
 
     backgroundColor: colours.darkblue,
-    overflow: "hidden",
+  },
+
+  screen: {
+    flex: 1,
+
+    height:
+      Platform.OS === "web"
+        ? "100dvh"
+        : undefined,
+
+    minHeight:
+      Platform.OS === "web"
+        ? "100dvh"
+        : undefined,
+
+    backgroundColor: colours.darkblue,
   },
 
   scrollView: {
     flex: 1,
     width: "100%",
+  },
 
-    ...(Platform.OS === "web"
-      ? {
-          overflowY: "auto",
-          overflowX: "hidden",
-          WebkitOverflowScrolling:
-            "touch",
-        }
-      : {}),
+  webScrollView: {
+    height: "100dvh",
+    maxHeight: "100dvh",
+
+    overflowY: "scroll",
+    overflowX: "hidden",
+
+    WebkitOverflowScrolling: "touch",
+    overscrollBehaviorY: "contain",
+    touchAction: "pan-y",
   },
 
   scrollContent: {

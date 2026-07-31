@@ -20,7 +20,6 @@ import {
   View,
 } from "react-native";
 
-import { Chip } from "@rneui/base";
 import { useFocusEffect } from "@react-navigation/native";
 
 import { auth } from "../utils/firebase";
@@ -28,8 +27,6 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
 import BottomNavbar from "../components/BottomNavbar";
-import SectionDivider from "../components/SectionDivider";
-import MusicCard from "../components/MusicCard";
 
 import {
   followUser,
@@ -117,6 +114,89 @@ const cleanArtistName = (value) => {
 
   return name;
 };
+
+
+function ResultTile({
+  item,
+  type,
+  onPress,
+}) {
+  const image =
+    item?.image ||
+    item?.coverArt ||
+    item?.picture_xl ||
+    item?.picture_big ||
+    item?.picture ||
+    "";
+
+  const title =
+    item?.title ||
+    item?.name ||
+    item?.username ||
+    "Unknown";
+
+  const subtitle =
+    type === "artist"
+      ? "Artist"
+      : item?.artistName ||
+        item?.artist?.name ||
+        item?.albumName ||
+        item?.album?.title ||
+        "";
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.82}
+      style={styles.resultTile}
+    >
+      <View style={styles.tileImageWrap}>
+        {image ? (
+          <Image
+            source={{ uri: image }}
+            style={[
+              styles.tileImage,
+              type === "artist" &&
+                styles.artistTileImage,
+            ]}
+          />
+        ) : (
+          <View style={styles.tileImageFallback}>
+            <Text style={styles.tileFallbackText}>
+              ♪
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.tileTypeBadge}>
+          <Text style={styles.tileTypeText}>
+            {type === "track"
+              ? "SONG"
+              : String(type || "").toUpperCase()}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.tileBody}>
+        <Text
+          style={styles.tileTitle}
+          numberOfLines={2}
+        >
+          {title}
+        </Text>
+
+        {subtitle ? (
+          <Text
+            style={styles.tileSubtitle}
+            numberOfLines={1}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 export default function Search({
   navigation,
@@ -1445,117 +1525,87 @@ const getRelationshipUserId =
               }
               keyboardShouldPersistTaps="handled"
             >
-              {/* FILTER CHIPS */}
-              <View
-                style={[
-                  styles.chipContainer,
-                  isCompact &&
-                    styles.compactChipContainer,
-                ]}
-              >
-                <Chip
-                  title="Songs"
-                  onPress={() =>
-                    dispatchFilter({
-                      type:
-                        "TOGGLE_SONG",
-                    })
-                  }
-                  type={
-                    filter.songOnly
-                      ? "solid"
-                      : "outline"
-                  }
-                  buttonStyle={[
-                    styles.filterChip,
-                    filter.songOnly &&
-                      styles.selectedFilterChip,
-                  ]}
-                  titleStyle={
-                    styles.filterChipText
-                  }
-                  containerStyle={
-                    styles.filterChipContainer
-                  }
-                />
+              {/* FILTERS */}
+              <View style={styles.filterBar}>
+                {[
+                  {
+                    label: "All",
+                    count: totalResults,
+                    selected:
+                      !filter.songOnly &&
+                      !filter.albumOnly &&
+                      !filter.artistOnly &&
+                      !filter.userOnly,
+                    action: "RESET",
+                  },
+                  {
+                    label: "Songs",
+                    count: songs.length,
+                    selected: filter.songOnly,
+                    action: "TOGGLE_SONG",
+                  },
+                  {
+                    label: "Albums",
+                    count: albums.length,
+                    selected: filter.albumOnly,
+                    action: "TOGGLE_ALBUM",
+                  },
+                  {
+                    label: "Artists",
+                    count: artists.length,
+                    selected: filter.artistOnly,
+                    action: "TOGGLE_ARTIST",
+                  },
+                  {
+                    label: "Users",
+                    count: users.length,
+                    selected: filter.userOnly,
+                    action: "TOGGLE_USER",
+                  },
+                ].map((option) => (
+                  <TouchableOpacity
+                    key={option.label}
+                    onPress={() =>
+                      dispatchFilter({
+                        type: option.action,
+                      })
+                    }
+                    style={[
+                      styles.filterButton,
+                      option.selected &&
+                        styles.filterButtonSelected,
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.filterButtonText,
+                        option.selected &&
+                          styles.filterButtonTextSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
 
-                <Chip
-                  title="Albums"
-                  onPress={() =>
-                    dispatchFilter({
-                      type:
-                        "TOGGLE_ALBUM",
-                    })
-                  }
-                  type={
-                    filter.albumOnly
-                      ? "solid"
-                      : "outline"
-                  }
-                  buttonStyle={[
-                    styles.filterChip,
-                    filter.albumOnly &&
-                      styles.selectedFilterChip,
-                  ]}
-                  titleStyle={
-                    styles.filterChipText
-                  }
-                  containerStyle={
-                    styles.filterChipContainer
-                  }
-                />
-
-                <Chip
-                  title="Artists"
-                  onPress={() =>
-                    dispatchFilter({
-                      type:
-                        "TOGGLE_ARTIST",
-                    })
-                  }
-                  type={
-                    filter.artistOnly
-                      ? "solid"
-                      : "outline"
-                  }
-                  buttonStyle={[
-                    styles.filterChip,
-                    filter.artistOnly &&
-                      styles.selectedFilterChip,
-                  ]}
-                  titleStyle={
-                    styles.filterChipText
-                  }
-                  containerStyle={
-                    styles.filterChipContainer
-                  }
-                />
-
-                <Chip
-                  title="Users"
-                  onPress={() =>
-                    dispatchFilter({
-                      type:
-                        "TOGGLE_USER",
-                    })
-                  }
-                  type={
-                    filter.userOnly
-                      ? "solid"
-                      : "outline"
-                  }
-                  buttonStyle={[
-                    styles.filterChip,
-                    filter.userOnly &&
-                      styles.selectedFilterChip,
-                  ]}
-                  titleStyle={
-                    styles.filterChipText
-                  }
-                  containerStyle={
-                    styles.filterChipContainer
-                  }
-                />
+                    <View
+                      style={[
+                        styles.filterCount,
+                        option.selected &&
+                          styles.filterCountSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterCountText,
+                          option.selected &&
+                            styles.filterCountTextSelected,
+                        ]}
+                      >
+                        {option.count}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
               </View>
 
               {totalResults === 0 ? (
@@ -1584,176 +1634,85 @@ const getRelationshipUserId =
                 <>
                   {/* SONGS */}
                   {shouldShowTrack ? (
-                    <View
-                      style={
-                        styles.resultSection
-                      }
-                    >
-                      <SectionDivider
-                        title="Songs"
-                      />
+                    <View style={styles.resultSection}>
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Songs</Text>
+                        <Text style={styles.sectionCount}>{songs.length}</Text>
+                      </View>
 
-                      {songs.length >
-                      0
-                        ? songs.map(
-                            (item) => (
-                              <View
-                                key={`track-${item.id}`}
-                                style={
-                                  styles.cardWrapper
-                                }
-                              >
-                                <MusicCard
-                                  id={
-                                    item.id
-                                  }
-                                  image={
-                                    item.image
-                                  }
-                                  name={
-                                    item.name ||
-                                    item.title
-                                  }
-                                  artist={
-                                    cleanArtistName(
-                                      item.artistName ||
-                                      item.artist?.name ||
-                                      ""
-                                    ) || undefined
-                                  }
-                                  album={
-                                    item.albumName ||
-                                    item.album
-                                      ?.title ||
-                                    ""
-                                  }
-                                  onPressCard={() =>
-                                    navigation.navigate(
-                                      "SongPage",
-                                      {
-                                        track:
-                                          item,
-                                      }
-                                    )
-                                  }
-                                />
-                              </View>
-                            )
-                          )
-                        : renderEmptySection(
-                            "Songs"
-                          )}
+                      {songs.length > 0 ? (
+                        <View style={styles.tileGrid}>
+                          {songs.map((item) => (
+                            <ResultTile
+                              key={`track-${item.id}`}
+                              item={item}
+                              type="track"
+                              onPress={() =>
+                                navigation.navigate(
+                                  "SongPage",
+                                  { track: item }
+                                )
+                              }
+                            />
+                          ))}
+                        </View>
+                      ) : renderEmptySection("Songs")}
                     </View>
                   ) : null}
 
                   {/* ALBUMS */}
                   {shouldShowAlbum ? (
-                    <View
-                      style={
-                        styles.resultSection
-                      }
-                    >
-                      <SectionDivider
-                        title="Albums"
-                      />
+                    <View style={styles.resultSection}>
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Albums</Text>
+                        <Text style={styles.sectionCount}>{albums.length}</Text>
+                      </View>
 
-                      {albums.length >
-                      0
-                        ? albums.map(
-                            (item) => (
-                              <View
-                                key={`album-${item.id}`}
-                                style={
-                                  styles.cardWrapper
-                                }
-                              >
-                                <MusicCard
-                                  id={
-                                    item.id
-                                  }
-                                  image={
-                                    item.image
-                                  }
-                                  name={
-                                    item.name ||
-                                    item.title
-                                  }
-                                  artist={
-                                    cleanArtistName(
-                                      item.artistName ||
-                                      item.artist?.name ||
-                                      ""
-                                    ) || undefined
-                                  }
-                                  onPressCard={() =>
-                                    navigation.navigate(
-                                      "AlbumPage",
-                                      {
-                                        album:
-                                          item,
-                                      }
-                                    )
-                                  }
-                                />
-                              </View>
-                            )
-                          )
-                        : renderEmptySection(
-                            "Albums"
-                          )}
+                      {albums.length > 0 ? (
+                        <View style={styles.tileGrid}>
+                          {albums.map((item) => (
+                            <ResultTile
+                              key={`album-${item.id}`}
+                              item={item}
+                              type="album"
+                              onPress={() =>
+                                navigation.navigate(
+                                  "AlbumPage",
+                                  { album: item }
+                                )
+                              }
+                            />
+                          ))}
+                        </View>
+                      ) : renderEmptySection("Albums")}
                     </View>
                   ) : null}
 
                   {/* ARTISTS */}
                   {shouldShowArtist ? (
-                    <View
-                      style={
-                        styles.resultSection
-                      }
-                    >
-                      <SectionDivider
-                        title="Artists"
-                      />
+                    <View style={styles.resultSection}>
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Artists</Text>
+                        <Text style={styles.sectionCount}>{artists.length}</Text>
+                      </View>
 
-                      {artists.length >
-                      0
-                        ? artists.map(
-                            (item) => (
-                              <View
-                                key={`artist-${item.id}`}
-                                style={
-                                  styles.cardWrapper
-                                }
-                              >
-                                <MusicCard
-                                  id={
-                                    item.id
-                                  }
-                                  image={
-                                    item.image
-                                  }
-                                  name={
-                                    item.name
-                                  }
-                                  artist={
-                                    item.name
-                                  }
-                                  onPressCard={() =>
-                                    navigation.navigate(
-                                      "ArtistPage",
-                                      {
-                                        artist:
-                                          item,
-                                      }
-                                    )
-                                  }
-                                />
-                              </View>
-                            )
-                          )
-                        : renderEmptySection(
-                            "Artists"
-                          )}
+                      {artists.length > 0 ? (
+                        <View style={styles.tileGrid}>
+                          {artists.map((item) => (
+                            <ResultTile
+                              key={`artist-${item.id}`}
+                              item={item}
+                              type="artist"
+                              onPress={() =>
+                                navigation.navigate(
+                                  "ArtistPage",
+                                  { artist: item }
+                                )
+                              }
+                            />
+                          ))}
+                        </View>
+                      ) : renderEmptySection("Artists")}
                     </View>
                   ) : null}
 
@@ -1764,9 +1723,10 @@ const getRelationshipUserId =
                         styles.resultSection
                       }
                     >
-                      <SectionDivider
-                        title="Users"
-                      />
+                      <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Users</Text>
+                        <Text style={styles.sectionCount}>{users.length}</Text>
+                      </View>
 
                       {users.length >
                       0
@@ -2512,7 +2472,7 @@ userResultCard: {
   borderRadius: 14,
 
   backgroundColor:
-    "rgba(255,255,255,0.96)",
+    "rgba(255,255,255,0.045)",
 },
 
 userResultAvatar: {
@@ -2542,7 +2502,7 @@ userResultInformation: {
 userResultUsername: {
   width: "100%",
 
-  color: "#111111",
+  color: "#ffffff",
 
   fontSize: 16,
   lineHeight: 21,
@@ -2551,7 +2511,7 @@ userResultUsername: {
 
 userResultPrivacy: {
   color:
-    "rgba(0,0,0,0.52)",
+    "rgba(255,255,255,0.52)",
 
   fontSize: 12,
   lineHeight: 17,
@@ -2698,4 +2658,174 @@ currentUserBadgeText: {
 
     right: 0,
   },
+
+  filterBar: {
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    padding: 6,
+    marginBottom: 24,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+
+  filterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    minHeight: 40,
+    paddingHorizontal: 13,
+    borderRadius: 12,
+  },
+
+  filterButtonSelected: {
+    backgroundColor: colours.lightblue,
+  },
+
+  filterButtonText: {
+    color: "rgba(255,255,255,0.66)",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  filterButtonTextSelected: {
+    color: "#ffffff",
+  },
+
+  filterCount: {
+    minWidth: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+
+  filterCountSelected: {
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  filterCountText: {
+    color: "rgba(255,255,255,0.58)",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  filterCountTextSelected: {
+    color: "#ffffff",
+  },
+
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+
+  sectionTitle: {
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+
+  sectionCount: {
+    color: colours.lightblue,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  tileGrid: {
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+  },
+
+  resultTile: {
+    width:
+      Platform.OS === "web"
+        ? "calc(25% - 11px)"
+        : "47%",
+    minWidth: 150,
+    maxWidth: 230,
+    flexGrow: 1,
+    overflow: "hidden",
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.075)",
+  },
+
+  tileImageWrap: {
+    position: "relative",
+    width: "100%",
+    aspectRatio: 1,
+    overflow: "hidden",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+
+  tileImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+
+  artistTileImage: {
+    borderRadius: 999,
+    transform: [{ scale: 0.82 }],
+  },
+
+  tileImageFallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  tileFallbackText: {
+    color: "rgba(255,255,255,0.24)",
+    fontSize: 52,
+    fontWeight: "800",
+  },
+
+  tileTypeBadge: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.68)",
+  },
+
+  tileTypeText: {
+    color: colours.lightblue,
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  tileBody: {
+    paddingHorizontal: 13,
+    paddingTop: 12,
+    paddingBottom: 14,
+  },
+
+  tileTitle: {
+    color: "#ffffff",
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "900",
+  },
+
+  tileSubtitle: {
+    color: "rgba(255,255,255,0.50)",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+
 });
