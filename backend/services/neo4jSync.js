@@ -6,6 +6,60 @@ const {
 const NODE_BATCH_SIZE = 300;
 const EDGE_BATCH_SIZE = 300;
 
+/*
+ * Only these relationship names may be inserted into Cypher.
+ * This protects the query while allowing Neo4j to display real,
+ * separately styled relationship types.
+ */
+const ALLOWED_RELATIONSHIP_TYPES =
+  new Set([
+    "ABOUT",
+    "AUTHORED",
+    "BY_ARTIST",
+    "CONTAINS",
+    "CREATED",
+    "FOLLOWS",
+    "FRIENDS_WITH",
+    "FRIEND_RECOMMENDED",
+    "LIKED",
+    "ON_ALBUM",
+    "PERFORMED",
+    "POSTED_ABOUT",
+    "RECEIVED",
+    "RECOMMENDED",
+    "REPLIES_TO",
+    "REQUESTED_TO_FOLLOW",
+    "REVIEWED",
+    "REVIEWS",
+    "SHARED",
+    "SHARED_WITH",
+    "SIMILAR",
+    "SIMILAR_TASTE",
+    "TASTE_SEED",
+    "UPVOTED",
+    "VIEWED",
+    "RELATED",
+  ]);
+
+const NODE_LABELS = {
+  album:
+    "Album",
+  artist:
+    "Artist",
+  post:
+    "Post",
+  reply:
+    "Reply",
+  review:
+    "Review",
+  track:
+    "Song",
+  song:
+    "Song",
+  user:
+    "User",
+};
+
 function splitIntoBatches(
   items,
   size
@@ -30,11 +84,50 @@ function splitIntoBatches(
 
 function cleanString(value) {
   return String(
-    value || ""
+    value === null ||
+    value === undefined
+      ? ""
+      : value
   ).trim();
 }
 
+function cleanRelationshipType(
+  value
+) {
+  const type =
+    cleanString(
+      value ||
+      "RELATED"
+    )
+      .toUpperCase()
+      .replace(
+        /[^A-Z0-9_]/g,
+        "_"
+      );
+
+  return ALLOWED_RELATIONSHIP_TYPES
+    .has(type)
+      ? type
+      : "RELATED";
+}
+
+function safeJson(value) {
+  try {
+    return JSON.stringify(
+      value || {}
+    );
+  } catch {
+    return "{}";
+  }
+}
+
 function normalizeNode(node) {
+  const type =
+    cleanString(
+      node?.type ||
+      "entity"
+    ).toLowerCase();
+
   return {
     id:
       cleanString(
@@ -46,11 +139,11 @@ function normalizeNode(node) {
         node?.rawId
       ),
 
-    type:
-      cleanString(
-        node?.type ||
-        "entity"
-      ).toLowerCase(),
+    type,
+
+    neo4jLabel:
+      NODE_LABELS[type] ||
+      "TrebleEntity",
 
     label:
       cleanString(
@@ -62,21 +155,15 @@ function normalizeNode(node) {
       cleanString(
         node?.image
       ),
+
+    propertiesJson:
+      safeJson(
+        node?.properties
+      ),
   };
 }
 
 function normalizeEdge(edge) {
-  let metadataJson = "{}";
-
-  try {
-    metadataJson =
-      JSON.stringify(
-        edge?.metadata || {}
-      );
-  } catch {
-    metadataJson = "{}";
-  }
-
   return {
     id:
       cleanString(
@@ -94,17 +181,19 @@ function normalizeEdge(edge) {
       ),
 
     relationship:
-      cleanString(
-        edge?.relationship ||
-        "RELATED"
-      ).toUpperCase(),
+      cleanRelationshipType(
+        edge?.relationship
+      ),
 
     weight:
       Number(
         edge?.weight || 1
       ),
 
-    metadataJson,
+    metadataJson:
+      safeJson(
+        edge?.metadata
+      ),
   };
 }
 
@@ -130,6 +219,10 @@ async function syncNodeBatch(
           node.label,
         entity.image =
           node.image,
+        entity.propertiesJson =
+          node.propertiesJson,
+        entity.managedBy =
+          'treble-sync',
         entity.lastSyncId =
           $syncId,
         entity.lastSyncedAt =
@@ -137,7 +230,7 @@ async function syncNodeBatch(
 
     FOREACH (
       ignored IN CASE
-        WHEN node.type = 'user'
+        WHEN node.neo4jLabel = 'User'
         THEN [1]
         ELSE []
       END |
@@ -146,7 +239,7 @@ async function syncNodeBatch(
 
     FOREACH (
       ignored IN CASE
-        WHEN node.type = 'artist'
+        WHEN node.neo4jLabel = 'Artist'
         THEN [1]
         ELSE []
       END |
@@ -155,7 +248,7 @@ async function syncNodeBatch(
 
     FOREACH (
       ignored IN CASE
-        WHEN node.type = 'album'
+        WHEN node.neo4jLabel = 'Album'
         THEN [1]
         ELSE []
       END |
@@ -164,14 +257,38 @@ async function syncNodeBatch(
 
     FOREACH (
       ignored IN CASE
-        WHEN node.type IN [
-          'track',
-          'song'
-        ]
+        WHEN node.neo4jLabel = 'Song'
         THEN [1]
         ELSE []
       END |
       SET entity:Song
+    )
+
+    FOREACH (
+      ignored IN CASE
+        WHEN node.neo4jLabel = 'Review'
+        THEN [1]
+        ELSE []
+      END |
+      SET entity:Review
+    )
+
+    FOREACH (
+      ignored IN CASE
+        WHEN node.neo4jLabel = 'Reply'
+        THEN [1]
+        ELSE []
+      END |
+      SET entity:Reply
+    )
+
+    FOREACH (
+      ignored IN CASE
+        WHEN node.neo4jLabel = 'Post'
+        THEN [1]
+        ELSE []
+      END |
+      SET entity:Post
     )
     `,
     {
@@ -184,10 +301,15 @@ async function syncNodeBatch(
   );
 }
 
-async function syncEdgeBatch(
+async function syncRelationshipGroup({
+  relationshipType,
   edges,
-  syncId
-) {
+  syncId,
+}) {
+  /*
+   * relationshipType is inserted only after validation against
+   * the hard-coded allowlist above.
+   */
   await driver.executeQuery(
     `
     UNWIND $edges AS edge
@@ -206,18 +328,20 @@ async function syncEdgeBatch(
 
     MERGE (
       source
-    )-[relationship:TREBLE_RELATIONSHIP {
+    )-[relationship:${relationshipType} {
       graphId: edge.id
     }]->(
       target
     )
 
-    SET relationship.kind =
-          edge.relationship,
-        relationship.weight =
+    SET relationship.weight =
           edge.weight,
         relationship.metadataJson =
           edge.metadataJson,
+        relationship.kind =
+          '${relationshipType}',
+        relationship.managedBy =
+          'treble-sync',
         relationship.lastSyncId =
           $syncId,
         relationship.lastSyncedAt =
@@ -233,25 +357,84 @@ async function syncEdgeBatch(
   );
 }
 
-/*
- * Delete records that were not present in the latest complete
- * Firestore snapshot. Cleanup only runs after every node and
- * relationship batch has completed successfully.
- */
+async function syncEdges(
+  edges,
+  syncId
+) {
+  const grouped =
+    new Map();
+
+  edges.forEach(
+    (edge) => {
+      if (
+        !grouped.has(
+          edge.relationship
+        )
+      ) {
+        grouped.set(
+          edge.relationship,
+          []
+        );
+      }
+
+      grouped
+        .get(
+          edge.relationship
+        )
+        .push(edge);
+    }
+  );
+
+  for (
+    const [
+      relationshipType,
+      relationshipEdges,
+    ] of grouped.entries()
+  ) {
+    for (
+      const batch of
+      splitIntoBatches(
+        relationshipEdges,
+        EDGE_BATCH_SIZE
+      )
+    ) {
+      await syncRelationshipGroup({
+        relationshipType,
+        edges:
+          batch,
+        syncId,
+      });
+    }
+  }
+}
+
 async function removeStaleGraphData(
   syncId
 ) {
+  /*
+   * Remove old relationships from both the new native
+   * relationship model and the previous generic
+   * TREBLE_RELATIONSHIP model.
+   */
   const relationshipResult =
     await driver.executeQuery(
       `
       MATCH ()-[
-        relationship:TREBLE_RELATIONSHIP
+        relationship
       ]->()
 
-      WHERE relationship.lastSyncId <>
-        $syncId
+      WHERE (
+        relationship.managedBy =
+          'treble-sync'
+        OR type(relationship) =
+          'TREBLE_RELATIONSHIP'
+      )
+      AND (
+        relationship.lastSyncId <>
+          $syncId
         OR relationship.lastSyncId
           IS NULL
+      )
 
       DELETE relationship
 
@@ -274,10 +457,18 @@ async function removeStaleGraphData(
         entity:TrebleEntity
       )
 
-      WHERE entity.lastSyncId <>
-        $syncId
+      WHERE (
+        entity.managedBy =
+          'treble-sync'
+        OR entity.managedBy
+          IS NULL
+      )
+      AND (
+        entity.lastSyncId <>
+          $syncId
         OR entity.lastSyncId
           IS NULL
+      )
 
       DETACH DELETE entity
 
@@ -371,18 +562,10 @@ async function syncGraphToNeo4j(
     );
   }
 
-  for (
-    const batch of
-    splitIntoBatches(
-      edges,
-      EDGE_BATCH_SIZE
-    )
-  ) {
-    await syncEdgeBatch(
-      batch,
-      syncId
-    );
-  }
+  await syncEdges(
+    edges,
+    syncId
+  );
 
   const cleanup =
     await removeStaleGraphData(
@@ -395,10 +578,23 @@ async function syncGraphToNeo4j(
 
   return {
     syncId,
+
     nodesSynced:
       nodes.length,
+
     relationshipsSynced:
       edges.length,
+
+    relationshipTypes:
+      [
+        ...new Set(
+          edges.map(
+            (edge) =>
+              edge.relationship
+          )
+        ),
+      ].sort(),
+
     ...cleanup,
   };
 }

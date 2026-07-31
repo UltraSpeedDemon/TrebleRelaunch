@@ -8489,50 +8489,400 @@ let neo4jSyncInterval = null;
  * Neo4j is the synchronized visual and relationship layer.
  */
 async function buildCompleteMusicGraph() {
+  /*
+   * Load every collection that contributes to the Treble
+   * music/social graph. Missing optional collections simply
+   * return an empty snapshot.
+   */
+  async function safeCollectionSnapshot(
+    collectionName
+  ) {
+    try {
+      return await db
+        .collection(collectionName)
+        .get();
+    } catch (error) {
+      console.warn(
+        `[Neo4j] Unable to read optional collection ${collectionName}:`,
+        error.message
+      );
+
+      return {
+        docs: [],
+        size: 0,
+      };
+    }
+  }
+
   const [
     tracksSnapshot,
     albumsSnapshot,
     artistsSnapshot,
     usersSnapshot,
-    edgesSnapshot,
+    storedEdgesSnapshot,
+    likesSnapshot,
+    reviewsSnapshot,
+    reviewRepliesSnapshot,
+    followsSnapshot,
+    followRequestsSnapshot,
+    recommendationSeedsSnapshot,
+    feedServedSnapshot,
+    recentlyViewedSnapshot,
+    musicSharesSnapshot,
+    postsSnapshot,
+    feedPostsSnapshot,
   ] = await Promise.all([
-    db
-      .collection(
-        MUSIC_TRACKS_COLLECTION
-      )
-      .get(),
+    safeCollectionSnapshot(
+      MUSIC_TRACKS_COLLECTION
+    ),
 
-    db
-      .collection(
-        MUSIC_ALBUMS_COLLECTION
-      )
-      .get(),
+    safeCollectionSnapshot(
+      MUSIC_ALBUMS_COLLECTION
+    ),
 
-    db
-      .collection(
-        MUSIC_ARTISTS_COLLECTION
-      )
-      .get(),
+    safeCollectionSnapshot(
+      MUSIC_ARTISTS_COLLECTION
+    ),
 
-    db
-      .collection("users")
-      .get(),
+    safeCollectionSnapshot("users"),
 
-    db
-      .collection(
-        MUSIC_GRAPH_EDGES_COLLECTION
-      )
-      .get(),
+    safeCollectionSnapshot(
+      MUSIC_GRAPH_EDGES_COLLECTION
+    ),
+
+    safeCollectionSnapshot("likes"),
+
+    safeCollectionSnapshot("reviews"),
+
+    safeCollectionSnapshot(
+      "reviewReplies"
+    ),
+
+    safeCollectionSnapshot("follows"),
+
+    safeCollectionSnapshot(
+      "followRequests"
+    ),
+
+    safeCollectionSnapshot(
+      "recommendationSeeds"
+    ),
+
+    safeCollectionSnapshot(
+      "feedServed"
+    ),
+
+    safeCollectionSnapshot(
+      "recentlyViewed"
+    ),
+
+    safeCollectionSnapshot(
+      MUSIC_SHARES_COLLECTION
+    ),
+
+    /*
+     * These are optional because the current Treble backend
+     * may not yet store posts in either collection.
+     */
+    safeCollectionSnapshot("posts"),
+
+    safeCollectionSnapshot("feedPosts"),
   ]);
 
-  const nodes = [];
+  const nodesById = new Map();
+  const edgesById = new Map();
+
+  function cleanGraphText(value) {
+    return String(
+      value === null ||
+      value === undefined
+        ? ""
+        : value
+    ).trim();
+  }
+
+  function serializeGraphTimestamp(
+    value
+  ) {
+    if (!value) {
+      return "";
+    }
+
+    if (
+      typeof value.toDate ===
+      "function"
+    ) {
+      return value
+        .toDate()
+        .toISOString();
+    }
+
+    if (
+      value instanceof Date
+    ) {
+      return value.toISOString();
+    }
+
+    const parsed =
+      new Date(value);
+
+    return Number.isNaN(
+      parsed.getTime()
+    )
+      ? ""
+      : parsed.toISOString();
+  }
+
+  function normalizeGraphType(
+    value,
+    fallback = "track"
+  ) {
+    const type =
+      cleanGraphText(
+        value || fallback
+      ).toLowerCase();
+
+    if (
+      type === "song"
+    ) {
+      return "track";
+    }
+
+    return type || fallback;
+  }
+
+  function graphNodeId(
+    type,
+    rawId
+  ) {
+    const cleanType =
+      normalizeGraphType(
+        type,
+        "entity"
+      );
+
+    const cleanId =
+      cleanGraphText(rawId);
+
+    return cleanId
+      ? `${cleanType}:${cleanId}`
+      : "";
+  }
+
+  function addNode({
+    id,
+    rawId = "",
+    type = "entity",
+    label = "",
+    image = "",
+    properties = {},
+  }) {
+    const cleanId =
+      cleanGraphText(id);
+
+    if (!cleanId) {
+      return null;
+    }
+
+    const cleanType =
+      normalizeGraphType(
+        type,
+        "entity"
+      );
+
+    const existing =
+      nodesById.get(cleanId) ||
+      {};
+
+    const node = {
+      ...existing,
+
+      id:
+        cleanId,
+
+      rawId:
+        cleanGraphText(
+          rawId ||
+          existing.rawId
+        ),
+
+      type:
+        cleanType,
+
+      label:
+        cleanGraphText(
+          label ||
+          existing.label ||
+          cleanId
+        ),
+
+      image:
+        cleanGraphText(
+          image ||
+          existing.image
+        ),
+
+      properties: {
+        ...(existing.properties ||
+          {}),
+        ...(properties || {}),
+      },
+    };
+
+    nodesById.set(
+      cleanId,
+      node
+    );
+
+    return node;
+  }
+
+  function ensureEntityNode({
+    type,
+    rawId,
+    label = "",
+    image = "",
+    properties = {},
+  }) {
+    const id =
+      graphNodeId(
+        type,
+        rawId
+      );
+
+    if (!id) {
+      return null;
+    }
+
+    return addNode({
+      id,
+      rawId,
+      type,
+      label:
+        label ||
+        `${normalizeGraphType(
+          type,
+          "entity"
+        )} ${rawId}`,
+      image,
+      properties,
+    });
+  }
+
+  function buildSyncEdgeId({
+    source,
+    relationship,
+    target,
+    suffix = "",
+  }) {
+    return crypto
+      .createHash("sha256")
+      .update(
+        [
+          source,
+          relationship,
+          target,
+          suffix,
+        ].join("|")
+      )
+      .digest("hex");
+  }
+
+  function addEdge({
+    id = "",
+    source,
+    target,
+    relationship,
+    weight = 1,
+    metadata = {},
+  }) {
+    const cleanSource =
+      cleanGraphText(source);
+
+    const cleanTarget =
+      cleanGraphText(target);
+
+    const cleanRelationship =
+      cleanGraphText(
+        relationship ||
+        "RELATED"
+      )
+        .toUpperCase()
+        .replace(
+          /[^A-Z0-9_]/g,
+          "_"
+        );
+
+    if (
+      !cleanSource ||
+      !cleanTarget ||
+      !cleanRelationship
+    ) {
+      return null;
+    }
+
+    if (
+      !nodesById.has(
+        cleanSource
+      ) ||
+      !nodesById.has(
+        cleanTarget
+      )
+    ) {
+      return null;
+    }
+
+    const edgeId =
+      cleanGraphText(id) ||
+      buildSyncEdgeId({
+        source:
+          cleanSource,
+        relationship:
+          cleanRelationship,
+        target:
+          cleanTarget,
+      });
+
+    const edge = {
+      id:
+        edgeId,
+
+      source:
+        cleanSource,
+
+      target:
+        cleanTarget,
+
+      relationship:
+        cleanRelationship,
+
+      weight:
+        Number(weight) || 1,
+
+      metadata:
+        metadata || {},
+    };
+
+    edgesById.set(
+      edgeId,
+      edge
+    );
+
+    return edge;
+  }
+
+  /*
+   * ======================================================
+   * CORE CATALOG NODES
+   * ======================================================
+   */
 
   artistsSnapshot.docs.forEach(
     (document) => {
       const data =
         document.data() || {};
 
-      nodes.push({
+      addNode({
         id:
           `artist:${document.id}`,
 
@@ -8551,6 +8901,16 @@ async function buildCompleteMusicGraph() {
           data.picture ||
           data.image ||
           "",
+
+        properties: {
+          source:
+            data.source ||
+            "deezer",
+
+          link:
+            data.link ||
+            "",
+        },
       });
     }
   );
@@ -8560,7 +8920,7 @@ async function buildCompleteMusicGraph() {
       const data =
         document.data() || {};
 
-      nodes.push({
+      addNode({
         id:
           `album:${document.id}`,
 
@@ -8579,6 +8939,33 @@ async function buildCompleteMusicGraph() {
           data.image ||
           data.coverArt ||
           "",
+
+        properties: {
+          artistId:
+            cleanGraphText(
+              data.artistId ||
+              data.artist?.id
+            ),
+
+          artistName:
+            cleanGraphText(
+              data.artistName ||
+              data.artist?.name
+            ),
+
+          releaseDate:
+            cleanGraphText(
+              data.releaseDate ||
+              data.release_date
+            ),
+
+          trackCount:
+            Number(
+              data.trackCount ||
+              data.nb_tracks ||
+              0
+            ),
+        },
       });
     }
   );
@@ -8588,7 +8975,7 @@ async function buildCompleteMusicGraph() {
       const data =
         document.data() || {};
 
-      nodes.push({
+      addNode({
         id:
           `track:${document.id}`,
 
@@ -8607,6 +8994,44 @@ async function buildCompleteMusicGraph() {
           data.image ||
           data.coverArt ||
           "",
+
+        properties: {
+          artistId:
+            cleanGraphText(
+              data.artistId ||
+              data.artist?.id
+            ),
+
+          artistName:
+            cleanGraphText(
+              data.artistName ||
+              data.artist?.name
+            ),
+
+          albumId:
+            cleanGraphText(
+              data.albumId ||
+              data.album?.id
+            ),
+
+          albumTitle:
+            cleanGraphText(
+              data.albumTitle ||
+              data.album?.title
+            ),
+
+          preview:
+            cleanGraphText(
+              data.preview ||
+              data.previewUrl ||
+              data.playbackUrl
+            ),
+
+          duration:
+            Number(
+              data.duration || 0
+            ),
+        },
       });
     }
   );
@@ -8616,7 +9041,7 @@ async function buildCompleteMusicGraph() {
       const data =
         document.data() || {};
 
-      nodes.push({
+      addNode({
         id:
           `user:${document.id}`,
 
@@ -8630,6 +9055,7 @@ async function buildCompleteMusicGraph() {
           data.username ||
           data.displayName ||
           data.name ||
+          data.email ||
           "User",
 
         image:
@@ -8638,63 +9064,1634 @@ async function buildCompleteMusicGraph() {
           data.profilePicture ||
           data.photoURL ||
           "",
+
+        properties: {
+          username:
+            cleanGraphText(
+              data.username
+            ),
+
+          displayName:
+            cleanGraphText(
+              data.displayName
+            ),
+
+          isPublic:
+            data.isPublic !==
+            false,
+
+          followersCount:
+            Number(
+              data.followersCount ||
+              0
+            ),
+
+          followingCount:
+            Number(
+              data.followingCount ||
+              0
+            ),
+        },
       });
     }
   );
 
-  const nodeIds =
-    new Set(
-      nodes.map(
-        (node) => node.id
-      )
-    );
+  /*
+   * Ensure catalog hierarchy exists even when an older
+   * Firestore graph-edge record has not been created yet.
+   */
+  albumsSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
 
-  let skippedEdges = 0;
+      const artistId =
+        cleanGraphText(
+          data.artistId ||
+          data.artist?.id
+        );
 
-  const edges =
-    edgesSnapshot.docs
-      .map((document) => {
-        const data =
-          document.data() || {};
+      if (artistId) {
+        ensureEntityNode({
+          type:
+            "artist",
+          rawId:
+            artistId,
+          label:
+            data.artistName ||
+            data.artist?.name ||
+            "Artist",
+        });
 
-        return {
-          id:
-            document.id,
-
+        addEdge({
           source:
-            `${data.fromType}:${data.fromId}`,
-
+            `artist:${artistId}`,
           target:
-            `${data.toType}:${data.toId}`,
-
+            `album:${document.id}`,
           relationship:
-            data.relationship ||
-            "RELATED",
+            "CREATED",
+          metadata: {
+            source:
+              "catalog",
+          },
+        });
+      }
+    }
+  );
 
-          weight:
-            Number(
-              data.weight || 1
+  tracksSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const artistId =
+        cleanGraphText(
+          data.artistId ||
+          data.artist?.id
+        );
+
+      const albumId =
+        cleanGraphText(
+          data.albumId ||
+          data.album?.id
+        );
+
+      if (artistId) {
+        ensureEntityNode({
+          type:
+            "artist",
+          rawId:
+            artistId,
+          label:
+            data.artistName ||
+            data.artist?.name ||
+            "Artist",
+        });
+
+        addEdge({
+          source:
+            `artist:${artistId}`,
+          target:
+            `track:${document.id}`,
+          relationship:
+            "PERFORMED",
+          metadata: {
+            source:
+              "catalog",
+          },
+        });
+
+        /*
+         * Reverse direction for easy Song -> Artist browsing.
+         */
+        addEdge({
+          source:
+            `track:${document.id}`,
+          target:
+            `artist:${artistId}`,
+          relationship:
+            "BY_ARTIST",
+          metadata: {
+            source:
+              "catalog",
+          },
+        });
+      }
+
+      if (albumId) {
+        ensureEntityNode({
+          type:
+            "album",
+          rawId:
+            albumId,
+          label:
+            data.albumTitle ||
+            data.album?.title ||
+            "Album",
+        });
+
+        addEdge({
+          source:
+            `album:${albumId}`,
+          target:
+            `track:${document.id}`,
+          relationship:
+            "CONTAINS",
+          metadata: {
+            source:
+              "catalog",
+          },
+        });
+
+        /*
+         * Reverse direction for easy Song -> Album browsing.
+         */
+        addEdge({
+          source:
+            `track:${document.id}`,
+          target:
+            `album:${albumId}`,
+          relationship:
+            "ON_ALBUM",
+          metadata: {
+            source:
+              "catalog",
+          },
+        });
+      }
+    }
+  );
+
+  /*
+   * ======================================================
+   * EXISTING GRAPH EDGES
+   * ======================================================
+   */
+
+  storedEdgesSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const source =
+        graphNodeId(
+          data.fromType,
+          data.fromId
+        );
+
+      const target =
+        graphNodeId(
+          data.toType,
+          data.toId
+        );
+
+      if (
+        !source ||
+        !target
+      ) {
+        return;
+      }
+
+      ensureEntityNode({
+        type:
+          data.fromType,
+        rawId:
+          data.fromId,
+      });
+
+      ensureEntityNode({
+        type:
+          data.toType,
+        rawId:
+          data.toId,
+      });
+
+      addEdge({
+        id:
+          document.id,
+
+        source,
+        target,
+
+        relationship:
+          data.relationship ||
+          "RELATED",
+
+        weight:
+          data.weight || 1,
+
+        metadata: {
+          ...(data.metadata ||
+            {}),
+
+          sourceCollection:
+            MUSIC_GRAPH_EDGES_COLLECTION,
+        },
+      });
+    }
+  );
+
+  /*
+   * ======================================================
+   * LIKES
+   * User -> Song / Album / Artist
+   * ======================================================
+   */
+
+  const likedMusicByUser =
+    new Map();
+
+  likesSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const userId =
+        cleanGraphText(
+          data.userId
+        );
+
+      const musicId =
+        cleanGraphText(
+          data.musicId ||
+          data.listenableId
+        );
+
+      const musicType =
+        normalizeGraphType(
+          data.type,
+          "track"
+        );
+
+      if (
+        !userId ||
+        !musicId
+      ) {
+        return;
+      }
+
+      ensureEntityNode({
+        type:
+          "user",
+        rawId:
+          userId,
+      });
+
+      ensureEntityNode({
+        type:
+          musicType,
+        rawId:
+          musicId,
+        label:
+          data.name ||
+          `${musicType} ${musicId}`,
+        properties: {
+          artistName:
+            cleanGraphText(
+              data.artistName
+            ),
+        },
+      });
+
+      addEdge({
+        id:
+          `like:${document.id}`,
+
+        source:
+          `user:${userId}`,
+
+        target:
+          graphNodeId(
+            musicType,
+            musicId
+          ),
+
+        relationship:
+          "LIKED",
+
+        weight:
+          5,
+
+        metadata: {
+          createdAt:
+            serializeGraphTimestamp(
+              data.createdAt
             ),
 
-          metadata:
-            data.metadata || {},
-        };
-      })
-      .filter((edge) => {
-        const valid =
-          nodeIds.has(
-            edge.source
-          ) &&
-          nodeIds.has(
-            edge.target
-          );
+          name:
+            cleanGraphText(
+              data.name
+            ),
 
-        if (!valid) {
-          skippedEdges += 1;
+          artistName:
+            cleanGraphText(
+              data.artistName
+            ),
+        },
+      });
+
+      if (
+        musicType === "track"
+      ) {
+        if (
+          !likedMusicByUser.has(
+            userId
+          )
+        ) {
+          likedMusicByUser.set(
+            userId,
+            new Set()
+          );
         }
 
-        return valid;
+        likedMusicByUser
+          .get(userId)
+          .add(musicId);
+      }
+    }
+  );
+
+  /*
+   * ======================================================
+   * REVIEWS
+   * User -> Review -> Song/Album/Artist
+   * User -> REVIEWED -> music
+   * ======================================================
+   */
+
+  reviewsSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const userId =
+        cleanGraphText(
+          data.userId
+        );
+
+      const musicId =
+        cleanGraphText(
+          data.listenableId ||
+          data.musicId
+        );
+
+      const musicType =
+        normalizeGraphType(
+          data.type,
+          "track"
+        );
+
+      const reviewNodeId =
+        `review:${document.id}`;
+
+      addNode({
+        id:
+          reviewNodeId,
+
+        rawId:
+          document.id,
+
+        type:
+          "review",
+
+        label:
+          cleanGraphText(
+            data.message
+          ).slice(
+            0,
+            80
+          ) ||
+          `Review ${document.id}`,
+
+        properties: {
+          message:
+            cleanGraphText(
+              data.message
+            ),
+
+          rating:
+            Number(
+              data.rating || 0
+            ),
+
+          hearted:
+            data.hearted === true,
+
+          emojiJson:
+            JSON.stringify(
+              Array.isArray(
+                data.emoji
+              )
+                ? data.emoji
+                : []
+            ),
+
+          upvoteCount:
+            Array.isArray(
+              data.upvotedBy
+            )
+              ? data.upvotedBy.length
+              : 0,
+
+          createdAt:
+            serializeGraphTimestamp(
+              data.createdAt
+            ),
+
+          updatedAt:
+            serializeGraphTimestamp(
+              data.updatedAt
+            ),
+        },
       });
+
+      if (userId) {
+        ensureEntityNode({
+          type:
+            "user",
+          rawId:
+            userId,
+          label:
+            data.username ||
+            "User",
+        });
+
+        addEdge({
+          source:
+            `user:${userId}`,
+          target:
+            reviewNodeId,
+          relationship:
+            "AUTHORED",
+          metadata: {
+            contentType:
+              "review",
+          },
+        });
+      }
+
+      if (musicId) {
+        ensureEntityNode({
+          type:
+            musicType,
+          rawId:
+            musicId,
+        });
+
+        const musicNodeId =
+          graphNodeId(
+            musicType,
+            musicId
+          );
+
+        addEdge({
+          source:
+            reviewNodeId,
+          target:
+            musicNodeId,
+          relationship:
+            "REVIEWS",
+          metadata: {
+            rating:
+              Number(
+                data.rating || 0
+              ),
+            hearted:
+              data.hearted ===
+              true,
+          },
+        });
+
+        if (userId) {
+          addEdge({
+            id:
+              `reviewed:${document.id}`,
+
+            source:
+              `user:${userId}`,
+
+            target:
+              musicNodeId,
+
+            relationship:
+              "REVIEWED",
+
+            weight:
+              Math.max(
+                Number(
+                  data.rating || 0
+                ),
+                data.hearted ===
+                  true
+                  ? 5
+                  : 1
+              ),
+
+            metadata: {
+              reviewId:
+                document.id,
+
+              rating:
+                Number(
+                  data.rating || 0
+                ),
+
+              hearted:
+                data.hearted ===
+                true,
+            },
+          });
+        }
+      }
+
+      /*
+       * Upvoters also connect to the review.
+       */
+      if (
+        Array.isArray(
+          data.upvotedBy
+        )
+      ) {
+        data.upvotedBy.forEach(
+          (upvoterId) => {
+            const cleanUpvoterId =
+              cleanGraphText(
+                upvoterId
+              );
+
+            if (!cleanUpvoterId) {
+              return;
+            }
+
+            ensureEntityNode({
+              type:
+                "user",
+              rawId:
+                cleanUpvoterId,
+            });
+
+            addEdge({
+              source:
+                `user:${cleanUpvoterId}`,
+              target:
+                reviewNodeId,
+              relationship:
+                "UPVOTED",
+            });
+          }
+        );
+      }
+    }
+  );
+
+  reviewRepliesSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const userId =
+        cleanGraphText(
+          data.userId
+        );
+
+      const reviewId =
+        cleanGraphText(
+          data.reviewId ||
+          data.rid
+        );
+
+      const replyNodeId =
+        `reply:${document.id}`;
+
+      addNode({
+        id:
+          replyNodeId,
+
+        rawId:
+          document.id,
+
+        type:
+          "reply",
+
+        label:
+          cleanGraphText(
+            data.message ||
+            data.text
+          ).slice(
+            0,
+            80
+          ) ||
+          `Reply ${document.id}`,
+
+        properties: {
+          message:
+            cleanGraphText(
+              data.message ||
+              data.text
+            ),
+
+          createdAt:
+            serializeGraphTimestamp(
+              data.createdAt
+            ),
+        },
+      });
+
+      if (userId) {
+        ensureEntityNode({
+          type:
+            "user",
+          rawId:
+            userId,
+          label:
+            data.username ||
+            "User",
+        });
+
+        addEdge({
+          source:
+            `user:${userId}`,
+          target:
+            replyNodeId,
+          relationship:
+            "AUTHORED",
+          metadata: {
+            contentType:
+              "reply",
+          },
+        });
+      }
+
+      if (reviewId) {
+        ensureEntityNode({
+          type:
+            "review",
+          rawId:
+            reviewId,
+          label:
+            `Review ${reviewId}`,
+        });
+
+        addEdge({
+          source:
+            replyNodeId,
+          target:
+            `review:${reviewId}`,
+          relationship:
+            "REPLIES_TO",
+        });
+      }
+    }
+  );
+
+  /*
+   * ======================================================
+   * FOLLOWING + MUTUAL FRIENDS
+   * ======================================================
+   */
+
+  const followPairs =
+    new Set();
+
+  followsSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const followerId =
+        cleanGraphText(
+          data.followerId
+        );
+
+      const followedId =
+        cleanGraphText(
+          data.followedId
+        );
+
+      if (
+        !followerId ||
+        !followedId ||
+        followerId ===
+          followedId
+      ) {
+        return;
+      }
+
+      ensureEntityNode({
+        type:
+          "user",
+        rawId:
+          followerId,
+      });
+
+      ensureEntityNode({
+        type:
+          "user",
+        rawId:
+          followedId,
+      });
+
+      followPairs.add(
+        `${followerId}|${followedId}`
+      );
+
+      addEdge({
+        id:
+          `follow:${document.id}`,
+
+        source:
+          `user:${followerId}`,
+
+        target:
+          `user:${followedId}`,
+
+        relationship:
+          "FOLLOWS",
+
+        metadata: {
+          createdAt:
+            serializeGraphTimestamp(
+              data.createdAt
+            ),
+        },
+      });
+    }
+  );
+
+  const friendPairs =
+    new Set();
+
+  followPairs.forEach(
+    (pair) => {
+      const [
+        firstUserId,
+        secondUserId,
+      ] = pair.split("|");
+
+      if (
+        !followPairs.has(
+          `${secondUserId}|${firstUserId}`
+        )
+      ) {
+        return;
+      }
+
+      const pairKey =
+        [
+          firstUserId,
+          secondUserId,
+        ]
+          .sort()
+          .join("|");
+
+      if (
+        friendPairs.has(
+          pairKey
+        )
+      ) {
+        return;
+      }
+
+      friendPairs.add(
+        pairKey
+      );
+
+      addEdge({
+        source:
+          `user:${firstUserId}`,
+        target:
+          `user:${secondUserId}`,
+        relationship:
+          "FRIENDS_WITH",
+        metadata: {
+          mutual:
+            true,
+        },
+      });
+
+      addEdge({
+        source:
+          `user:${secondUserId}`,
+        target:
+          `user:${firstUserId}`,
+        relationship:
+          "FRIENDS_WITH",
+        metadata: {
+          mutual:
+            true,
+        },
+      });
+    }
+  );
+
+  /*
+   * Pending requests are useful graph connections.
+   * We intentionally do NOT create NOT_FOLLOWING edges:
+   * absence of FOLLOWS already means not following, and
+   * generating every missing pair would grow O(users²).
+   */
+  followRequestsSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const followerId =
+        cleanGraphText(
+          data.followerId ||
+          data.fromUserId ||
+          data.requesterId
+        );
+
+      const followedId =
+        cleanGraphText(
+          data.followedId ||
+          data.toUserId ||
+          data.requestedUserId
+        );
+
+      if (
+        !followerId ||
+        !followedId
+      ) {
+        return;
+      }
+
+      ensureEntityNode({
+        type:
+          "user",
+        rawId:
+          followerId,
+      });
+
+      ensureEntityNode({
+        type:
+          "user",
+        rawId:
+          followedId,
+      });
+
+      addEdge({
+        id:
+          `follow-request:${document.id}`,
+
+        source:
+          `user:${followerId}`,
+
+        target:
+          `user:${followedId}`,
+
+        relationship:
+          "REQUESTED_TO_FOLLOW",
+
+        metadata: {
+          status:
+            cleanGraphText(
+              data.status ||
+              "pending"
+            ),
+
+          createdAt:
+            serializeGraphTimestamp(
+              data.createdAt
+            ),
+        },
+      });
+    }
+  );
+
+  /*
+   * ======================================================
+   * SHARING
+   * User -> music
+   * User -> User
+   * ======================================================
+   */
+
+  musicSharesSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const fromUserId =
+        cleanGraphText(
+          data.fromUserId
+        );
+
+      const toUserId =
+        cleanGraphText(
+          data.toUserId
+        );
+
+      const itemId =
+        cleanGraphText(
+          data.itemId
+        );
+
+      const itemType =
+        normalizeGraphType(
+          data.type,
+          "track"
+        );
+
+      if (fromUserId) {
+        ensureEntityNode({
+          type:
+            "user",
+          rawId:
+            fromUserId,
+          label:
+            data.sender?.username ||
+            "User",
+        });
+      }
+
+      if (toUserId) {
+        ensureEntityNode({
+          type:
+            "user",
+          rawId:
+            toUserId,
+        });
+      }
+
+      if (itemId) {
+        ensureEntityNode({
+          type:
+            itemType,
+          rawId:
+            itemId,
+          label:
+            data.item?.title ||
+            data.item?.name ||
+            `${itemType} ${itemId}`,
+          image:
+            data.item?.image ||
+            data.item?.coverArt ||
+            "",
+        });
+      }
+
+      if (
+        fromUserId &&
+        toUserId
+      ) {
+        addEdge({
+          id:
+            `shared-with:${document.id}`,
+
+          source:
+            `user:${fromUserId}`,
+
+          target:
+            `user:${toUserId}`,
+
+          relationship:
+            "SHARED_WITH",
+
+          metadata: {
+            shareId:
+              document.id,
+
+            itemId,
+
+            itemType,
+
+            comment:
+              cleanGraphText(
+                data.comment
+              ),
+
+            createdAt:
+              serializeGraphTimestamp(
+                data.createdAt
+              ),
+          },
+        });
+      }
+
+      if (
+        fromUserId &&
+        itemId
+      ) {
+        addEdge({
+          id:
+            `shared-item:${document.id}`,
+
+          source:
+            `user:${fromUserId}`,
+
+          target:
+            graphNodeId(
+              itemType,
+              itemId
+            ),
+
+          relationship:
+            "SHARED",
+
+          weight:
+            3,
+
+          metadata: {
+            toUserId,
+            shareId:
+              document.id,
+          },
+        });
+      }
+
+      if (
+        toUserId &&
+        itemId
+      ) {
+        addEdge({
+          id:
+            `received-item:${document.id}`,
+
+          source:
+            `user:${toUserId}`,
+
+          target:
+            graphNodeId(
+              itemType,
+              itemId
+            ),
+
+          relationship:
+            "RECEIVED",
+
+          metadata: {
+            fromUserId,
+            shareId:
+              document.id,
+          },
+        });
+      }
+    }
+  );
+
+  /*
+   * ======================================================
+   * RECENTLY VIEWED
+   * ======================================================
+   */
+
+  recentlyViewedSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const userId =
+        cleanGraphText(
+          data.userId
+        );
+
+      const itemId =
+        cleanGraphText(
+          data.itemId ||
+          data.listenableId
+        );
+
+      const itemType =
+        normalizeGraphType(
+          data.type,
+          "track"
+        );
+
+      if (
+        !userId ||
+        !itemId
+      ) {
+        return;
+      }
+
+      ensureEntityNode({
+        type:
+          "user",
+        rawId:
+          userId,
+      });
+
+      ensureEntityNode({
+        type:
+          itemType,
+        rawId:
+          itemId,
+        label:
+          data.title ||
+          data.name ||
+          `${itemType} ${itemId}`,
+        image:
+          data.image ||
+          data.coverArt ||
+          "",
+      });
+
+      addEdge({
+        id:
+          `viewed:${document.id}`,
+
+        source:
+          `user:${userId}`,
+
+        target:
+          graphNodeId(
+            itemType,
+            itemId
+          ),
+
+        relationship:
+          "VIEWED",
+
+        metadata: {
+          viewedAt:
+            serializeGraphTimestamp(
+              data.viewedAt
+            ),
+        },
+      });
+    }
+  );
+
+  /*
+   * ======================================================
+   * RECOMMENDATION SEEDS
+   * User -> music used to build taste profile
+   * ======================================================
+   */
+
+  recommendationSeedsSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const userId =
+        cleanGraphText(
+          data.userId
+        );
+
+      const musicId =
+        cleanGraphText(
+          data.musicId
+        );
+
+      const musicType =
+        normalizeGraphType(
+          data.type,
+          "track"
+        );
+
+      if (
+        !userId ||
+        !musicId
+      ) {
+        return;
+      }
+
+      ensureEntityNode({
+        type:
+          "user",
+        rawId:
+          userId,
+      });
+
+      ensureEntityNode({
+        type:
+          musicType,
+        rawId:
+          musicId,
+        label:
+          data.name ||
+          `${musicType} ${musicId}`,
+        properties: {
+          artistName:
+            cleanGraphText(
+              data.artistName
+            ),
+        },
+      });
+
+      addEdge({
+        id:
+          `seed:${document.id}`,
+
+        source:
+          `user:${userId}`,
+
+        target:
+          graphNodeId(
+            musicType,
+            musicId
+          ),
+
+        relationship:
+          "TASTE_SEED",
+
+        weight:
+          data.reason ===
+          "favourite"
+            ? 5
+            : 3,
+
+        metadata: {
+          reason:
+            cleanGraphText(
+              data.reason ||
+              "like"
+            ),
+
+          createdAt:
+            serializeGraphTimestamp(
+              data.createdAt
+            ),
+
+          updatedAt:
+            serializeGraphTimestamp(
+              data.updatedAt
+            ),
+        },
+      });
+    }
+  );
+
+  /*
+   * ======================================================
+   * RECOMMENDATIONS ACTUALLY SERVED
+   * User -> Song
+   * ======================================================
+   */
+
+  feedServedSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const userId =
+        cleanGraphText(
+          data.userId
+        );
+
+      const musicId =
+        cleanGraphText(
+          data.musicId
+        );
+
+      const musicType =
+        normalizeGraphType(
+          data.type,
+          "track"
+        );
+
+      if (
+        !userId ||
+        !musicId
+      ) {
+        return;
+      }
+
+      ensureEntityNode({
+        type:
+          "user",
+        rawId:
+          userId,
+      });
+
+      ensureEntityNode({
+        type:
+          musicType,
+        rawId:
+          musicId,
+      });
+
+      const source =
+        cleanGraphText(
+          data.source ||
+          "recommendation"
+        ).toLowerCase();
+
+      const relationship =
+        source.includes(
+          "friend"
+        )
+          ? "FRIEND_RECOMMENDED"
+          : "RECOMMENDED";
+
+      addEdge({
+        id:
+          `served:${document.id}`,
+
+        source:
+          `user:${userId}`,
+
+        target:
+          graphNodeId(
+            musicType,
+            musicId
+          ),
+
+        relationship,
+
+        metadata: {
+          source,
+
+          servedAt:
+            serializeGraphTimestamp(
+              data.servedAt
+            ),
+        },
+      });
+    }
+  );
+
+  /*
+   * ======================================================
+   * DERIVED SIMILAR TASTE
+   *
+   * Users become related when they share liked songs.
+   * This is stored only when at least one common like exists.
+   * ======================================================
+   */
+
+  const likedUsers =
+    [
+      ...likedMusicByUser.keys(),
+    ];
+
+  for (
+    let firstIndex = 0;
+    firstIndex <
+      likedUsers.length;
+    firstIndex += 1
+  ) {
+    for (
+      let secondIndex =
+        firstIndex + 1;
+      secondIndex <
+        likedUsers.length;
+      secondIndex += 1
+    ) {
+      const firstUserId =
+        likedUsers[
+          firstIndex
+        ];
+
+      const secondUserId =
+        likedUsers[
+          secondIndex
+        ];
+
+      const firstLikes =
+        likedMusicByUser.get(
+          firstUserId
+        ) ||
+        new Set();
+
+      const secondLikes =
+        likedMusicByUser.get(
+          secondUserId
+        ) ||
+        new Set();
+
+      const sharedTrackIds =
+        [
+          ...firstLikes,
+        ].filter(
+          (trackId) =>
+            secondLikes.has(
+              trackId
+            )
+        );
+
+      if (
+        sharedTrackIds.length ===
+        0
+      ) {
+        continue;
+      }
+
+      const similarityWeight =
+        sharedTrackIds.length;
+
+      addEdge({
+        source:
+          `user:${firstUserId}`,
+        target:
+          `user:${secondUserId}`,
+        relationship:
+          "SIMILAR_TASTE",
+        weight:
+          similarityWeight,
+        metadata: {
+          sharedLikeCount:
+            sharedTrackIds.length,
+
+          sharedTrackIds:
+            sharedTrackIds.slice(
+              0,
+              50
+            ),
+        },
+      });
+
+      addEdge({
+        source:
+          `user:${secondUserId}`,
+        target:
+          `user:${firstUserId}`,
+        relationship:
+          "SIMILAR_TASTE",
+        weight:
+          similarityWeight,
+        metadata: {
+          sharedLikeCount:
+            sharedTrackIds.length,
+
+          sharedTrackIds:
+            sharedTrackIds.slice(
+              0,
+              50
+            ),
+        },
+      });
+    }
+  }
+
+  /*
+   * ======================================================
+   * OPTIONAL POSTS
+   *
+   * Supports either posts or feedPosts without breaking when
+   * those collections are empty or use slightly different
+   * field names.
+   * ======================================================
+   */
+
+  const allPostDocuments = [
+    ...postsSnapshot.docs,
+    ...feedPostsSnapshot.docs,
+  ];
+
+  allPostDocuments.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      const userId =
+        cleanGraphText(
+          data.userId ||
+          data.uid ||
+          data.authorId ||
+          data.createdBy
+        );
+
+      const musicId =
+        cleanGraphText(
+          data.musicId ||
+          data.listenableId ||
+          data.itemId ||
+          data.targetId
+        );
+
+      const musicType =
+        normalizeGraphType(
+          data.type ||
+          data.itemType,
+          "track"
+        );
+
+      const postNodeId =
+        `post:${document.id}`;
+
+      addNode({
+        id:
+          postNodeId,
+
+        rawId:
+          document.id,
+
+        type:
+          "post",
+
+        label:
+          cleanGraphText(
+            data.message ||
+            data.text ||
+            data.caption ||
+            data.content
+          ).slice(
+            0,
+            80
+          ) ||
+          `Post ${document.id}`,
+
+        properties: {
+          message:
+            cleanGraphText(
+              data.message ||
+              data.text ||
+              data.caption ||
+              data.content
+            ),
+
+          createdAt:
+            serializeGraphTimestamp(
+              data.createdAt
+            ),
+        },
+      });
+
+      if (userId) {
+        ensureEntityNode({
+          type:
+            "user",
+          rawId:
+            userId,
+        });
+
+        addEdge({
+          source:
+            `user:${userId}`,
+          target:
+            postNodeId,
+          relationship:
+            "AUTHORED",
+          metadata: {
+            contentType:
+              "post",
+          },
+        });
+      }
+
+      if (musicId) {
+        ensureEntityNode({
+          type:
+            musicType,
+          rawId:
+            musicId,
+        });
+
+        addEdge({
+          source:
+            postNodeId,
+          target:
+            graphNodeId(
+              musicType,
+              musicId
+            ),
+          relationship:
+            "ABOUT",
+        });
+
+        if (userId) {
+          addEdge({
+            source:
+              `user:${userId}`,
+            target:
+              graphNodeId(
+                musicType,
+                musicId
+              ),
+            relationship:
+              "POSTED_ABOUT",
+            metadata: {
+              postId:
+                document.id,
+            },
+          });
+        }
+      }
+    }
+  );
+
+  const nodes =
+    [
+      ...nodesById.values(),
+    ];
+
+  const edges =
+    [
+      ...edgesById.values(),
+    ];
 
   return {
     nodes,
@@ -8706,8 +10703,6 @@ async function buildCompleteMusicGraph() {
 
       edges:
         edges.length,
-
-      skippedEdges,
 
       tracks:
         tracksSnapshot.size,
@@ -8721,8 +10716,41 @@ async function buildCompleteMusicGraph() {
       users:
         usersSnapshot.size,
 
+      likes:
+        likesSnapshot.size,
+
+      reviews:
+        reviewsSnapshot.size,
+
+      reviewReplies:
+        reviewRepliesSnapshot.size,
+
+      follows:
+        followsSnapshot.size,
+
+      mutualFriendPairs:
+        friendPairs.size,
+
+      followRequests:
+        followRequestsSnapshot.size,
+
+      shares:
+        musicSharesSnapshot.size,
+
+      recentlyViewed:
+        recentlyViewedSnapshot.size,
+
+      recommendationSeeds:
+        recommendationSeedsSnapshot.size,
+
+      recommendationsServed:
+        feedServedSnapshot.size,
+
+      posts:
+        allPostDocuments.length,
+
       storedGraphEdges:
-        edgesSnapshot.size,
+        storedEdgesSnapshot.size,
     },
   };
 }
