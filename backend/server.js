@@ -8669,6 +8669,194 @@ async function buildCompleteMusicGraph() {
       : "";
   }
 
+  function isPlaceholderGraphLabel({
+    label,
+    id = "",
+    rawId = "",
+    type = "entity",
+  }) {
+    const value =
+      cleanGraphText(label);
+
+    if (!value) {
+      return true;
+    }
+
+    const normalizedValue =
+      value.toLowerCase();
+
+    const normalizedType =
+      normalizeGraphType(
+        type,
+        "entity"
+      );
+
+    const normalizedRawId =
+      cleanGraphText(
+        rawId
+      ).toLowerCase();
+
+    const normalizedId =
+      cleanGraphText(
+        id
+      ).toLowerCase();
+
+    const genericLabels =
+      new Set([
+        "user",
+        "artist",
+        "album",
+        "song",
+        "track",
+        "review",
+        "reply",
+        "post",
+        "treble entity",
+        "unknown",
+        "unknown user",
+        "unknown artist",
+        "unknown album",
+        "unknown song",
+        "unknown track",
+      ]);
+
+    if (
+      genericLabels.has(
+        normalizedValue
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      normalizedId &&
+      normalizedValue ===
+        normalizedId
+    ) {
+      return true;
+    }
+
+    if (
+      normalizedRawId &&
+      (
+        normalizedValue ===
+          normalizedRawId ||
+        normalizedValue ===
+          `${normalizedType} ${normalizedRawId}` ||
+        normalizedValue ===
+          `${normalizedType}:${normalizedRawId}`
+      )
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function graphLabelQuality({
+    label,
+    id = "",
+    rawId = "",
+    type = "entity",
+  }) {
+    const value =
+      cleanGraphText(label);
+
+    if (!value) {
+      return 0;
+    }
+
+    if (
+      isPlaceholderGraphLabel({
+        label:
+          value,
+        id,
+        rawId,
+        type,
+      })
+    ) {
+      return 1;
+    }
+
+    let score = 10;
+
+    if (
+      /[a-z]/i.test(value)
+    ) {
+      score += 5;
+    }
+
+    if (
+      /\s/.test(value)
+    ) {
+      score += 3;
+    }
+
+    if (
+      /[^a-z0-9_-]/i.test(value)
+    ) {
+      score += 2;
+    }
+
+    return score;
+  }
+
+  function chooseBetterGraphLabel({
+    incomingLabel,
+    existingLabel,
+    id,
+    rawId,
+    type,
+  }) {
+    const incoming =
+      cleanGraphText(
+        incomingLabel
+      );
+
+    const existing =
+      cleanGraphText(
+        existingLabel
+      );
+
+    const incomingScore =
+      graphLabelQuality({
+        label:
+          incoming,
+        id,
+        rawId,
+        type,
+      });
+
+    const existingScore =
+      graphLabelQuality({
+        label:
+          existing,
+        id,
+        rawId,
+        type,
+      });
+
+    if (
+      incomingScore >
+      existingScore
+    ) {
+      return incoming;
+    }
+
+    if (
+      existingScore >
+      incomingScore
+    ) {
+      return existing;
+    }
+
+    return (
+      existing ||
+      incoming ||
+      cleanGraphText(id)
+    );
+  }
+
   function addNode({
     id,
     rawId = "",
@@ -8694,6 +8882,43 @@ async function buildCompleteMusicGraph() {
       nodesById.get(cleanId) ||
       {};
 
+    const finalRawId =
+      cleanGraphText(
+        rawId ||
+        existing.rawId
+      );
+
+    const finalLabel =
+      chooseBetterGraphLabel({
+        incomingLabel:
+          label,
+        existingLabel:
+          existing.label,
+        id:
+          cleanId,
+        rawId:
+          finalRawId,
+        type:
+          cleanType,
+      });
+
+    const incomingImage =
+      cleanGraphText(image);
+
+    const existingImage =
+      cleanGraphText(
+        existing.image
+      );
+
+    const finalImage =
+      (
+        incomingImage &&
+        incomingImage.toLowerCase() !==
+          "none"
+      )
+        ? incomingImage
+        : existingImage;
+
     const node = {
       ...existing,
 
@@ -8701,26 +8926,16 @@ async function buildCompleteMusicGraph() {
         cleanId,
 
       rawId:
-        cleanGraphText(
-          rawId ||
-          existing.rawId
-        ),
+        finalRawId,
 
       type:
         cleanType,
 
       label:
-        cleanGraphText(
-          label ||
-          existing.label ||
-          cleanId
-        ),
+        finalLabel,
 
       image:
-        cleanGraphText(
-          image ||
-          existing.image
-        ),
+        finalImage,
 
       properties: {
         ...(existing.properties ||
@@ -8754,19 +8969,96 @@ async function buildCompleteMusicGraph() {
       return null;
     }
 
+    const normalizedType =
+      normalizeGraphType(
+        type,
+        "entity"
+      );
+
+    const existing =
+      nodesById.get(id);
+
+    const fallbackLabel =
+      `${normalizedType} ${rawId}`;
+
     return addNode({
       id,
       rawId,
-      type,
+      type:
+        normalizedType,
       label:
-        label ||
-        `${normalizeGraphType(
-          type,
-          "entity"
-        )} ${rawId}`,
+        cleanGraphText(label) ||
+        existing?.label ||
+        fallbackLabel,
       image,
       properties,
     });
+  }
+
+  function getGraphMetadataLabel({
+    type,
+    metadata = {},
+    fallback = "",
+  }) {
+    const normalizedType =
+      normalizeGraphType(
+        type,
+        "entity"
+      );
+
+    if (
+      normalizedType ===
+      "track"
+    ) {
+      return (
+        metadata.trackTitle ||
+        metadata.songTitle ||
+        metadata.title ||
+        metadata.name ||
+        fallback
+      );
+    }
+
+    if (
+      normalizedType ===
+      "album"
+    ) {
+      return (
+        metadata.albumTitle ||
+        metadata.title ||
+        metadata.name ||
+        fallback
+      );
+    }
+
+    if (
+      normalizedType ===
+      "artist"
+    ) {
+      return (
+        metadata.artistName ||
+        metadata.name ||
+        fallback
+      );
+    }
+
+    if (
+      normalizedType ===
+      "user"
+    ) {
+      return (
+        metadata.username ||
+        metadata.displayName ||
+        metadata.userName ||
+        fallback
+      );
+    }
+
+    return (
+      metadata.title ||
+      metadata.name ||
+      fallback
+    );
   }
 
   function buildSyncEdgeId({
@@ -9272,11 +9564,26 @@ async function buildCompleteMusicGraph() {
         return;
       }
 
+      const edgeMetadata =
+        data.metadata || {};
+
       ensureEntityNode({
         type:
           data.fromType,
         rawId:
           data.fromId,
+        label:
+          getGraphMetadataLabel({
+            type:
+              data.fromType,
+            metadata:
+              edgeMetadata,
+          }),
+        image:
+          edgeMetadata.fromImage ||
+          edgeMetadata.artistImage ||
+          edgeMetadata.image ||
+          "",
       });
 
       ensureEntityNode({
@@ -9284,6 +9591,19 @@ async function buildCompleteMusicGraph() {
           data.toType,
         rawId:
           data.toId,
+        label:
+          getGraphMetadataLabel({
+            type:
+              data.toType,
+            metadata:
+              edgeMetadata,
+          }),
+        image:
+          edgeMetadata.toImage ||
+          edgeMetadata.trackImage ||
+          edgeMetadata.albumImage ||
+          edgeMetadata.image ||
+          "",
       });
 
       addEdge({
@@ -10683,6 +11003,259 @@ async function buildCompleteMusicGraph() {
     }
   );
 
+  /*
+   * Hydrate any music nodes that still only have identifier-like
+   * fallback names. fetchDeezer() already checks memory, the
+   * permanent catalog, and the persistent Firestore cache first.
+   */
+  const unresolvedMusicNodes =
+    [
+      ...nodesById.values(),
+    ].filter((node) => {
+      return (
+        [
+          "track",
+          "album",
+          "artist",
+        ].includes(
+          node.type
+        ) &&
+        isPlaceholderGraphLabel({
+          label:
+            node.label,
+          id:
+            node.id,
+          rawId:
+            node.rawId,
+          type:
+            node.type,
+        })
+      );
+    });
+
+  async function hydrateGraphMusicNode(
+    node
+  ) {
+    const rawId =
+      cleanGraphText(
+        node.rawId
+      );
+
+    if (!rawId) {
+      return;
+    }
+
+    try {
+      const endpoint =
+        node.type === "track"
+          ? `/track/${encodeURIComponent(
+              rawId
+            )}`
+          : node.type === "album"
+            ? `/album/${encodeURIComponent(
+                rawId
+              )}`
+            : `/artist/${encodeURIComponent(
+                rawId
+              )}`;
+
+      const data =
+        await fetchDeezer(
+          endpoint
+        );
+
+      if (
+        !data ||
+        data.error
+      ) {
+        return;
+      }
+
+      if (
+        node.type === "track"
+      ) {
+        const normalized =
+          normalizeCatalogTrack(
+            data
+          );
+
+        if (normalized) {
+          addNode({
+            id:
+              node.id,
+            rawId,
+            type:
+              "track",
+            label:
+              normalized.title ||
+              normalized.name,
+            image:
+              normalized.image ||
+              normalized.coverArt,
+            properties: {
+              ...(node.properties ||
+                {}),
+              artistId:
+                normalized.artistId ||
+                "",
+              artistName:
+                normalized.artistName ||
+                "",
+              albumId:
+                normalized.albumId ||
+                "",
+              albumTitle:
+                normalized.albumTitle ||
+                "",
+              preview:
+                normalized.preview ||
+                "",
+              duration:
+                Number(
+                  normalized.duration ||
+                  0
+                ),
+            },
+          });
+        }
+
+        return;
+      }
+
+      if (
+        node.type === "album"
+      ) {
+        const normalized =
+          normalizeCatalogAlbum(
+            data,
+            data.artist
+          );
+
+        if (normalized) {
+          addNode({
+            id:
+              node.id,
+            rawId,
+            type:
+              "album",
+            label:
+              normalized.title ||
+              normalized.name,
+            image:
+              normalized.image ||
+              normalized.coverArt,
+            properties: {
+              ...(node.properties ||
+                {}),
+              artistId:
+                normalized.artistId ||
+                "",
+              artistName:
+                normalized.artistName ||
+                "",
+              releaseDate:
+                normalized.releaseDate ||
+                "",
+              trackCount:
+                Number(
+                  normalized.trackCount ||
+                  0
+                ),
+            },
+          });
+        }
+
+        return;
+      }
+
+      const normalized =
+        normalizeCatalogArtist(
+          data
+        );
+
+      if (normalized) {
+        addNode({
+          id:
+            node.id,
+          rawId,
+          type:
+            "artist",
+          label:
+            normalized.name ||
+            normalized.title,
+          image:
+            normalized.picture ||
+            "",
+          properties: {
+            ...(node.properties ||
+              {}),
+            link:
+              normalized.link ||
+              "",
+          },
+        });
+      }
+    } catch (error) {
+      console.warn(
+        `[Neo4j] Unable to hydrate ${node.type} ${rawId}:`,
+        error.message
+      );
+    }
+  }
+
+  const MUSIC_HYDRATION_CONCURRENCY =
+    8;
+
+  for (
+    let index = 0;
+    index <
+      unresolvedMusicNodes.length;
+    index +=
+      MUSIC_HYDRATION_CONCURRENCY
+  ) {
+    const batch =
+      unresolvedMusicNodes.slice(
+        index,
+        index +
+          MUSIC_HYDRATION_CONCURRENCY
+      );
+
+    await Promise.all(
+      batch.map(
+        hydrateGraphMusicNode
+      )
+    );
+  }
+
+  const unresolvedAfterHydration =
+    [
+      ...nodesById.values(),
+    ].filter((node) => {
+      return (
+        [
+          "track",
+          "album",
+          "artist",
+        ].includes(
+          node.type
+        ) &&
+        isPlaceholderGraphLabel({
+          label:
+            node.label,
+          id:
+            node.id,
+          rawId:
+            node.rawId,
+          type:
+            node.type,
+        })
+      );
+    }).length;
+
+  console.log(
+    `[Neo4j] Music name hydration: ${unresolvedMusicNodes.length} attempted, ${unresolvedAfterHydration} still unresolved`
+  );
+
   const nodes =
     [
       ...nodesById.values(),
@@ -10751,6 +11324,9 @@ async function buildCompleteMusicGraph() {
 
       storedGraphEdges:
         storedEdgesSnapshot.size,
+
+      unresolvedMusicNames:
+        unresolvedAfterHydration,
     },
   };
 }
