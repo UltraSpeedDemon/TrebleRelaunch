@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -88,7 +89,14 @@ export default function Feed({ navigation }) {
   const isDesktopWeb = isWeb && width >= 768;
   const isMobileWeb = isWeb && width < 768;
 
-  const isTablet = width >= 768 && width < 1100;
+  const isTablet =
+    width >= 768 &&
+    width < 1100;
+
+  const isWideDesktop =
+    isDesktopWeb &&
+    width >= 1180;
+
   const isCompact = width < 768;
 
   const [isLoading, setIsLoading] = useState(true);
@@ -102,6 +110,13 @@ export default function Feed({ navigation }) {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [notificationsCount, setNotificationsCount] = useState(0);
+
+  /*
+   * Home Feed filters. These only change what is visible;
+   * they do not request or discard feed data.
+   */
+  const [feedFilter, setFeedFilter] =
+    useState("all");
 
   const [likeLoading, setLikeLoading] = useState({});
 
@@ -2290,6 +2305,14 @@ export default function Feed({ navigation }) {
                   ]}
                 />
 
+                <View style={styles.mediaTypeBadge}>
+                  <Text style={styles.mediaTypeText}>
+                    {String(
+                      getItemType(item)
+                    ).toUpperCase()}
+                  </Text>
+                </View>
+
                 {getItemType(item) === "track" ? (
                   <TouchableOpacity
                     onPress={(event) => {
@@ -2572,6 +2595,354 @@ export default function Feed({ navigation }) {
       );
     }, [handleRefresh]);
 
+  const filteredFeed =
+    useMemo(() => {
+      if (feedFilter === "all") {
+        return combinedFeed;
+      }
+
+      return combinedFeed.filter(
+        (item) => {
+          const origin =
+            item?.origin ||
+            item?.item_info?.origin;
+
+          const isFriendActivity =
+            item?.class ===
+              "friend_review" ||
+            item?.class ===
+              "following_review" ||
+            item?.class === "share" ||
+            Boolean(item?.shared_by) ||
+            origin?.type === "friends";
+
+          if (
+            feedFilter === "friends"
+          ) {
+            return isFriendActivity;
+          }
+
+          return !isFriendActivity;
+        }
+      );
+    }, [
+      combinedFeed,
+      feedFilter,
+    ]);
+
+  const feedStats =
+    useMemo(() => {
+      let friendActivity = 0;
+      let recommendations = 0;
+      let liked = 0;
+
+      combinedFeed.forEach((item) => {
+        const origin =
+          item?.origin ||
+          item?.item_info?.origin;
+
+        const isFriendActivity =
+          item?.class ===
+            "friend_review" ||
+          item?.class ===
+            "following_review" ||
+          item?.class === "share" ||
+          Boolean(item?.shared_by) ||
+          origin?.type === "friends";
+
+        if (isFriendActivity) {
+          friendActivity += 1;
+        } else {
+          recommendations += 1;
+        }
+
+        if (getLikedStatus(item)) {
+          liked += 1;
+        }
+      });
+
+      return {
+        friendActivity,
+        recommendations,
+        liked,
+      };
+    }, [
+      combinedFeed,
+      getLikedStatus,
+    ]);
+
+  const renderFeedHeader =
+    useCallback(() => {
+      return (
+        <View style={styles.feedHeaderBlock}>
+          <View style={styles.homeHero}>
+            <View style={styles.homeHeroText}>
+              <View style={styles.homeKickerRow}>
+                <Icon
+                  name="home"
+                  size={16}
+                  color={
+                    colours.lightblue ||
+                    "#35afe5"
+                  }
+                />
+
+                <Text style={styles.homeKicker}>
+                  YOUR MUSIC HOME
+                </Text>
+              </View>
+
+              <Text style={styles.homeTitle}>
+                Home Feed
+              </Text>
+
+              <Text style={styles.homeSubtitle}>
+                Music picked for you,
+                reviews from your circle,
+                and songs your friends are
+                sharing right now.
+              </Text>
+            </View>
+
+            {isDesktopWeb ? (
+              <TouchableOpacity
+                style={styles.refreshFeedButton}
+                onPress={handleRefresh}
+                disabled={refreshing}
+                activeOpacity={0.82}
+              >
+                {refreshing ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <Icon
+                    name="refresh"
+                    size={19}
+                    color="#ffffff"
+                  />
+                )}
+
+                <Text
+                  style={
+                    styles.refreshFeedButtonText
+                  }
+                >
+                  New Mix
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <View style={styles.feedFilterBar}>
+            {[
+              {
+                key: "all",
+                label: "All",
+                icon: "view-stream",
+              },
+              {
+                key: "friends",
+                label: "Friends",
+                icon: "people-outline",
+              },
+              {
+                key: "for-you",
+                label: "For You",
+                icon: "auto-awesome",
+              },
+            ].map((option) => {
+              const active =
+                feedFilter === option.key;
+
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() =>
+                    setFeedFilter(
+                      option.key
+                    )
+                  }
+                  style={[
+                    styles.feedFilterButton,
+
+                    active &&
+                      styles.feedFilterButtonActive,
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <Icon
+                    name={option.icon}
+                    size={17}
+                    color={
+                      active
+                        ? "#ffffff"
+                        : "rgba(255,255,255,0.48)"
+                    }
+                  />
+
+                  <Text
+                    style={[
+                      styles.feedFilterText,
+
+                      active &&
+                        styles.feedFilterTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {filteredFeed.length === 0 &&
+          combinedFeed.length > 0 ? (
+            <View style={styles.filterEmptyCard}>
+              <Icon
+                name="filter-list-off"
+                size={24}
+                color="rgba(255,255,255,0.36)"
+              />
+
+              <Text
+                style={styles.filterEmptyText}
+              >
+                Nothing in this section yet.
+                Try another feed filter.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      );
+    }, [
+      combinedFeed.length,
+      feedFilter,
+      filteredFeed.length,
+      handleRefresh,
+      isDesktopWeb,
+      refreshing,
+    ]);
+
+  const renderDesktopRail = () => {
+    if (!isWideDesktop) {
+      return null;
+    }
+
+    return (
+      <View style={styles.desktopRail}>
+        <View style={styles.desktopRailCard}>
+          <Text style={styles.railEyebrow}>
+            YOUR FEED
+          </Text>
+
+          <Text style={styles.railTitle}>
+            Today on Treble
+          </Text>
+
+          <View style={styles.railStatRow}>
+            <View style={styles.railStat}>
+              <Text style={styles.railStatValue}>
+                {feedStats.friendActivity}
+              </Text>
+
+              <Text style={styles.railStatLabel}>
+                Friend posts
+              </Text>
+            </View>
+
+            <View style={styles.railStat}>
+              <Text style={styles.railStatValue}>
+                {feedStats.recommendations}
+              </Text>
+
+              <Text style={styles.railStatLabel}>
+                For you
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.railStatFull}>
+            <Icon
+              name="favorite"
+              size={18}
+              color="#ff526f"
+            />
+
+            <Text style={styles.railStatFullText}>
+              {feedStats.liked} songs liked
+              in this mix
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.desktopRailCard}>
+          <Text style={styles.railEyebrow}>
+            KEEP DISCOVERING
+          </Text>
+
+          {[
+            {
+              icon: "explore",
+              label: "Explore trending music",
+              route: "Explore",
+            },
+            {
+              icon: "auto-awesome",
+              label: "Swipe to discover",
+              route: "MusicSwiperTest",
+            },
+            {
+              icon: "people-outline",
+              label: "See your friends",
+              route: "FriendsList",
+            },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.route}
+              style={styles.railLink}
+              onPress={() =>
+                navigation.navigate(
+                  item.route
+                )
+              }
+              activeOpacity={0.8}
+            >
+              <View
+                style={styles.railLinkIcon}
+              >
+                <Icon
+                  name={item.icon}
+                  size={19}
+                  color={
+                    colours.lightblue ||
+                    "#35afe5"
+                  }
+                />
+              </View>
+
+              <Text style={styles.railLinkText}>
+                {item.label}
+              </Text>
+
+              <Icon
+                name="chevron-right"
+                size={19}
+                color="rgba(255,255,255,0.32)"
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.desktopRailHint}>
+          Scroll for more music. Your feed
+          loads continuously.
+        </Text>
+      </View>
+    );
+  };
+
     return (
     <View
       style={[
@@ -2653,92 +3024,15 @@ export default function Feed({ navigation }) {
         style={[
           styles.content,
           isDesktopWeb && styles.desktopContent,
+          isWideDesktop &&
+            styles.wideDesktopContent,
           isMobileWeb && styles.mobileWebContent,
         ]}
       >
-        {!isDesktopWeb ? (
-          <View style={styles.mobileHeaderSection}>
-            <View style={styles.mobileTitleRow}>
-              <View style={styles.headerTextContainer}>
-                <Text
-                  style={[
-                    styles.header,
-                    styles.mobileHeader,
-                  ]}
-                >
-                  Recent Feed
-                </Text>
-
-                <Text
-                  style={[
-                    styles.headerDescription,
-                    styles.mobileHeaderDescription,
-                  ]}
-                >
-                  Personalized Music, and Friend Activity.
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.notificationsButton}
-                onPress={() => navigation.navigate("Notifications")}
-              >
-                <Image
-                  source={require("../images/notificationsIcon2.png")}
-                  style={styles.notificationIcon}
-                />
-
-                {notificationsCount > 0 ? (
-                  <View style={styles.notificationBadge}>
-                    <Text style={styles.notificationBadgeText}>
-                      {notificationsCount > 99
-                        ? "99+"
-                        : notificationsCount}
-                    </Text>
-                  </View>
-                ) : null}
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View
-            style={[
-              styles.titleRow,
-              isWeb && styles.webTitleRow,
-            ]}
-          >
-            <View style={styles.feedTitleLine}>
-              <Text style={styles.header}>
-                Recent Feed
-              </Text>
-
-              <View style={styles.forYouBadge}>
-                <Icon
-                  name="auto-awesome"
-                  size={14}
-                  color={
-                    colours.lightblue ||
-                    "#35afe5"
-                  }
-                />
-
-                <Text style={styles.forYouBadgeText}>
-                  FOR YOU
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.headerDescription}>
-              Personalized music recommendations, and friend activity.
-            </Text>
-
-            <Text style={styles.refreshHint}>
-              This mix stays while you are here and refreshes when you return.
-            </Text>
-          </View>
-        )}
+        {renderDesktopRail()}
 
         {isLoading ? (
+
           <View style={styles.loadingContainer}>
             <ActivityIndicator
               size="large"
@@ -2755,8 +3049,9 @@ export default function Feed({ navigation }) {
           </View>
         ) : (
           <FlatList
-            data={combinedFeed}
+            data={filteredFeed}
             renderItem={renderFeedItem}
+            ListHeaderComponent={renderFeedHeader}
             keyExtractor={keyExtractor}
 
             /*
@@ -2771,11 +3066,16 @@ export default function Feed({ navigation }) {
             contentContainerStyle={[
               styles.feedContent,
               isWeb && styles.webFeedContent,
-              combinedFeed.length === 0 &&
+              filteredFeed.length === 0 &&
+                combinedFeed.length === 0 &&
                 styles.emptyFeedContent,
             ]}
 
-            ListEmptyComponent={renderEmptyFeed}
+            ListEmptyComponent={
+              combinedFeed.length === 0
+                ? renderEmptyFeed
+                : null
+            }
             ListFooterComponent={renderListFooter}
 
             refreshControl={
@@ -3160,10 +3460,14 @@ desktopBottomNavBar: {
 
     paddingTop: 18,
     paddingBottom: 0,
-    paddingLeft: 32,
-    paddingRight: 32,
+    paddingLeft: 28,
+    paddingRight: 28,
 
     overflow: "hidden",
+  },
+
+  wideDesktopContent: {
+    paddingRight: 332,
   },
 
   mobileWebContent: {
@@ -3177,8 +3481,8 @@ desktopBottomNavBar: {
     minHeight: 0,
 
     paddingTop: 80,
-    paddingBottom: 75,
-    paddingHorizontal: 14,
+    paddingBottom: 88,
+    paddingHorizontal: 10,
 
     overflow: "hidden",
   },
@@ -3297,7 +3601,7 @@ desktopBottomNavBar: {
     color: "rgba(255,255,255,0.42)",
     fontSize: 11,
     lineHeight: 16,
-    marginTop: 4,
+    marginTop: 0,
   },
 
   mobileHeader: {
@@ -3363,7 +3667,7 @@ desktopBottomNavBar: {
 
   feedContent: {
     flexGrow: 0,
-    paddingBottom: 120,
+    paddingBottom: 140,
   },
 
   webFeedContent: {
@@ -3376,34 +3680,400 @@ desktopBottomNavBar: {
     flexGrow: 1,
   },
 
+  feedHeaderBlock: {
+    width: "100%",
+    maxWidth: 720,
+
+    alignSelf: "center",
+
+    marginBottom: 16,
+  },
+
+  homeHero: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 18,
+  },
+
+  homeHeroText: {
+    flex: 1,
+    minWidth: 0,
+
+    paddingRight: 14,
+  },
+
+  homeKickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    gap: 6,
+
+    marginBottom: 5,
+  },
+
+  homeKicker: {
+    color:
+      colours.lightblue ||
+      "#35afe5",
+
+    fontSize: 9,
+    fontWeight: "900",
+
+    letterSpacing: 1.5,
+  },
+
+  homeTitle: {
+    color: "#ffffff",
+
+    fontSize: 32,
+    lineHeight: 39,
+
+    fontWeight: "900",
+  },
+
+  homeSubtitle: {
+    maxWidth: 560,
+
+    color:
+      "rgba(255,255,255,0.56)",
+
+    fontSize: 13,
+    lineHeight: 20,
+
+    marginTop: 5,
+  },
+
+  refreshFeedButton: {
+    minHeight: 40,
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+
+    gap: 7,
+
+    paddingHorizontal: 14,
+
+    borderRadius: 13,
+
+    backgroundColor:
+      colours.lightblue ||
+      "#35afe5",
+  },
+
+  refreshFeedButtonText: {
+    color: "#ffffff",
+
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  feedFilterBar: {
+    width: "100%",
+
+    flexDirection: "row",
+
+    padding: 5,
+    marginBottom: 16,
+
+    borderRadius: 16,
+
+    backgroundColor:
+      "rgba(255,255,255,0.035)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.065)",
+  },
+
+  feedFilterButton: {
+    flex: 1,
+
+    minHeight: 40,
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+
+    gap: 6,
+
+    borderRadius: 12,
+  },
+
+  feedFilterButtonActive: {
+    backgroundColor:
+      "rgba(53,175,229,0.17)",
+  },
+
+  feedFilterText: {
+    color:
+      "rgba(255,255,255,0.48)",
+
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  feedFilterTextActive: {
+    color: "#ffffff",
+  },
+
+  filterEmptyCard: {
+    minHeight: 110,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    paddingHorizontal: 20,
+
+    borderRadius: 16,
+
+    backgroundColor:
+      "rgba(255,255,255,0.035)",
+  },
+
+  filterEmptyText: {
+    color:
+      "rgba(255,255,255,0.48)",
+
+    fontSize: 12,
+    lineHeight: 18,
+
+    textAlign: "center",
+
+    marginTop: 7,
+  },
+
+  desktopRail: {
+    position: "absolute",
+
+    top: 4,
+    right: 26,
+
+    width: 278,
+
+    zIndex: 10,
+  },
+
+  desktopRailCard: {
+    width: "100%",
+
+    padding: 17,
+    marginBottom: 14,
+
+    borderRadius: 18,
+
+    backgroundColor:
+      "rgba(255,255,255,0.04)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.07)",
+  },
+
+  railEyebrow: {
+    color:
+      colours.lightblue ||
+      "#35afe5",
+
+    fontSize: 9,
+    fontWeight: "900",
+
+    letterSpacing: 1.2,
+
+    marginBottom: 5,
+  },
+
+  railTitle: {
+    color: "#ffffff",
+
+    fontSize: 18,
+    lineHeight: 23,
+
+    fontWeight: "900",
+
+    marginBottom: 14,
+  },
+
+  railStatRow: {
+    flexDirection: "row",
+
+    gap: 8,
+  },
+
+  railStat: {
+    flex: 1,
+
+    padding: 11,
+
+    borderRadius: 13,
+
+    backgroundColor:
+      "rgba(255,255,255,0.045)",
+  },
+
+  railStatValue: {
+    color: "#ffffff",
+
+    fontSize: 20,
+    fontWeight: "900",
+  },
+
+  railStatLabel: {
+    color:
+      "rgba(255,255,255,0.44)",
+
+    fontSize: 10,
+    lineHeight: 14,
+
+    marginTop: 2,
+  },
+
+  railStatFull: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    gap: 8,
+
+    marginTop: 10,
+    padding: 10,
+
+    borderRadius: 12,
+
+    backgroundColor:
+      "rgba(255,82,111,0.08)",
+  },
+
+  railStatFullText: {
+    flex: 1,
+
+    color:
+      "rgba(255,255,255,0.64)",
+
+    fontSize: 11,
+    lineHeight: 16,
+  },
+
+  railLink: {
+    minHeight: 49,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    paddingHorizontal: 5,
+
+    borderBottomWidth: 1,
+    borderBottomColor:
+      "rgba(255,255,255,0.055)",
+  },
+
+  railLinkIcon: {
+    width: 34,
+    height: 34,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 11,
+
+    backgroundColor:
+      "rgba(53,175,229,0.10)",
+
+    marginRight: 10,
+  },
+
+  railLinkText: {
+    flex: 1,
+
+    color:
+      "rgba(255,255,255,0.76)",
+
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  desktopRailHint: {
+    color:
+      "rgba(255,255,255,0.30)",
+
+    fontSize: 10,
+    lineHeight: 15,
+
+    textAlign: "center",
+
+    paddingHorizontal: 16,
+  },
+
+  mediaTypeBadge: {
+    position: "absolute",
+
+    top: 11,
+    left: 11,
+
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+
+    borderRadius: 8,
+
+    backgroundColor:
+      "rgba(0,0,0,0.72)",
+  },
+
+  mediaTypeText: {
+    color:
+      colours.lightblue ||
+      "#35afe5",
+
+    fontSize: 8,
+    fontWeight: "900",
+
+    letterSpacing: 0.7,
+  },
+
   /* =========================================================
      FEED CARDS
   ========================================================= */
 
   card: {
     width: "100%",
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 18,
+
+    marginBottom: 18,
+    padding: 0,
+
+    overflow: "hidden",
+
+    borderRadius: 22,
+
     backgroundColor:
-      colours.foreground,
+      "rgba(255,255,255,0.045)",
+
     borderWidth: 1,
+
     shadowColor: "#000000",
+
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 8,
     },
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    elevation: 3,
+
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+
+    elevation: 4,
   },
 
   webCard: {
     width: "100%",
-    maxWidth: 760,
+    maxWidth: 720,
+
     alignSelf: "center",
-    padding: 22,
-    borderRadius: 20,
+
+    borderRadius: 22,
   },
 
   tabletCard: {
@@ -3411,8 +4081,11 @@ desktopBottomNavBar: {
   },
 
   compactCard: {
-    padding: 14,
-    borderRadius: 14,
+    borderRadius: 16,
+  },
+
+  compactMusicLayout: {
+    alignItems: "stretch",
   },
 
   cardHeader: {
@@ -3421,7 +4094,14 @@ desktopBottomNavBar: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 18,
+    marginBottom: 0,
+
+    paddingHorizontal: 16,
+    paddingTop: 15,
+    paddingBottom: 13,
+
+    backgroundColor:
+      "rgba(0,0,0,0.16)",
   },
 
   contextHeadingRow: {
@@ -3463,25 +4143,38 @@ desktopBottomNavBar: {
 
   actionButtons: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 17,
+    alignItems: "center",
+
+    gap: 8,
   },
 
   actionButton: {
     minWidth: 42,
+
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
+
+    gap: 5,
+
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+
+    borderRadius: 11,
+
+    backgroundColor:
+      "rgba(255,255,255,0.055)",
   },
 
   actionIcon: {
-    width: 28,
-    height: 28,
+    width: 20,
+    height: 20,
     resizeMode: "contain",
   },
 
   actionLoader: {
-    width: 28,
-    height: 28,
+    width: 20,
+    height: 20,
   },
 
   actionText: {
@@ -3493,31 +4186,38 @@ desktopBottomNavBar: {
 
   musicLayout: {
     width: "100%",
-    alignItems: "center",
-  },
 
-  compactMusicLayout: {
-    alignItems: "center",
+    alignItems: "stretch",
   },
 
   imageContainer: {
     position: "relative",
+
+    width: "100%",
+
     alignItems: "center",
     justifyContent: "center",
+
+    backgroundColor:
+      "rgba(255,255,255,0.035)",
   },
 
   postImage: {
-    width: 280,
-    height: 280,
-    maxWidth: "100%",
-    borderRadius: 14,
+    width: "100%",
+    maxWidth: 420,
+    aspectRatio: 1,
+
+    borderRadius: 0,
+
     resizeMode: "cover",
-    backgroundColor: "rgba(255,255,255,0.05)",
+
+    backgroundColor:
+      "rgba(255,255,255,0.05)",
   },
 
   compactPostImage: {
-    width: 230,
-    height: 230,
+    width: "100%",
+    maxWidth: "100%",
   },
 
   playButton: {
@@ -3540,9 +4240,12 @@ desktopBottomNavBar: {
 
   songInformation: {
     width: "100%",
-    alignItems: "center",
-    paddingTop: 14,
-    paddingHorizontal: 10,
+
+    alignItems: "flex-start",
+
+    paddingHorizontal: 17,
+    paddingTop: 15,
+    paddingBottom: 16,
   },
 
   postTitle: {
@@ -3550,14 +4253,14 @@ desktopBottomNavBar: {
     fontSize: 21,
     lineHeight: 27,
     fontWeight: "800",
-    textAlign: "center",
+    textAlign: "left",
   },
 
   postAlbum: {
     color: "rgba(255,255,255,0.68)",
     fontSize: 15,
     lineHeight: 20,
-    textAlign: "center",
+    textAlign: "left",
     marginTop: 3,
   },
 
@@ -3565,7 +4268,7 @@ desktopBottomNavBar: {
     color: "rgba(255,255,255,0.48)",
     fontSize: 14,
     lineHeight: 19,
-    textAlign: "center",
+    textAlign: "left",
     marginTop: 2,
   },
 
@@ -3577,10 +4280,19 @@ desktopBottomNavBar: {
     width: "100%",
     flexDirection: "row",
     alignItems: "flex-start",
-    marginTop: 18,
-    padding: 13,
-    borderRadius: 12,
-    backgroundColor: colours.foreground2,
+    marginTop: 0,
+
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+
+    borderTopWidth: 1,
+    borderTopColor:
+      "rgba(255,255,255,0.07)",
+
+    borderRadius: 0,
+
+    backgroundColor:
+      "rgba(0,0,0,0.12)",
   },
 
   reviewAvatar: {
