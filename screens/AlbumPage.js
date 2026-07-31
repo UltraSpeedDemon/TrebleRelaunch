@@ -1902,6 +1902,7 @@ export default function AlbumPage({ route, navigation }) {
                   <View
                     style={[
                       styles.detailReviewToolbar,
+                      styles.detailReviewToolbarSpacing,
                       isCompact &&
                         styles.detailReviewToolbarCompact,
                     ]}
@@ -1919,19 +1920,24 @@ export default function AlbumPage({ route, navigation }) {
                           handleToggleFavourite();
                         }}
                       >
-                        <Image
-                          source={
-                            favourite
-                              ? require("../images/whiteFullHeart.png")
-                              : require("../images/whiteOpenHeart.png")
-                          }
-                          style={styles.detailFavouriteIcon}
-                        />
+                        <MaterialIcons
+                        name={
+                          favourite
+                            ? "bookmark"
+                            : "bookmark-border"
+                        }
+                        size={31}
+                        color={
+                          favourite
+                            ? colours.lightblue
+                            : "#ffffff"
+                        }
+                      />
                       </TouchableOpacity>
 
                       <Text style={styles.detailFavouriteLabel}>
-                        Favourite
-                      </Text>
+                      Save
+                    </Text>
                     </View>
 
                     <View
@@ -2032,7 +2038,7 @@ export default function AlbumPage({ route, navigation }) {
                   <View style={styles.reviewInputRow}>
                     <TextInput
                       style={styles.reviewInput}
-                      placeholder="Add an album review..."
+                      placeholder="Write a review — choose Save, stars, and a reaction first..."
                       placeholderTextColor="#888888"
                       value={review}
                       onChangeText={setReview}
@@ -3939,6 +3945,15 @@ desktopBottomNavBar: {
 
     borderColor:
       colours.lightblue,
+  },
+
+
+  /* =========================================================
+     REVIEW COMPOSER SPACING + SAVE CONTROL
+  ========================================================= */
+
+  detailReviewToolbarSpacing: {
+    marginTop: 30,
   },
 
 });

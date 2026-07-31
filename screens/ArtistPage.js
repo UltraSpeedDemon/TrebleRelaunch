@@ -1331,9 +1331,19 @@ export default function ArtistPage({ route, navigation }) {
                 </View>
 
                 {/* SONGS AND ALBUMS LINKS */}
-                <View style={styles.listenablesContainer}>
+                <View
+                  style={[
+                    styles.listenablesContainer,
+                    isCompact &&
+                      styles.listenablesContainerCompact,
+                  ]}
+                >
                   <TouchableOpacity
-                    style={styles.artistLinkRow}
+                    style={[
+                      styles.artistLinkRow,
+                      isCompact &&
+                        styles.artistLinkRowCompact,
+                    ]}
                     activeOpacity={0.8}
                     onPress={(event) => {
                       event?.stopPropagation?.();
@@ -1366,7 +1376,11 @@ export default function ArtistPage({ route, navigation }) {
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.artistLinkRow}
+                    style={[
+                      styles.artistLinkRow,
+                      isCompact &&
+                        styles.artistLinkRowCompact,
+                    ]}
                     activeOpacity={0.8}
                     onPress={(event) => {
                       event?.stopPropagation?.();
@@ -1404,6 +1418,7 @@ export default function ArtistPage({ route, navigation }) {
                   <View
                     style={[
                       styles.detailReviewToolbar,
+                      styles.detailReviewToolbarSpacing,
                       isCompact &&
                         styles.detailReviewToolbarCompact,
                     ]}
@@ -1421,19 +1436,24 @@ export default function ArtistPage({ route, navigation }) {
                           handleToggleFavourite();
                         }}
                       >
-                        <Image
-                          source={
-                            favourite
-                              ? require("../images/whiteFullHeart.png")
-                              : require("../images/whiteOpenHeart.png")
-                          }
-                          style={styles.detailFavouriteIcon}
-                        />
+                        <MaterialIcons
+                        name={
+                          favourite
+                            ? "bookmark"
+                            : "bookmark-border"
+                        }
+                        size={31}
+                        color={
+                          favourite
+                            ? colours.lightblue
+                            : "#ffffff"
+                        }
+                      />
                       </TouchableOpacity>
 
                       <Text style={styles.detailFavouriteLabel}>
-                        Favourite
-                      </Text>
+                      Save
+                    </Text>
                     </View>
 
                     <View
@@ -1534,7 +1554,7 @@ export default function ArtistPage({ route, navigation }) {
                   <View style={styles.reviewInputRow}>
                     <TextInput
                       style={styles.reviewInput}
-                      placeholder="Add an artist review..."
+                      placeholder="Write a review — choose Save, stars, and a reaction first..."
                       placeholderTextColor="#888888"
                       value={review}
                       onChangeText={setReview}
@@ -2081,13 +2101,33 @@ desktopBottomNavBar: {
   listenablesContainer: {
     width: "100%",
 
+    flexDirection: "row",
+    alignItems: "stretch",
+
     marginTop: 22,
 
     gap: 12,
   },
 
-  artistLinkRow: {
+  listenablesContainerCompact: {
+    flexDirection: "column",
+
+    gap: 10,
+  },
+
+  artistLinkRowCompact: {
     width: "100%",
+    minHeight: 74,
+
+    flexBasis: "auto",
+
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+
+  artistLinkRow: {
+    flex: 1,
+    minWidth: 0,
     minHeight: 68,
 
     flexDirection: "row",
@@ -3306,6 +3346,15 @@ desktopBottomNavBar: {
 
     borderColor:
       colours.lightblue,
+  },
+
+
+  /* =========================================================
+     REVIEW COMPOSER SPACING + SAVE CONTROL
+  ========================================================= */
+
+  detailReviewToolbarSpacing: {
+    marginTop: 30,
   },
 
 });

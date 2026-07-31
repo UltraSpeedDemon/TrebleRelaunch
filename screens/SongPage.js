@@ -1686,6 +1686,7 @@ const handlePlayPreview = async () => {
                 <View
                     style={[
                       styles.detailReviewToolbar,
+                      styles.detailReviewToolbarSpacing,
                       isCompact &&
                         styles.detailReviewToolbarCompact,
                     ]}
@@ -1703,18 +1704,23 @@ const handlePlayPreview = async () => {
                         handleToggleFavourite();
                       }}
                     >
-                      <Image
-                        source={
+                      <Icon
+                        name={
                           favourite
-                            ? require("../images/whiteFullHeart.png")
-                            : require("../images/whiteOpenHeart.png")
+                            ? "bookmark"
+                            : "bookmark-border"
                         }
-                        style={styles.detailFavouriteIcon}
+                        size={31}
+                        color={
+                          favourite
+                            ? colours.lightblue
+                            : "#ffffff"
+                        }
                       />
                     </TouchableOpacity>
 
                     <Text style={styles.detailFavouriteLabel}>
-                      Favourite
+                      Save
                     </Text>
                   </View>
 
@@ -1817,7 +1823,7 @@ const handlePlayPreview = async () => {
                 <View style={styles.reviewInputRow}>
                   <TextInput
                     style={styles.reviewInput}
-                    placeholder="Add a review..."
+                    placeholder="Write a review — choose Save, stars, and a reaction first..."
                     placeholderTextColor="#888888"
                     value={review}
                     onChangeText={setReview}
@@ -3719,6 +3725,15 @@ artist: {
     height: 82,
 
     borderRadius: 41,
+  },
+
+
+  /* =========================================================
+     REVIEW COMPOSER SPACING + SAVE CONTROL
+  ========================================================= */
+
+  detailReviewToolbarSpacing: {
+    marginTop: 30,
   },
 
 });
