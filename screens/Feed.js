@@ -56,7 +56,12 @@ const PAGE_SIZE = 10;
 const DOUBLE_TAP_DELAY = 300;
 
 const FEED_CACHE_KEY = "treble_feed_cache_v3";
-const FEED_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
+/*
+ * The visible feed stays in place until the user manually refreshes.
+ * Friend shares and friend-liked cards must not disappear while the
+ * user is still reading them.
+ */
+const FEED_CACHE_MAX_AGE_MS = null;
 
 const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
@@ -754,17 +759,15 @@ export default function Feed({ navigation }) {
           return false;
         }
 
-        const cacheAge =
-          Date.now() -
-          Number(
-            cached.savedAt || 0
-          );
-
         const safeCachedItems = cached.items.filter(
           (item) =>
             item?.liked !== true &&
             item?.item_info?.liked !== true
         );
+
+        if (safeCachedItems.length === 0) {
+          return false;
+        }
 
         setCombinedFeed(safeCachedItems);
 
@@ -775,10 +778,11 @@ export default function Feed({ navigation }) {
         setHasMore(true);
         setIsLoading(false);
 
-        return (
-          cacheAge <
-          FEED_CACHE_MAX_AGE_MS
-        );
+        /*
+         * Once restored, this feed remains active until the user
+         * explicitly presses Refresh Feed or pulls to refresh.
+         */
+        return true;
       } catch (error) {
         console.warn(
           "[Feed] Could not restore feed cache:",
@@ -827,24 +831,42 @@ export default function Feed({ navigation }) {
             refresh
           );
 
-        setCombinedFeed(
-          timelineItems
-        );
+        if (timelineItems.length > 0) {
+          setCombinedFeed(
+            timelineItems
+          );
 
-        setTimelineOffset(
-          timelineItems.length
-        );
+          setTimelineOffset(
+            timelineItems.length
+          );
 
-        setRecommendationsOffset(0);
+          setRecommendationsOffset(0);
 
-        setHasMore(
-          timelineItems.length >=
-          PAGE_SIZE
-        );
+          setHasMore(
+            timelineItems.length >=
+            PAGE_SIZE
+          );
 
-        await saveFeedCache(
-          timelineItems
-        );
+          await saveFeedCache(
+            timelineItems
+          );
+        } else if (
+          latestFeedRef.current.length > 0
+        ) {
+          /*
+           * Never blank the feed because of an empty, failed, or
+           * temporarily incomplete refresh response.
+           */
+          console.warn(
+            "[Feed] Refresh returned no cards; keeping the current feed."
+          );
+
+          setHasMore(true);
+        } else {
+          setCombinedFeed([]);
+          setTimelineOffset(0);
+          setHasMore(false);
+        }
       } catch (error) {
         console.error(
           "[Feed] Initial feed error:",
@@ -889,6 +911,10 @@ export default function Feed({ navigation }) {
       if (
         timelineItems.length === 0
       ) {
+        /*
+         * Keep the current feed intact. A later manual refresh can
+         * request a new recommendation mix.
+         */
         setHasMore(false);
         return;
       }
@@ -985,10 +1011,20 @@ export default function Feed({ navigation }) {
 
 
   const handleRefresh = useCallback(async () => {
+    if (initialRequestInFlight.current) {
+      return;
+    }
+
     setRefreshing(true);
     setHasMore(true);
+    setTimelineOffset(0);
+    setRecommendationsOffset(0);
 
     try {
+      /*
+       * Both the Refresh Feed button and pull-to-refresh call this
+       * same function. refresh=true asks the backend for a new mix.
+       */
       await fetchInitialFeed(
         true,
         false
@@ -1008,7 +1044,7 @@ export default function Feed({ navigation }) {
     let cancelled = false;
 
     const startFeed = async () => {
-      const cacheIsFresh =
+      const restoredFeed =
         await restoreFeedCache();
 
       if (cancelled) {
@@ -1016,22 +1052,13 @@ export default function Feed({ navigation }) {
       }
 
       /*
-       * Always refresh eventually, but a fresh cache gets a
-       * short delay so the screen can paint first.
+       * Do not silently replace an already-visible feed.
+       * Fetch a new one only when no cached feed exists.
        */
-      if (cacheIsFresh) {
-        setTimeout(() => {
-          if (!cancelled) {
-            fetchInitialFeed(
-              false,
-              false
-            );
-          }
-        }, 250);
-      } else {
-        fetchInitialFeed(
+      if (!restoredFeed) {
+        await fetchInitialFeed(
           false,
-          latestFeedRef.current.length === 0
+          true
         );
       }
     };
@@ -2389,6 +2416,10 @@ export default function Feed({ navigation }) {
             <Text style={styles.headerDescription}>
               Music selected for you and activity from your friends.
             </Text>
+
+            <Text style={styles.refreshHint}>
+              This mix stays here until you press Refresh Feed.
+            </Text>
           </View>
         )}
 
@@ -2945,6 +2976,13 @@ desktopBottomNavBar: {
     fontSize: 14,
     lineHeight: 20,
     marginTop: 3,
+  },
+
+  refreshHint: {
+    color: "rgba(255,255,255,0.42)",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
   },
 
   mobileHeader: {

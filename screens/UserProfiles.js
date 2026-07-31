@@ -1593,42 +1593,133 @@ const finalButtonLabel =
       [navigation]
     );
 
+
+  const openReviewSong =
+    useCallback(
+      async (review) => {
+        const reviewSong =
+          review?.song ||
+          review?.item_info ||
+          review?.track ||
+          {};
+
+        const trackId = String(
+          reviewSong?.id ||
+          reviewSong?.listenableId ||
+          reviewSong?.listenable_id ||
+          review?.listenableId ||
+          review?.listenable_id ||
+          review?.musicId ||
+          review?.music_id ||
+          ""
+        );
+
+        if (!trackId) {
+          Alert.alert(
+            "Unable to open song",
+            "This review does not have a valid track ID."
+          );
+          return;
+        }
+
+        let fullTrack = {
+          ...reviewSong,
+          id: trackId,
+          listenableId: trackId,
+          listenable_id: trackId,
+          type: "track",
+        };
+
+        try {
+          const response =
+            await getSongFromDeezer(
+              trackId
+            );
+
+          if (response?.ok) {
+            const deezerTrack =
+              await response.json();
+
+            fullTrack = {
+              ...reviewSong,
+              ...deezerTrack,
+
+              id: String(
+                deezerTrack?.id ||
+                trackId
+              ),
+
+              listenableId: String(
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                trackId
+              ),
+
+              listenable_id: String(
+                deezerTrack?.listenable_id ||
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                trackId
+              ),
+
+              type: "track",
+
+              preview:
+                deezerTrack?.preview ||
+                deezerTrack?.previewUrl ||
+                reviewSong?.preview ||
+                reviewSong?.previewUrl ||
+                "",
+
+              previewUrl:
+                deezerTrack?.previewUrl ||
+                deezerTrack?.preview ||
+                reviewSong?.previewUrl ||
+                reviewSong?.preview ||
+                "",
+            };
+          }
+        } catch (error) {
+          console.warn(
+            "[UserProfiles] Unable to hydrate review song before opening:",
+            error
+          );
+        }
+
+        navigation.navigate(
+          "SongPage",
+          {
+            track: fullTrack,
+          }
+        );
+      },
+      [navigation]
+    );
+
   const renderLikedSongsSection =
     useCallback(
       () => (
-        <View
-          style={
-            styles.cardSection
-          }
-        >
-          <View
-            style={
-              styles.sectionHeader
-            }
-          >
-            <View>
-              <Text
-                style={
-                  styles.sectionTitle
-                }
-              >
+        <View style={styles.cardSection}>
+          <View style={styles.sectionHeader}>
+            <View
+              style={
+                styles.sectionHeadingGroup
+              }
+            >
+              <Text style={styles.sectionTitle}>
                 Liked Songs
               </Text>
 
               <Text
                 style={
-                  styles.likedSongsSubtitle
+                  styles.sectionDescription
                 }
               >
-                Recently liked tracks
+                Songs they recently liked
               </Text>
             </View>
 
-            <Text
-              style={
-                styles.sectionCount
-              }
-            >
+            <Text style={styles.sectionCount}>
               {likedSongs.length}
             </Text>
           </View>
@@ -1649,75 +1740,62 @@ const finalButtonLabel =
             </View>
           ) : (
             <DraggableProfileRow
-              useNativeScroll={
-                !isDesktopWeb
-              }
+              useNativeScroll={!isDesktopWeb}
               contentStyle={
                 styles.horizontalLikedList
               }
             >
-              {likedSongs.map(
-                (song, index) => {
-                  const imageUri =
-                    song?.image ||
-                    song?.coverArt ||
-                    song?.album?.cover_xl ||
-                    song?.album?.cover_big ||
-                    song?.album?.cover_medium ||
-                    "";
+              {likedSongs.map((song) => {
+                const imageUri =
+                  song?.image ||
+                  song?.coverArt ||
+                  song?.album?.cover_xl ||
+                  song?.album?.cover_big ||
+                  "";
 
-                  return (
-                    <TouchableOpacity
-                      key={
-                        `liked-song-${song?.id || index}`
-                      }
-                      style={
-                        styles.likedSongCard
-                      }
-                      activeOpacity={0.82}
-                      onPress={() =>
-                        openLikedSong(song)
-                      }
-                    >
-                      {imageUri ? (
-                        <Image
-                          source={{
-                            uri: imageUri,
-                          }}
-                          style={
-                            styles.likedSongImage
-                          }
-                        />
-                      ) : (
-                        <View
-                          style={
-                            styles.likedSongPlaceholder
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.likedSongPlaceholderText
-                            }
-                          >
-                            ♪
-                          </Text>
-                        </View>
-                      )}
-
+                return (
+                  <TouchableOpacity
+                    key={String(song.id)}
+                    style={[
+                      styles.likedSongCard,
+                      isCompact &&
+                        styles.compactLikedSongCard,
+                    ]}
+                    activeOpacity={0.82}
+                    onPress={() =>
+                      openLikedSong(song)
+                    }
+                  >
+                    {imageUri ? (
+                      <Image
+                        source={{
+                          uri: imageUri,
+                        }}
+                        style={
+                          styles.likedSongImage
+                        }
+                      />
+                    ) : (
                       <View
                         style={
-                          styles.likedSongHeart
+                          styles.likedSongPlaceholder
                         }
                       >
                         <Text
                           style={
-                            styles.likedSongHeartText
+                            styles.likedSongPlaceholderText
                           }
                         >
-                          ♥
+                          ♪
                         </Text>
                       </View>
+                    )}
 
+                    <View
+                      style={
+                        styles.likedSongInfo
+                      }
+                    >
                       <Text
                         style={
                           styles.likedSongTitle
@@ -1737,17 +1815,32 @@ const finalButtonLabel =
                       >
                         {song?.artistName ||
                           song?.artist?.name ||
-                          "Unknown Artist"}
+                          ""}
                       </Text>
-                    </TouchableOpacity>
-                  );
-                }
-              )}
+                    </View>
+
+                    <View
+                      style={
+                        styles.likedSongHeartBadge
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.likedSongHeart
+                        }
+                      >
+                        ♥
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </DraggableProfileRow>
           )}
         </View>
       ),
       [
+        isCompact,
         isDesktopWeb,
         likedSongs,
         openLikedSong,
@@ -1813,12 +1906,16 @@ const finalButtonLabel =
             >
               {reviews.map(
                 (item, index) => (
-                  <View
+                  <TouchableOpacity
                     key={
                       `${title}-${item?.id || index}`
                     }
                     style={
                       styles.reviewSnippetCard
+                    }
+                    activeOpacity={0.9}
+                    onPress={() =>
+                      openReviewSong(item)
                     }
                   >
                     <ReviewCard
@@ -1842,7 +1939,7 @@ const finalButtonLabel =
                       showComments={false}
                       profileReviewMode
                     />
-                  </View>
+                  </TouchableOpacity>
                 )
               )}
             </DraggableProfileRow>
@@ -1855,6 +1952,7 @@ const finalButtonLabel =
         handleUpvote,
         isDesktopWeb,
         navigation,
+        openReviewSong,
       ]
     );
 
@@ -2436,10 +2534,14 @@ const finalButtonLabel =
                         item,
                         index
                       ) => (
-                        <View
+                        <TouchableOpacity
                           key={`activity-${item?.id || index}`}
                           style={
                             styles.activityReviewWrapper
+                          }
+                          activeOpacity={0.94}
+                          onPress={() =>
+                            openReviewSong(item)
                           }
                         >
                           <ReviewCard
@@ -2463,7 +2565,7 @@ const finalButtonLabel =
                             showComments={false}
                             profileReviewMode
                           />
-                        </View>
+                        </TouchableOpacity>
                       )
                     )}
                   </View>
@@ -3040,6 +3142,21 @@ const styles =
       marginBottom: 14,
     },
 
+    sectionHeadingGroup: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    sectionDescription: {
+      color:
+        "rgba(255,255,255,0.52)",
+
+      fontSize: 12,
+      lineHeight: 17,
+
+      marginTop: 3,
+    },
+
     sectionTitle: {
       color:
         colours.lightblue ||
@@ -3090,49 +3207,96 @@ const styles =
     likedSongCard: {
       position: "relative",
 
-      width: 160,
+      width: 188,
 
-      marginRight: 14,
+      flexShrink: 0,
+
+      marginRight: 13,
+
+      overflow: "hidden",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(53,175,229,0.42)",
+
+      borderRadius: 14,
+
+      backgroundColor:
+        "rgba(12,24,40,0.96)",
+
+      shadowColor:
+        colours.lightblue ||
+        "#35afe5",
+      shadowOffset: {
+        width: 0,
+        height: 5,
+      },
+      shadowOpacity: 0.16,
+      shadowRadius: 10,
+      elevation: 3,
+    },
+
+    compactLikedSongCard: {
+      width: 158,
     },
 
     likedSongImage: {
-      width: 160,
-      height: 160,
-
-      borderRadius: 14,
+      width: "100%",
+      height: 158,
 
       resizeMode: "cover",
 
       backgroundColor:
-        "rgba(255,255,255,0.08)",
+        "rgba(255,255,255,0.06)",
     },
 
     likedSongPlaceholder: {
-      width: 160,
-      height: 160,
+      width: "100%",
+      height: 158,
 
       alignItems: "center",
       justifyContent: "center",
 
-      borderRadius: 14,
-
       backgroundColor:
-        "rgba(255,255,255,0.07)",
+        "rgba(255,255,255,0.06)",
     },
 
     likedSongPlaceholderText: {
       color:
-        "rgba(255,255,255,0.7)",
+        "rgba(255,255,255,0.65)",
 
       fontSize: 42,
-      fontWeight: "700",
     },
 
-    likedSongHeart: {
+    likedSongInfo: {
+      paddingHorizontal: 12,
+      paddingTop: 11,
+      paddingBottom: 13,
+    },
+
+    likedSongTitle: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      lineHeight: 19,
+      fontWeight: "800",
+    },
+
+    likedSongArtist: {
+      color:
+        "rgba(255,255,255,0.54)",
+
+      fontSize: 12,
+      lineHeight: 17,
+
+      marginTop: 2,
+    },
+
+    likedSongHeartBadge: {
       position: "absolute",
 
-      top: 10,
-      right: 10,
+      top: 9,
+      right: 9,
 
       width: 30,
       height: 30,
@@ -3146,36 +3310,23 @@ const styles =
         "rgba(0,0,0,0.72)",
     },
 
-    likedSongHeartText: {
-      color: "#ff4f7b",
-
-      fontSize: 17,
-      lineHeight: 20,
-    },
-
-    likedSongTitle: {
-      color: "#ffffff",
-
-      fontSize: 14,
-      fontWeight: "800",
-
-      marginTop: 9,
-    },
-
-    likedSongArtist: {
+    likedSongHeart: {
       color:
-        "rgba(255,255,255,0.55)",
+        colours.lightblue ||
+        "#35afe5",
 
-      fontSize: 12,
-
-      marginTop: 3,
+      fontSize: 16,
+      lineHeight: 18,
     },
 
     reviewSnippetCard: {
-      width: 310,
+      width: 340,
       minHeight: 210,
 
-      marginRight: 14,
+      marginRight: 13,
+
+      borderRadius: 14,
+      overflow: "hidden",
     },
 
     sectionEmptyBox: {
