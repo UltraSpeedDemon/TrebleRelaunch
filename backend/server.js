@@ -4431,8 +4431,17 @@ async function createNotification({
   type,
   fromUserId,
   toUserId,
+
   targetId = null,
+  shareId = null,
+
+  itemId = null,
+  itemType = "track",
+  itemData = null,
+
   songTitle = "",
+  comment = "",
+
   dedupeKey = null,
 }) {
   const cleanFromUserId =
@@ -4463,10 +4472,9 @@ async function createNotification({
     {
       id: notificationRef.id,
 
-      type:
-        String(type)
-          .trim()
-          .toLowerCase(),
+      type: String(type)
+        .trim()
+        .toLowerCase(),
 
       fromUserId:
         cleanFromUserId,
@@ -4479,8 +4487,34 @@ async function createNotification({
           ? String(targetId)
           : null,
 
+      shareId:
+        shareId
+          ? String(shareId)
+          : null,
+
+      itemId:
+        itemId
+          ? String(itemId)
+          : null,
+
+      itemType:
+        String(itemType || "track")
+          .trim()
+          .toLowerCase(),
+
+      itemData:
+        itemData &&
+        typeof itemData === "object"
+          ? itemData
+          : null,
+
       songTitle:
         String(songTitle || ""),
+
+      comment:
+        String(comment || "")
+          .trim()
+          .slice(0, 500),
 
       read: false,
 
@@ -4497,7 +4531,6 @@ async function createNotification({
 
   return notificationRef.id;
 }
-
 async function deleteNotificationsMatching({
   type,
   fromUserId,
@@ -4784,16 +4817,26 @@ app.post(
         !result.alreadyFollowing
       ) {
         await createNotification({
-          type: "follow",
+          type: "music_share",
 
-          fromUserId:
-            followerId,
+          fromUserId,
+          toUserId,
 
-          toUserId:
-            followedId,
+          shareId: shareRef.id,
 
-          dedupeKey:
-            `follow_${followerId}_${followedId}`,
+          // This must be the music ID, not the share document ID.
+          targetId: itemId,
+          itemId,
+
+          itemType: type,
+          itemData: item,
+
+          songTitle:
+            item.title ||
+            item.name ||
+            "Shared music",
+
+          comment,
         });
       }
 

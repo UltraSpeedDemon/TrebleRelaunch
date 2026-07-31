@@ -58,8 +58,8 @@ const NOTIFICATION_TYPES = {
   FOLLOW_ACCEPTED:
     "follow_accepted",
 
-  SONG_SHARED:
-    "song_shared",
+  MUSIC_SHARED:
+    "music_share",
 };
 
 export default function Notifications({
@@ -260,15 +260,14 @@ export default function Notifications({
       }
 
       if (
-        cleanType ===
-          "song_shared" ||
-        cleanType ===
-          "shared_song" ||
-        cleanType ===
-          "songshare"
+        cleanType === "music_share" ||
+        cleanType === "music_shared" ||
+        cleanType === "song_shared" ||
+        cleanType === "shared_song" ||
+        cleanType === "songshare"
       ) {
         return NOTIFICATION_TYPES
-          .SONG_SHARED;
+          .MUSIC_SHARED;
       }
 
       return NOTIFICATION_TYPES
@@ -353,22 +352,59 @@ export default function Notifications({
             null,
 
           targetId:
-            String(
-              item?.targetId ||
-              item?.target_id ||
-              item?.songId ||
-              item?.song_id ||
-              ""
-            ),
+          String(
+            item?.itemId ||
+            item?.item_id ||
+            item?.songId ||
+            item?.song_id ||
+            item?.targetId ||
+            item?.target_id ||
+            ""
+          ),
 
-          songTitle:
-            String(
-              item?.songTitle ||
-              item?.song_title ||
-              item?.targetTitle ||
-              item?.target_title ||
-              ""
-            ),
+        shareId:
+          String(
+            item?.shareId ||
+            item?.share_id ||
+            ""
+          ),
+
+        itemType:
+          String(
+            item?.itemType ||
+            item?.item_type ||
+            item?.musicType ||
+            item?.music_type ||
+            "track"
+          )
+            .trim()
+            .toLowerCase(),
+
+        itemData:
+          item?.itemData ||
+          item?.item_data ||
+          item?.track ||
+          item?.musicItem ||
+          null,
+
+        songTitle:
+          String(
+            item?.songTitle ||
+            item?.song_title ||
+            item?.targetTitle ||
+            item?.target_title ||
+            item?.itemData?.title ||
+            item?.itemData?.name ||
+            ""
+          ),
+
+        comment:
+          String(
+            item?.comment ||
+            item?.message ||
+            item?.description ||
+            ""
+          ).trim(),
         };
       },
       [
@@ -1028,70 +1064,119 @@ export default function Notifications({
    * Notification message.
    */
   const getNotificationText =
-    useCallback((item) => {
-      switch (item.type) {
-        case NOTIFICATION_TYPES
-          .FOLLOW_REQUEST:
-          return "requested to follow you.";
+  useCallback((item) => {
+    switch (item.type) {
+      case NOTIFICATION_TYPES
+        .FOLLOW_REQUEST:
+        return "requested to follow you.";
 
-        case NOTIFICATION_TYPES
-          .FOLLOW_ACCEPTED:
-          return "accepted your follow request.";
+      case NOTIFICATION_TYPES
+        .FOLLOW_ACCEPTED:
+        return "accepted your follow request.";
 
-        case NOTIFICATION_TYPES
-          .SONG_SHARED:
-          return item.songTitle
-            ? `shared “${item.songTitle}” with you.`
-            : "shared a song with you.";
+      case NOTIFICATION_TYPES
+        .MUSIC_SHARED:
+        return item.songTitle
+          ? `shared “${item.songTitle}” with you.`
+          : "shared music with you.";
 
-        case NOTIFICATION_TYPES
-          .FOLLOW:
+      case NOTIFICATION_TYPES
+        .FOLLOW:
 
-        default:
-          return "started following you.";
-      }
-    }, []);
+      default:
+        return "started following you.";
+    }
+  }, []);
 
   /*
    * Open notification destination.
    */
   const handleNotificationPress =
-    useCallback(
-      (item) => {
-        if (
-          item.type ===
-            NOTIFICATION_TYPES
-              .SONG_SHARED &&
-          item.targetId
-        ) {
-          /*
-           * Change this screen name later
-           * if your song screen is named
-           * something different.
-           */
+  useCallback(
+    (item) => {
+      if (
+        item.type ===
+        NOTIFICATION_TYPES.MUSIC_SHARED
+      ) {
+        const musicItem =
+          item.itemData || {
+            id: item.targetId,
+            listenableId:
+              item.targetId,
+            listenable_id:
+              item.targetId,
+            type:
+              item.itemType ||
+              "track",
+            title:
+              item.songTitle ||
+              "Shared music",
+            name:
+              item.songTitle ||
+              "Shared music",
+          };
+
+        const musicType =
+          String(
+            item.itemType ||
+            musicItem.type ||
+            "track"
+          ).toLowerCase();
+
+        if (musicType === "artist") {
           navigation.navigate(
-            "ArtistListenables",
+            "ArtistPage",
             {
-              songId:
-                item.targetId,
+              artist:
+                musicItem,
             }
           );
 
           return;
         }
 
-        if (item.userId) {
+        if (musicType === "album") {
           navigation.navigate(
-            "UserProfiles",
+            "AlbumPage",
             {
-              userId:
-                item.userId,
+              album:
+                musicItem,
             }
           );
+
+          return;
         }
-      },
-      [navigation]
-    );
+
+        navigation.navigate(
+          "SongPage",
+          {
+            track: {
+              ...musicItem,
+
+              id:
+                musicItem.id ||
+                item.targetId,
+
+              type: "track",
+            },
+          }
+        );
+
+        return;
+      }
+
+      if (item.userId) {
+        navigation.navigate(
+          "UserProfiles",
+          {
+            userId:
+              item.userId,
+          }
+        );
+      }
+    },
+    [navigation]
+  );
 
   /*
    * Render one notification.
@@ -1177,6 +1262,14 @@ export default function Notifications({
                     item
                   )}
                 </Text>
+
+                {item.type ===
+                  NOTIFICATION_TYPES.MUSIC_SHARED &&
+                item.comment ? (
+                  <Text style={styles.sharedComment}>
+                    “{item.comment}”
+                  </Text>
+                ) : null}
 
                 {item.createdAt ? (
                   <Text
@@ -1280,8 +1373,12 @@ export default function Notifications({
                 >
                   {item.type ===
                   NOTIFICATION_TYPES
-                    .SONG_SHARED
-                    ? "View Song"
+                    .MUSIC_SHARED
+                    ? item.itemType === "artist"
+                      ? "View Artist"
+                      : item.itemType === "album"
+                        ? "View Album"
+                        : "View Song"
                     : "View Profile"}
                 </Text>
               </TouchableOpacity>
@@ -1877,6 +1974,14 @@ const styles =
       lineHeight: 22,
       fontWeight: "800",
     },
+
+    sharedComment: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 5,
+    fontStyle: "italic",
+  },
 
     timeText: {
       color:

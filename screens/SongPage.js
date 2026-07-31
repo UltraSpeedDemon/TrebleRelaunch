@@ -1140,7 +1140,7 @@ const handlePlayPreview = async () => {
                 <Animated.View
                   style={[
                     styles.modalContent,
-                    isDesktopWeb && styles.desktopModalContent,
+                    isDesktopWeb && styles.webModalContent,
                     {
                       transform: [
                         {
@@ -2299,43 +2299,50 @@ artist: {
   ========================================================= */
 
   modalKeyboardView: {
-    flex: 1,
-  },
-
-  modalOverlay: {
-    flex: 1,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    padding: 18,
-
-    backgroundColor: "rgba(0,0,0,0.76)",
-  },
-
-  modalContent: {
-    width: "100%",
-    maxHeight: "82%",
-
-    padding: 18,
-
-    borderRadius: 20,
-
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-
-    backgroundColor: colours.background,
-
-    shadowColor: "#000000",
-    shadowOffset: {
-      width: 0,
-      height: 8,
+      flex: 1,
+      width: "100%",
     },
-    shadowOpacity: 0.45,
-    shadowRadius: 18,
 
-    elevation: 12,
-  },
+    modalOverlay: {
+      flex: 1,
+      width: "100%",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 14,
+      paddingVertical: 18,
+      backgroundColor: "rgba(0,0,0,0.76)",
+    },
+
+    modalContent: {
+      width: "100%",
+      maxWidth: "100%",
+      maxHeight: "82%",
+
+      padding: 18,
+      borderRadius: 20,
+
+      backgroundColor: colours.background,
+
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.1)",
+
+      shadowColor: "#000000",
+      shadowOffset: {
+        width: 0,
+        height: 8,
+      },
+      shadowOpacity: 0.45,
+      shadowRadius: 18,
+
+      elevation: 12,
+    },
+
+    webModalContent: {
+      width: 520,
+      maxWidth: 520,
+      maxHeight: 650,
+      padding: 22,
+    },
 
   desktopModalContent: {
     width: 520,
