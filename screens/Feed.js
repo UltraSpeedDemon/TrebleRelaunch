@@ -52,8 +52,11 @@ import {
   getFollowRequests,
 } from "../providers/rest";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 const DOUBLE_TAP_DELAY = 300;
+
+const FEED_CACHE_KEY = "treble_feed_cache_v2";
+const FEED_CACHE_MAX_AGE_MS = 15 * 60 * 1000;
 
 const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
@@ -102,6 +105,9 @@ export default function Feed({ navigation }) {
   const [currentPreview, setCurrentPreview] = useState(null);
 
   const fetchedInitial = useRef(false);
+  const initialRequestInFlight = useRef(false);
+  const loadMoreRequestInFlight = useRef(false);
+  const latestFeedRef = useRef([]);
   const tapTimerRef = useRef(null);
   const viewedRecommendationIds = useRef(new Set());
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -118,6 +124,10 @@ export default function Feed({ navigation }) {
   const getItemInfo = useCallback((item) => {
     return item?.item_info || item || {};
   }, []);
+
+  useEffect(() => {
+    latestFeedRef.current = combinedFeed;
+  }, [combinedFeed]);
 
   const getItemId = useCallback((item) => {
     return (
@@ -460,6 +470,120 @@ export default function Feed({ navigation }) {
     ]
   );
 
+  const handlePlayItem = useCallback(
+    async (item) => {
+      const existingPreview =
+        getPreviewUrl(item);
+
+      if (existingPreview) {
+        await handlePlayPreview(
+          existingPreview
+        );
+        return;
+      }
+
+      const itemId =
+        getItemId(item);
+
+      if (
+        getItemType(item) !== "track" ||
+        !itemId
+      ) {
+        Alert.alert(
+          "Preview unavailable",
+          "This item does not have a music preview."
+        );
+        return;
+      }
+
+      try {
+        const response =
+          await getSongFromDeezer(
+            itemId
+          );
+
+        if (!response?.ok) {
+          throw new Error(
+            `Preview request failed with status ${response?.status}`
+          );
+        }
+
+        const deezerData =
+          await response.json();
+
+        const preview =
+          deezerData?.preview ||
+          deezerData?.previewUrl ||
+          deezerData?.playbackUrl ||
+          "";
+
+        if (!preview) {
+          Alert.alert(
+            "Preview unavailable",
+            "This item does not currently have a playable preview."
+          );
+          return;
+        }
+
+        setCombinedFeed((items) =>
+          items.map((feedItem) => {
+            if (
+              getItemId(feedItem) !==
+              itemId
+            ) {
+              return feedItem;
+            }
+
+            if (feedItem.item_info) {
+              return {
+                ...feedItem,
+                preview,
+                item_info: {
+                  ...feedItem.item_info,
+                  preview,
+                  previewUrl:
+                    preview,
+                  playbackUrl:
+                    preview,
+                },
+              };
+            }
+
+            return {
+              ...feedItem,
+              preview,
+              previewUrl:
+                preview,
+              playbackUrl:
+                preview,
+            };
+          })
+        );
+
+        await handlePlayPreview(
+          preview
+        );
+      } catch (error) {
+        console.error(
+          "[Feed] Lazy preview error:",
+          error
+        );
+
+        Alert.alert(
+          "Preview error",
+          "The music preview could not be loaded."
+        );
+      }
+    },
+    [
+      getItemId,
+      getItemType,
+      getPreviewUrl,
+      handlePlayPreview,
+    ]
+  );
+
+
   const fetchTimelineItems = useCallback(
     async (offset, refresh = false) => {
       const currentUser = auth.currentUser;
@@ -586,52 +710,136 @@ export default function Feed({ navigation }) {
     ]
   );
 
+  const saveFeedCache = useCallback(
+    async (items) => {
+      try {
+        await AsyncStorage.setItem(
+          FEED_CACHE_KEY,
+          JSON.stringify({
+            savedAt: Date.now(),
+            items,
+          })
+        );
+      } catch (error) {
+        console.warn(
+          "[Feed] Could not save feed cache:",
+          error
+        );
+      }
+    },
+    []
+  );
+
+  const restoreFeedCache = useCallback(
+    async () => {
+      try {
+        const raw =
+          await AsyncStorage.getItem(
+            FEED_CACHE_KEY
+          );
+
+        if (!raw) {
+          return false;
+        }
+
+        const cached =
+          JSON.parse(raw);
+
+        if (
+          !Array.isArray(
+            cached?.items
+          ) ||
+          cached.items.length === 0
+        ) {
+          return false;
+        }
+
+        const cacheAge =
+          Date.now() -
+          Number(
+            cached.savedAt || 0
+          );
+
+        setCombinedFeed(
+          cached.items
+        );
+
+        setTimelineOffset(
+          cached.items.length
+        );
+
+        setHasMore(true);
+        setIsLoading(false);
+
+        return (
+          cacheAge <
+          FEED_CACHE_MAX_AGE_MS
+        );
+      } catch (error) {
+        console.warn(
+          "[Feed] Could not restore feed cache:",
+          error
+        );
+        return false;
+      }
+    },
+    []
+  );
+
   const fetchInitialFeed = useCallback(
-    async (refresh = false) => {
-      setIsLoading(true);
+    async (
+      refresh = false,
+      showFullLoader = true
+    ) => {
+      if (
+        initialRequestInFlight.current
+      ) {
+        return;
+      }
+
+      initialRequestInFlight.current =
+        true;
+
+      if (
+        showFullLoader &&
+        latestFeedRef.current.length === 0
+      ) {
+        setIsLoading(true);
+      }
 
       try {
-        const [
-          timelineItems,
-          recommendationItems,
-        ] = await Promise.all([
-          fetchTimelineItems(0, refresh),
-          fetchRecommendationItems(0, refresh),
-        ]);
-
-        const itemsWithPreviews =
-          await Promise.all(
-            [
-              ...timelineItems,
-              ...recommendationItems,
-            ].map(fetchPreviewForItem)
-          );
-
-        const updatedTimeline =
-          itemsWithPreviews.slice(
+        /*
+         * The optimized backend timeline already contains:
+         * - new shared music
+         * - recommended music
+         * - duplicate filtering
+         *
+         * Calling /users/recommendations here as well doubled
+         * backend work and made the first page wait twice.
+         */
+        const timelineItems =
+          await fetchTimelineItems(
             0,
-            timelineItems.length
+            refresh
           );
 
-        const updatedRecommendations =
-          itemsWithPreviews.slice(
-            timelineItems.length
-          );
-
-        const mergedItems = mergeFeedItems(
-          updatedTimeline,
-          updatedRecommendations
+        setCombinedFeed(
+          timelineItems
         );
 
-        setCombinedFeed(mergedItems);
-        setTimelineOffset(timelineItems.length);
-        setRecommendationsOffset(
-          recommendationItems.length
+        setTimelineOffset(
+          timelineItems.length
         );
+
+        setRecommendationsOffset(0);
 
         setHasMore(
-          timelineItems.length > 0 ||
-          recommendationItems.length > 0
+          timelineItems.length >=
+          PAGE_SIZE
+        );
+
+        await saveFeedCache(
+          timelineItems
         );
       } catch (error) {
         console.error(
@@ -639,19 +847,22 @@ export default function Feed({ navigation }) {
           error
         );
       } finally {
+        initialRequestInFlight.current =
+          false;
+
         setIsLoading(false);
       }
     },
     [
-      fetchPreviewForItem,
-      fetchRecommendationItems,
       fetchTimelineItems,
-      mergeFeedItems,
+      saveFeedCache,
     ]
   );
 
+
   const loadMoreFeed = useCallback(async () => {
     if (
+      loadMoreRequestInFlight.current ||
       loadingMore ||
       isLoading ||
       !hasMore
@@ -659,128 +870,177 @@ export default function Feed({ navigation }) {
       return;
     }
 
+    loadMoreRequestInFlight.current =
+      true;
+
     setLoadingMore(true);
 
     try {
-      const [
-        timelineItems,
-        recommendationItems,
-      ] = await Promise.all([
-        fetchTimelineItems(
+      const timelineItems =
+        await fetchTimelineItems(
           timelineOffset,
           false
-        ),
-        fetchRecommendationItems(
-          recommendationsOffset,
-          false
-        ),
-      ]);
+        );
 
       if (
-        timelineItems.length === 0 &&
-        recommendationItems.length === 0
+        timelineItems.length === 0
       ) {
         setHasMore(false);
         return;
       }
 
-      const itemsWithPreviews =
-        await Promise.all(
-          [
-            ...timelineItems,
-            ...recommendationItems,
-          ].map(fetchPreviewForItem)
-        );
+      let updatedFeed = [];
 
-      const updatedTimeline =
-        itemsWithPreviews.slice(
-          0,
-          timelineItems.length
-        );
+      setCombinedFeed(
+        (currentItems) => {
+          /*
+           * Deduplicate by the actual music ID first.
+           * record_id can differ even when two cards refer
+           * to the same song.
+           */
+          const existingIds =
+            new Set(
+              currentItems
+                .map(
+                  (item) =>
+                    getItemId(item)
+                )
+                .filter(Boolean)
+            );
 
-      const updatedRecommendations =
-        itemsWithPreviews.slice(
-          timelineItems.length
-        );
+          const uniqueNewItems =
+            timelineItems.filter(
+              (item) => {
+                const itemId =
+                  getItemId(item);
 
-      const newItems = mergeFeedItems(
-        updatedTimeline,
-        updatedRecommendations
+                if (
+                  !itemId ||
+                  existingIds.has(
+                    itemId
+                  )
+                ) {
+                  return false;
+                }
+
+                existingIds.add(
+                  itemId
+                );
+
+                return true;
+              }
+            );
+
+          updatedFeed = [
+            ...currentItems,
+            ...uniqueNewItems,
+          ];
+
+          return updatedFeed;
+        }
       );
-
-      setCombinedFeed((currentItems) => {
-        const existingIds = new Set(
-          currentItems.map(
-            (item) =>
-              getRecordId(item) ||
-              getItemId(item)
-          )
-        );
-
-        const uniqueNewItems =
-          newItems.filter((item) => {
-            const itemId =
-              getRecordId(item) ||
-              getItemId(item);
-
-            return !existingIds.has(itemId);
-          });
-
-        return [
-          ...currentItems,
-          ...uniqueNewItems,
-        ];
-      });
 
       setTimelineOffset(
         (currentOffset) =>
-          currentOffset + timelineItems.length
+          currentOffset +
+          timelineItems.length
       );
 
-      setRecommendationsOffset(
-        (currentOffset) =>
-          currentOffset +
-          recommendationItems.length
+      setHasMore(
+        timelineItems.length >=
+        PAGE_SIZE
       );
+
+      if (
+        updatedFeed.length > 0
+      ) {
+        await saveFeedCache(
+          updatedFeed
+        );
+      }
     } catch (error) {
       console.error(
         "[Feed] Load-more error:",
         error
       );
     } finally {
+      loadMoreRequestInFlight.current =
+        false;
+
       setLoadingMore(false);
     }
   }, [
-    fetchPreviewForItem,
-    fetchRecommendationItems,
     fetchTimelineItems,
     getItemId,
-    getRecordId,
     hasMore,
     isLoading,
     loadingMore,
-    mergeFeedItems,
-    recommendationsOffset,
+    saveFeedCache,
     timelineOffset,
   ]);
+
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     setHasMore(true);
 
     try {
-      await fetchInitialFeed(true);
+      await fetchInitialFeed(
+        true,
+        false
+      );
     } finally {
       setRefreshing(false);
     }
   }, [fetchInitialFeed]);
 
   useEffect(() => {
-    if (!fetchedInitial.current) {
-      fetchedInitial.current = true;
-      fetchInitialFeed(false);
+    if (fetchedInitial.current) {
+      return;
     }
-  }, [fetchInitialFeed]);
+
+    fetchedInitial.current = true;
+
+    let cancelled = false;
+
+    const startFeed = async () => {
+      const cacheIsFresh =
+        await restoreFeedCache();
+
+      if (cancelled) {
+        return;
+      }
+
+      /*
+       * Always refresh eventually, but a fresh cache gets a
+       * short delay so the screen can paint first.
+       */
+      if (cacheIsFresh) {
+        setTimeout(() => {
+          if (!cancelled) {
+            fetchInitialFeed(
+              false,
+              false
+            );
+          }
+        }, 250);
+      } else {
+        fetchInitialFeed(
+          false,
+          latestFeedRef.current.length === 0
+        );
+      }
+    };
+
+    startFeed();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    fetchInitialFeed,
+    restoreFeedCache,
+  ]);
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -910,14 +1170,23 @@ export default function Feed({ navigation }) {
         }
 
         if (nextLiked) {
-          await postRecommendations(
+          /*
+           * The like is already complete. Saving a recommendation
+           * seed should not keep the heart button loading.
+           */
+          postRecommendations(
             currentUser.uid,
             itemId,
             getItemType(item),
             getDisplayName(item),
             getArtistName(item) ||
               getDisplayName(item)
-          );
+          ).catch((error) => {
+            console.warn(
+              "[Feed] Could not save recommendation seed:",
+              error
+            );
+          });
         }
       } catch (error) {
         console.error(
@@ -1588,13 +1857,13 @@ export default function Feed({ navigation }) {
                   ]}
                 />
 
-                {previewUrl ? (
+                {getItemType(item) === "track" ? (
                   <TouchableOpacity
                     onPress={(event) => {
                       event?.stopPropagation?.();
 
-                      handlePlayPreview(
-                        previewUrl
+                      handlePlayItem(
+                        item
                       );
                     }}
                     style={styles.playButton}
@@ -1610,7 +1879,7 @@ export default function Feed({ navigation }) {
                       tintColor={
                         colours.secondaryblue
                       }
-                      backgroundColor="rgba(255,255,255,0.25)"
+                      backgroundColor="rgba(255,255,255,0.20)"
                       rotation={0}
                     >
                       {() => (
@@ -1677,7 +1946,7 @@ export default function Feed({ navigation }) {
       getRecommendationContext,
       handleItemTap,
       handleLikeSong,
-      handlePlayPreview,
+      handlePlayItem,
       isCompact,
       isPlaying,
       isTablet,
@@ -1794,7 +2063,9 @@ export default function Feed({ navigation }) {
         getItemId(item) ||
         index;
 
-      return `feed-${itemId}-${index}`;
+      return itemId
+        ? `feed-${itemId}`
+        : `feed-fallback-${index}`;
     },
     [
       getItemId,
@@ -2002,9 +2273,26 @@ export default function Feed({ navigation }) {
               isWeb && styles.webTitleRow,
             ]}
           >
-            <Text style={styles.header}>
-              Recent Feed
-            </Text>
+            <View style={styles.feedTitleLine}>
+              <Text style={styles.header}>
+                Recent Feed
+              </Text>
+
+              <View style={styles.forYouBadge}>
+                <Icon
+                  name="auto-awesome"
+                  size={14}
+                  color={
+                    colours.lightblue ||
+                    "#35afe5"
+                  }
+                />
+
+                <Text style={styles.forYouBadgeText}>
+                  FOR YOU
+                </Text>
+              </View>
+            </View>
 
             <Text style={styles.headerDescription}>
               Music selected for you and activity from your friends.
@@ -2019,8 +2307,12 @@ export default function Feed({ navigation }) {
               color="#ffffff"
             />
 
+            <Text style={styles.loadingTitle}>
+              Building your mix
+            </Text>
+
             <Text style={styles.loadingText}>
-              Loading your feed...
+              Loading music and friend activity...
             </Text>
           </View>
         ) : (
@@ -2059,7 +2351,12 @@ export default function Feed({ navigation }) {
             }
 
             onEndReached={loadMoreFeed}
-            onEndReachedThreshold={0.35}
+            onEndReachedThreshold={0.6}
+
+            initialNumToRender={4}
+            maxToRenderPerBatch={4}
+            updateCellsBatchingPeriod={50}
+            windowSize={7}
 
             showsVerticalScrollIndicator={false}
 
@@ -2067,13 +2364,16 @@ export default function Feed({ navigation }) {
 
             viewabilityConfig={{
               itemVisiblePercentThreshold: 60,
+              minimumViewTime: 350,
             }}
 
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             nestedScrollEnabled={true}
             scrollEnabled={true}
-            removeClippedSubviews={false}
+            removeClippedSubviews={
+              Platform.OS !== "web"
+            }
           />
         )}
       </View>
@@ -2445,6 +2745,34 @@ desktopBottomNavBar: {
     overflow: "hidden",
   },
 
+  feedTitleLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  forYouBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(53,175,229,0.35)",
+    backgroundColor: "rgba(53,175,229,0.10)",
+  },
+
+  forYouBadgeText: {
+    color:
+      colours.lightblue ||
+      "#35afe5",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+  },
+
   titleRow: {
     width: "100%",
     maxWidth: 760,
@@ -2545,8 +2873,15 @@ desktopBottomNavBar: {
     justifyContent: "center",
   },
 
+  loadingTitle: {
+    color: "#ffffff",
+    fontSize: 17,
+    fontWeight: "700",
+    marginTop: 16,
+  },
+
   loadingText: {
-    color: "rgba(255,255,255,0.7)",
+    color: "rgba(255,255,255,0.62)",
     fontSize: 14,
     marginTop: 10,
   },
@@ -2602,19 +2937,20 @@ desktopBottomNavBar: {
 
   card: {
     width: "100%",
-    marginBottom: 18,
+    marginBottom: 16,
     padding: 16,
-    borderRadius: 16,
-    backgroundColor: colours.foreground,
-    borderWidth: 2,
+    borderRadius: 18,
+    backgroundColor:
+      colours.foreground,
+    borderWidth: 1,
     shadowColor: "#000000",
     shadowOffset: {
       width: 0,
       height: 6,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 4,
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    elevation: 3,
   },
 
   webCard: {

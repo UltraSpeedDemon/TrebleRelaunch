@@ -1905,28 +1905,41 @@ function normalizeDeezerTrack(track) {
 }
 
 async function createFeedItem(
-    track,
-    source,
-    userId,
-    origin = null
+  track,
+  source,
+  userId,
+  origin = null,
+  likedTrackIds = null
 ) {
-  const normalized = normalizeDeezerTrack(track);
+  const normalized =
+    normalizeDeezerTrack(track);
 
   let liked = false;
 
-  if (userId) {
+  if (
+    likedTrackIds instanceof Set
+  ) {
+    liked =
+      likedTrackIds.has(
+        normalized.id
+      );
+  } else if (userId) {
     const likeDoc = await db
       .collection("likes")
-      .doc(`${userId}_track_${normalized.id}`)
+      .doc(
+        `${userId}_track_${normalized.id}`
+      )
       .get();
 
     liked = likeDoc.exists;
   }
 
   return {
-    record_id: `deezer-${source}-${normalized.id}`,
+    record_id:
+      `deezer-${source}-${normalized.id}`,
     id: normalized.id,
-    listenable_id: normalized.id,
+    listenable_id:
+      normalized.id,
     type: "track",
     liked,
     source,
@@ -1943,8 +1956,10 @@ async function createFeedItem(
     artist: normalized.artist,
     album: normalized.album,
     image: normalized.image,
-    coverArt: normalized.coverArt,
-    preview: normalized.preview,
+    coverArt:
+      normalized.coverArt,
+    preview:
+      normalized.preview,
   };
 }
 
@@ -2150,108 +2165,414 @@ app.post("/users/share", async (req, res) => {
   }
 });
 
-async function getSharedFeedItems(userId, { limit = 20, offset = 0 } = {}) {
+const SHARED_FEED_SEEN_COLLECTION =
+  "sharedFeedSeen";
+
+function getSharedSeenDocumentId(
+  userId,
+  shareId
+) {
+  return `${String(userId)}_${String(shareId)}`;
+}
+
+function markSharedItemsSeen(
+  userId,
+  items
+) {
+  if (
+    !userId ||
+    !Array.isArray(items) ||
+    items.length === 0
+  ) {
+    return;
+  }
+
+  setImmediate(async () => {
+    try {
+      const batch = db.batch();
+
+      items.forEach((item) => {
+        if (!item?.shareId) {
+          return;
+        }
+
+        const seenRef = db
+          .collection(
+            SHARED_FEED_SEEN_COLLECTION
+          )
+          .doc(
+            getSharedSeenDocumentId(
+              userId,
+              item.shareId
+            )
+          );
+
+        batch.set(
+          seenRef,
+          {
+            userId:
+              String(userId),
+            shareId:
+              String(item.shareId),
+            musicId:
+              String(item.id || ""),
+            seenAt:
+              FieldValue.serverTimestamp(),
+          },
+          {
+            merge: true,
+          }
+        );
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.warn(
+        "[SHARE] Unable to mark shared feed items seen:",
+        error.message
+      );
+    }
+  });
+}
+
+async function getSharedFeedItems(
+  userId,
+  {
+    limit = 20,
+    offset = 0,
+    likedTrackIds = null,
+    excludeMusicIds = null,
+    markSeen = true,
+  } = {}
+) {
   if (!userId) return [];
 
+  /*
+   * Fetch only the newest reasonable share window.
+   * Previously every share ever received was downloaded,
+   * sorted, hydrated, and checked on each feed load.
+   */
   const snapshot = await db
-    .collection(MUSIC_SHARES_COLLECTION)
-    .where("toUserId", "==", String(userId))
+    .collection(
+      MUSIC_SHARES_COLLECTION
+    )
+    .where(
+      "toUserId",
+      "==",
+      String(userId)
+    )
+    .orderBy(
+      "createdAt",
+      "desc"
+    )
+    .limit(
+      Math.min(
+        Math.max(
+          limit + offset + 30,
+          30
+        ),
+        100
+      )
+    )
     .get();
 
-  const shares = snapshot.docs
-    .map((document) => {
-      const data = document.data() || {};
-      return {
+  const candidates =
+    snapshot.docs.map(
+      (document) => ({
         document,
-        data,
-        time: data.createdAt?.toMillis?.() || 0,
-      };
-    })
-    .sort((a, b) => b.time - a.time)
-    .slice(offset, offset + limit);
+        data:
+          document.data() || {},
+      })
+    );
 
-  const items = await Promise.all(
-    shares.map(async ({ document, data }) => {
-      let item = data.item || null;
+  if (
+    candidates.length === 0
+  ) {
+    return [];
+  }
 
-      if (!item && data.itemId) {
-        try {
-          item = await hydrateSharedItem(
-            null,
-            data.itemId,
-            data.type || "track"
-          );
-        } catch (error) {
-          console.warn(`[SHARE] Unable to hydrate ${data.itemId}:`, error.message);
-          return null;
-        }
-      }
+  /*
+   * Read all seen markers in one Firestore round trip.
+   */
+  const seenRefs =
+    candidates.map(({ document }) =>
+      db
+        .collection(
+          SHARED_FEED_SEEN_COLLECTION
+        )
+        .doc(
+          getSharedSeenDocumentId(
+            userId,
+            document.id
+          )
+        )
+    );
 
-      if (!item?.id) return null;
+  const seenSnapshots =
+    await db.getAll(...seenRefs);
 
-      const normalized = normalizeSharedItem(
-        item,
-        data.itemId,
-        data.type || item.type
+  const seenShareIds =
+    new Set(
+      seenSnapshots
+        .filter(
+          (seenSnapshot) =>
+            seenSnapshot.exists
+        )
+        .map(
+          (seenSnapshot) =>
+            String(
+              seenSnapshot.data()
+                ?.shareId || ""
+            )
+        )
+    );
+
+  const excludedIds =
+    excludeMusicIds instanceof Set
+      ? excludeMusicIds
+      : new Set();
+
+  const selected = [];
+  const selectedMusicIds =
+    new Set();
+
+  for (
+    let index = 0;
+    index < candidates.length;
+    index += 1
+  ) {
+    const {
+      document,
+      data,
+    } = candidates[index];
+
+    const itemId =
+      String(
+        data.itemId ||
+        data.item?.id ||
+        ""
       );
 
-      let liked = false;
-      if (normalized.type === "track") {
-        const likeDoc = await db
-          .collection("likes")
-          .doc(`${userId}_track_${normalized.id}`)
-          .get();
-        liked = likeDoc.exists;
-      }
+    /*
+     * Do not show:
+     * - a share already returned before
+     * - the same song twice in one response
+     * - a song already selected elsewhere in this feed
+     */
+    if (
+      seenShareIds.has(
+        document.id
+      ) ||
+      !itemId ||
+      selectedMusicIds.has(
+        itemId
+      ) ||
+      excludedIds.has(
+        itemId
+      )
+    ) {
+      continue;
+    }
 
-      return {
-        class: "share",
-        source: "share",
-        shareId: document.id,
-        record_id: data.itemRid || `shared-${document.id}`,
-        id: normalized.id,
-        listenable_id: normalized.id,
-        type: normalized.type,
-        liked,
-        item_info: {
-          ...normalized,
-          liked,
-        },
-        title: normalized.title,
-        name: normalized.name,
-        artist: normalized.artist,
-        album: normalized.album || null,
-        image: normalized.image,
-        coverArt: normalized.coverArt,
-        preview: normalized.preview,
-        comment: data.comment || "",
-        createdAt: shareTimestampToIso(data.createdAt),
-        shared_by: data.sender || {
-          userId: data.fromUserId,
-          uid: data.fromUserId,
-          username: "A friend",
-          avatar: "None",
-        },
-      };
-    })
-  );
+    selected.push({
+      document,
+      data,
+    });
 
-  return items.filter(Boolean);
+    selectedMusicIds.add(
+      itemId
+    );
+
+    if (
+      selected.length >=
+      offset + limit
+    ) {
+      break;
+    }
+  }
+
+  const page =
+    selected.slice(
+      offset,
+      offset + limit
+    );
+
+  const items =
+    await Promise.all(
+      page.map(
+        async ({
+          document,
+          data,
+        }) => {
+          let item =
+            data.item || null;
+
+          if (
+            !item &&
+            data.itemId
+          ) {
+            try {
+              item =
+                await hydrateSharedItem(
+                  null,
+                  data.itemId,
+                  data.type ||
+                    "track"
+                );
+            } catch (error) {
+              console.warn(
+                `[SHARE] Unable to hydrate ${data.itemId}:`,
+                error.message
+              );
+              return null;
+            }
+          }
+
+          if (!item?.id) {
+            return null;
+          }
+
+          const normalized =
+            normalizeSharedItem(
+              item,
+              data.itemId,
+              data.type ||
+                item.type
+            );
+
+          const liked =
+            likedTrackIds
+              instanceof Set
+              ? likedTrackIds.has(
+                  normalized.id
+                )
+              : false;
+
+          return {
+            class: "share",
+            source: "share",
+            shareId:
+              document.id,
+            record_id:
+              data.itemRid ||
+              `shared-${document.id}`,
+            id:
+              normalized.id,
+            listenable_id:
+              normalized.id,
+            type:
+              normalized.type,
+            liked,
+            item_info: {
+              ...normalized,
+              liked,
+            },
+            title:
+              normalized.title,
+            name:
+              normalized.name,
+            artist:
+              normalized.artist,
+            album:
+              normalized.album ||
+              null,
+            image:
+              normalized.image,
+            coverArt:
+              normalized.coverArt,
+            preview:
+              normalized.preview,
+            comment:
+              data.comment || "",
+            createdAt:
+              shareTimestampToIso(
+                data.createdAt
+              ),
+            shared_by:
+              data.sender || {
+                userId:
+                  data.fromUserId,
+                uid:
+                  data.fromUserId,
+                username:
+                  "A friend",
+                avatar:
+                  "None",
+              },
+          };
+        }
+      )
+    );
+
+  const validItems =
+    items.filter(Boolean);
+
+  if (markSeen) {
+    markSharedItemsSeen(
+      userId,
+      validItems
+    );
+  }
+
+  return validItems;
 }
 
 app.get("/users/share", async (req, res) => {
   try {
-    const userId = String(req.query.user_id || "").trim();
+    const userId =
+      String(
+        req.query.user_id ||
+        ""
+      ).trim();
+
     if (!userId) {
-      return res.status(400).json({ ok: false, sharedItems: [], error: "user_id is required." });
+      return res.status(400).json({
+        ok: false,
+        sharedItems: [],
+        error:
+          "user_id is required.",
+      });
     }
 
-    const { limit, offset } = getPagination(req);
-    const sharedItems = await getSharedFeedItems(userId, { limit, offset });
-    return res.json({ ok: true, sharedItems });
+    const {
+      limit,
+      offset,
+    } = getPagination(req);
+
+    const likedTrackIds =
+      new Set(
+        await getUserLikedTrackIds(
+          userId
+        )
+      );
+
+    const sharedItems =
+      await getSharedFeedItems(
+        userId,
+        {
+          limit,
+          offset,
+          likedTrackIds,
+          markSeen: true,
+        }
+      );
+
+    return res.json({
+      ok: true,
+      sharedItems,
+    });
   } catch (error) {
-    console.error("GET /users/share error:", error);
-    return res.status(500).json({ ok: false, sharedItems: [], error: error.message });
+    console.error(
+      "GET /users/share error:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+      sharedItems: [],
+      error:
+        error.message,
+    });
   }
 });
 
@@ -2700,16 +3021,24 @@ const friendCandidates =
               track,
               "friend-recommendation",
               userId,
-              origin
+              origin,
+              likedTrackIds
             )
         )
       );
 
-    await markFeedItemsServed(
-      userId,
-      recommendations,
-      "friend-recommendation"
-    );
+    setImmediate(() => {
+      markFeedItemsServed(
+        userId,
+        recommendations,
+        "friend-recommendation"
+      ).catch((error) => {
+        console.warn(
+          "[Recommendations] Unable to mark friend recommendations served:",
+          error.message
+        );
+      });
+    });
 
     return recommendations;
   }
@@ -2910,11 +3239,18 @@ if (page.length === 0) {
       )
     );
 
-  await markFeedItemsServed(
-    userId,
-    recommendations,
-    "recommendation"
-  );
+  setImmediate(() => {
+    markFeedItemsServed(
+      userId,
+      recommendations,
+      "recommendation"
+    ).catch((error) => {
+      console.warn(
+        "[Recommendations] Unable to mark recommendations served:",
+        error.message
+      );
+    });
+  });
 
   return recommendations;
   }
@@ -2963,174 +3299,260 @@ app.post("/users", async (req, res) => {
 
 app.get("/users/timeline", async (req, res) => {
   try {
-    const { limit, offset } = getPagination(req);
+    const {
+      limit,
+      offset,
+    } = getPagination(req);
 
-    const userId = String(
-      req.query.user_id || ""
-    ).trim();
+    const userId =
+      String(
+        req.query.user_id ||
+        ""
+      ).trim();
 
     const refresh =
-      String(req.query.refresh || "false") === "true";
+      String(
+        req.query.refresh ||
+        "false"
+      ) === "true";
 
-    const sharedTimelineItems = userId
-      ? await getSharedFeedItems(userId, { limit, offset })
-      : [];
-
+    /*
+     * Likes and recently-served tracks are loaded together.
+     * Shared items are loaded immediately after likes are
+     * available so they can reuse the same Set and avoid
+     * one Firestore read per shared song.
+     */
     const [
       likedTrackIdList,
       recentlyServedTrackIds,
     ] = await Promise.all([
       userId
-        ? getUserLikedTrackIds(userId)
+        ? getUserLikedTrackIds(
+            userId
+          )
         : Promise.resolve([]),
 
       userId
-        ? getRecentlyServedTrackIds(userId)
-        : Promise.resolve(new Set()),
+        ? getRecentlyServedTrackIds(
+            userId
+          )
+        : Promise.resolve(
+            new Set()
+          ),
     ]);
 
-    const likedTrackIds = new Set(
-      likedTrackIdList
-    );
+    const likedTrackIds =
+      new Set(
+        likedTrackIdList
+      );
 
-    const excludedTrackIds = new Set([
-      ...likedTrackIds,
-      ...recentlyServedTrackIds,
+    const excludedTrackIds =
+      new Set([
+        ...likedTrackIds,
+        ...recentlyServedTrackIds,
+      ]);
+
+    const sharedTimelinePromise =
+      userId
+        ? getSharedFeedItems(
+            userId,
+            {
+              limit:
+                Math.min(
+                  limit,
+                  5
+                ),
+              offset: 0,
+              likedTrackIds,
+              excludeMusicIds:
+                excludedTrackIds,
+              markSeen: true,
+            }
+          )
+        : Promise.resolve([]);
+
+    /*
+     * One chart request is normally enough. The old endpoint
+     * could make four chart requests sequentially, which was
+     * the largest feed-loading delay.
+     */
+    const chartOffset =
+      refresh
+        ? Math.floor(
+            Math.random() * 100
+          )
+        : offset;
+
+    const chartPromise =
+      fetchDeezer(
+        `/chart/0/tracks?limit=${Math.max(
+          limit * 4,
+          50
+        )}&index=${chartOffset}`
+      );
+
+    const [
+      sharedTimelineItems,
+      chart,
+    ] = await Promise.all([
+      sharedTimelinePromise,
+      chartPromise,
     ]);
 
     const selectedTracks = [];
-    const selectedTrackIds = new Set();
-
-    /*
-     * Try several Deezer chart regions so the feed does not
-     * become empty when the first chart page is exhausted.
-     */
-    const offsetsToTry = refresh
-      ? [
-          Math.floor(Math.random() * 50),
-          50 + Math.floor(Math.random() * 50),
-          100 + Math.floor(Math.random() * 50),
-          0,
-        ]
-      : [
-          offset,
-          offset + 30,
-          offset + 60,
-          offset + 90,
-        ];
-
-    for (const chartOffset of offsetsToTry) {
-      if (selectedTracks.length >= limit) {
-        break;
-      }
-
-      const chart = await fetchDeezer(
-        `/chart/0/tracks?limit=50&index=${chartOffset}`
+    const selectedTrackIds =
+      new Set(
+        sharedTimelineItems.map(
+          (item) =>
+            String(item.id)
+        )
       );
 
-      for (const track of chart.data || []) {
-        const trackId = String(
-          track.id || ""
-        );
+    for (
+      const track of
+        chart.data || []
+    ) {
+      const trackId =
+        String(track.id || "");
 
-        if (
-          !trackId ||
-          excludedTrackIds.has(trackId) ||
-          selectedTrackIds.has(trackId)
-        ) {
-          continue;
-        }
-
-        selectedTracks.push(track);
-        selectedTrackIds.add(trackId);
-
-        if (selectedTracks.length >= limit) {
-          break;
-        }
+      if (
+        !trackId ||
+        excludedTrackIds.has(
+          trackId
+        ) ||
+        selectedTrackIds.has(
+          trackId
+        )
+      ) {
+        continue;
       }
-    }
-
-    /*
-     * Cooldown fallback:
-     * allow songs that were shown previously, but continue
-     * excluding songs the user already liked.
-     */
-    if (selectedTracks.length < limit) {
-      const fallback = await fetchDeezer(
-        `/chart/0/tracks?limit=100&index=${
-          Math.floor(Math.random() * 100)
-        }`
-      );
-
-      for (const track of fallback.data || []) {
-        const trackId = String(
-          track.id || ""
-        );
-
-        if (
-          !trackId ||
-          likedTrackIds.has(trackId) ||
-          selectedTrackIds.has(trackId)
-        ) {
-          continue;
-        }
-
-        selectedTracks.push(track);
-        selectedTrackIds.add(trackId);
-
-        if (selectedTracks.length >= limit) {
-          break;
-        }
-      }
-    }
-
-    /*
-     * Absolute emergency fallback:
-     * the feed must never be empty. This only runs if the user
-     * has somehow liked nearly everything returned by Deezer.
-     */
-    if (selectedTracks.length === 0) {
-      const emergencyChart =
-        await fetchDeezer(
-          "/chart/0/tracks?limit=20&index=0"
-        );
 
       selectedTracks.push(
-        ...(emergencyChart.data || []).slice(
-          0,
-          limit
-        )
+        track
       );
+
+      selectedTrackIds.add(
+        trackId
+      );
+
+      if (
+        selectedTracks.length >=
+        Math.max(
+          limit -
+            sharedTimelineItems.length,
+          0
+        )
+      ) {
+        break;
+      }
     }
 
-    const generatedTimeline = await Promise.all(
-      selectedTracks.map((track) =>
-        createFeedItem(
-          track,
-          "timeline",
-          userId,
-          {
-            type: "feed",
-            title: "Recommended for you",
-            artist: "",
-          }
-        )
+    /*
+     * Only one additional request is allowed if the first
+     * chart page could not fill the feed.
+     */
+    if (
+      selectedTracks.length <
+      Math.max(
+        limit -
+          sharedTimelineItems.length,
+        0
       )
-    );
+    ) {
+      const fallback =
+        await fetchDeezer(
+          `/chart/0/tracks?limit=50&index=${
+            100 +
+            Math.floor(
+              Math.random() * 100
+            )
+          }`
+        );
 
-    await markFeedItemsServed(
-      userId,
-      generatedTimeline,
-      "timeline"
-    );
+      for (
+        const track of
+          fallback.data || []
+      ) {
+        const trackId =
+          String(
+            track.id || ""
+          );
+
+        if (
+          !trackId ||
+          likedTrackIds.has(
+            trackId
+          ) ||
+          selectedTrackIds.has(
+            trackId
+          )
+        ) {
+          continue;
+        }
+
+        selectedTracks.push(
+          track
+        );
+
+        selectedTrackIds.add(
+          trackId
+        );
+
+        if (
+          selectedTracks.length >=
+          Math.max(
+            limit -
+              sharedTimelineItems.length,
+            0
+          )
+        ) {
+          break;
+        }
+      }
+    }
+
+    const generatedTimeline =
+      await Promise.all(
+        selectedTracks.map(
+          (track) =>
+            createFeedItem(
+              track,
+              "timeline",
+              userId,
+              {
+                type: "feed",
+                title:
+                  "Recommended for you",
+                artist: "",
+              },
+              likedTrackIds
+            )
+        )
+      );
 
     const timeline = [
       ...sharedTimelineItems,
       ...generatedTimeline,
     ].slice(0, limit);
 
+    /*
+     * Do not delay the response while recording served songs.
+     */
+    setImmediate(() => {
+      markFeedItemsServed(
+        userId,
+        timeline,
+        "timeline"
+      ).catch((error) => {
+        console.warn(
+          "[Timeline] Unable to mark feed items served:",
+          error.message
+        );
+      });
+    });
+
     console.log(
-      `[Timeline] Returning ${timeline.length} items (${sharedTimelineItems.length} shared)`
+      `[Timeline] Returning ${timeline.length} items (${sharedTimelineItems.length} new shared)`
     );
 
     return res.status(200).json({
@@ -3146,45 +3568,73 @@ app.get("/users/timeline", async (req, res) => {
       error
     );
 
-    /*
-     * Even if personalized timeline generation fails,
-     * return a basic Deezer feed.
-     */
     try {
-      const { limit } = getPagination(req);
+      const { limit } =
+        getPagination(req);
 
       const emergencyChart =
         await fetchDeezer(
           `/chart/0/tracks?limit=${limit}&index=0`
         );
 
-      const timeline = await Promise.all(
-        (emergencyChart.data || []).map(
-          (track) =>
-            createFeedItem(
-              track,
-              "timeline",
-              req.query.user_id,
-              {
+      const timeline =
+        (emergencyChart.data || [])
+          .slice(0, limit)
+          .map((track) => {
+            const normalized =
+              normalizeDeezerTrack(
+                track
+              );
+
+            return {
+              record_id:
+                `deezer-timeline-${normalized.id}`,
+              id:
+                normalized.id,
+              listenable_id:
+                normalized.id,
+              type: "track",
+              liked: false,
+              source:
+                "timeline",
+              origin: {
                 type: "feed",
                 title:
                   "Recommended for you",
                 artist: "",
-              }
-            )
-        )
-      );
+              },
+              item_info:
+                normalized,
+              title:
+                normalized.title,
+              name:
+                normalized.name,
+              artist:
+                normalized.artist,
+              album:
+                normalized.album,
+              image:
+                normalized.image,
+              coverArt:
+                normalized.coverArt,
+              preview:
+                normalized.preview,
+            };
+          });
 
       return res.status(200).json({
         ok: true,
         timeline,
         fallback: true,
       });
-    } catch (fallbackError) {
+    } catch (
+      fallbackError
+    ) {
       return res.status(502).json({
         ok: false,
         timeline: [],
-        error: fallbackError.message,
+        error:
+          fallbackError.message,
       });
     }
   }
@@ -7942,6 +8392,60 @@ app.get("/admin/music-graph", async (req, res) => {
   }
 });
 
+
+
+app.post("/users/share/reset-seen", async (req, res) => {
+  try {
+    const userId =
+      String(
+        req.body?.user_id ||
+        ""
+      ).trim();
+
+    if (!userId) {
+      return res.status(400).json({
+        ok: false,
+        error:
+          "user_id is required.",
+      });
+    }
+
+    const snapshot = await db
+      .collection(
+        SHARED_FEED_SEEN_COLLECTION
+      )
+      .where(
+        "userId",
+        "==",
+        userId
+      )
+      .get();
+
+    const batch = db.batch();
+
+    snapshot.docs.forEach(
+      (document) => {
+        batch.delete(
+          document.ref
+        );
+      }
+    );
+
+    await batch.commit();
+
+    return res.json({
+      ok: true,
+      reset:
+        snapshot.size,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error:
+        error.message,
+    });
+  }
+});
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`Treble backend running at http://localhost:${port}`);
