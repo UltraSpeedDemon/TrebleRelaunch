@@ -3144,105 +3144,247 @@ async function buildPersonalizedRecommendations({
     getRecommendationSeedTracks(userId),
   ]);
 
-  const likedTrackIds = new Set(
-    likedTrackIdList.map(String)
-  );
+  const likedTrackIds =
+    new Set(
+      likedTrackIdList.map(String)
+    );
 
-  const excludedTrackIds = new Set([
-    ...likedTrackIds,
-    ...recentlyServedTrackIds,
-  ]);
+  /*
+   * Songs already served are excluded from normal recommendations.
+   * Liked songs are always excluded and can never be returned.
+   */
+  const excludedTrackIds =
+    new Set([
+      ...likedTrackIds,
+      ...recentlyServedTrackIds,
+    ]);
 
-  const selectedSeeds = (
-    refresh ? shuffleArray(seedTracks) : seedTracks
-  ).slice(0, 6);
+  /*
+   * Rotate through different taste seeds as the user scrolls.
+   * The old code always used the same first six seeds.
+   */
+  const orderedSeeds =
+    refresh
+      ? shuffleArray(seedTracks)
+      : seedTracks;
+
+  const seedWindowSize =
+    Math.min(
+      6,
+      orderedSeeds.length
+    );
+
+  const seedStart =
+    orderedSeeds.length > 0
+      ? Math.floor(
+          offset /
+          Math.max(limit, 1)
+        ) %
+        orderedSeeds.length
+      : 0;
+
+  const selectedSeeds = [];
+
+  for (
+    let index = 0;
+    index < seedWindowSize;
+    index += 1
+  ) {
+    selectedSeeds.push(
+      orderedSeeds[
+        (seedStart + index) %
+          orderedSeeds.length
+      ]
+    );
+  }
 
   const [
     friendCandidates,
     topTrackGroups,
     radioTrackGroups,
   ] = await Promise.all([
-    getFriendCatalogRecommendations(userId, {
-      limit: Math.max(limit * 2, 20),
-      excludedTrackIds,
-    }),
+    getFriendCatalogRecommendations(
+      userId,
+      {
+        limit:
+          Math.max(
+            limit * 3,
+            30
+          ),
+        excludedTrackIds,
+      }
+    ),
 
     Promise.all(
-      selectedSeeds.map((seed) =>
-        getTracksFromSeed(seed, 10)
+      selectedSeeds.map(
+        (seed) =>
+          getTracksFromSeed(
+            seed,
+            15
+          )
       )
     ),
 
     Promise.all(
-      selectedSeeds.map((seed) =>
-        getRadioTracksFromSeed(seed, 10)
+      selectedSeeds.map(
+        (seed) =>
+          getRadioTracksFromSeed(
+            seed,
+            15
+          )
       )
     ),
   ]);
 
-  const discovery = await fetchDeezer(
-    `/chart/0/tracks?limit=${Math.max(limit * 4, 40)}&index=${
-      refresh ? Math.floor(Math.random() * 120) : 20 + offset
-    }`
-  );
+  /*
+   * Rotate discovery windows as pagination continues.
+   * This avoids repeatedly requesting the same chart slice.
+   */
+  const pageNumber =
+    Math.floor(
+      offset /
+      Math.max(limit, 1)
+    );
+
+  const discoveryIndex =
+    refresh
+      ? Math.floor(
+          Math.random() * 700
+        )
+      : (
+          25 +
+          pageNumber * 67
+        ) %
+        850;
+
+  const discovery =
+    await fetchDeezer(
+      `/chart/0/tracks?limit=${Math.max(
+        limit * 8,
+        80
+      )}&index=${discoveryIndex}`
+    );
 
   const allCandidates = [
-    ...friendCandidates.map((candidate) => ({
-      ...candidate,
-      score: Number(candidate.origin?.score || 0) + 10,
-    })),
+    ...friendCandidates.map(
+      (candidate) => ({
+        ...candidate,
+        score:
+          Number(
+            candidate.origin?.score ||
+            0
+          ) + 10,
+      })
+    ),
 
     ...radioTrackGroups.flat(),
 
-    ...topTrackGroups.flat().map((candidate) => ({
-      ...candidate,
-      score:
-        candidate.origin?.type === "favourite"
-          ? 9
-          : candidate.origin?.type === "high-rating"
-            ? 8
-            : 6,
-    })),
+    ...topTrackGroups
+      .flat()
+      .map((candidate) => ({
+        ...candidate,
+        score:
+          candidate.origin?.type ===
+          "favourite"
+            ? 9
+            : candidate.origin?.type ===
+                "high-rating"
+              ? 8
+              : 6,
+      })),
 
-    ...(discovery.data || []).map((track) => ({
-      track,
-      score: 1,
-      origin: {
-        type: "discovery",
-        title: "Trending outside your usual mix",
-        artist: "",
-      },
-    })),
+    ...(discovery.data || []).map(
+      (track) => ({
+        track,
+        score: 1,
+        origin: {
+          type: "discovery",
+          title:
+            "Fresh discovery for your mix",
+          artist: "",
+        },
+      })
+    ),
   ];
 
-  const diversified = diversifyRecommendationCandidates(
-    refresh ? shuffleArray(allCandidates) : allCandidates,
-    {
-      limit: offset + limit,
-      excludedTrackIds,
+  /*
+   * IMPORTANT:
+   * Do not slice by offset here. recentlyServedTrackIds already
+   * removes previous pages. Slicing by offset a second time was
+   * causing later pages to become empty.
+   */
+  let page =
+    diversifyRecommendationCandidates(
+      refresh
+        ? shuffleArray(
+            allCandidates
+          )
+        : allCandidates,
+      {
+        limit,
+        excludedTrackIds,
+      }
+    ).slice(0, limit);
+
+  /*
+   * Keep searching different chart windows until the page is full.
+   */
+  const usedIds =
+    new Set(
+      page.map(
+        (candidate) =>
+          String(
+            candidate.track?.id ||
+            ""
+          )
+      )
+    );
+
+  const fallbackOffsets = [
+    (
+      discoveryIndex + 113
+    ) % 900,
+    (
+      discoveryIndex + 277
+    ) % 900,
+    (
+      discoveryIndex + 431
+    ) % 900,
+    Math.floor(
+      Math.random() * 900
+    ),
+  ];
+
+  for (
+    const fallbackIndex of
+      fallbackOffsets
+  ) {
+    if (page.length >= limit) {
+      break;
     }
-  );
 
-  let page = diversified.slice(offset, offset + limit);
+    const fill =
+      await fetchDeezer(
+        `/chart/0/tracks?limit=100&index=${fallbackIndex}`
+      );
 
-  if (page.length < limit) {
-    const fill = await fetchDeezer(
-      `/chart/0/tracks?limit=100&index=${
-        140 + Math.floor(Math.random() * 100)
-      }`
-    );
-
-    const usedIds = new Set(
-      page.map((candidate) => String(candidate.track?.id || ""))
-    );
-
-    for (const track of fill.data || []) {
-      const trackId = String(track.id || "");
+    for (
+      const track of
+        fill.data || []
+    ) {
+      const trackId =
+        String(
+          track.id || ""
+        );
 
       if (
         !trackId ||
-        likedTrackIds.has(trackId) ||
-        recentlyServedTrackIds.has(trackId) ||
+        likedTrackIds.has(
+          trackId
+        ) ||
+        recentlyServedTrackIds.has(
+          trackId
+        ) ||
         usedIds.has(trackId)
       ) {
         continue;
@@ -3254,35 +3396,106 @@ async function buildPersonalizedRecommendations({
         track,
         origin: {
           type: "discovery",
-          title: "Fresh discovery",
+          title:
+            "More music for your taste",
           artist: "",
         },
       });
 
-      if (page.length >= limit) break;
+      if (
+        page.length >= limit
+      ) {
+        break;
+      }
     }
   }
 
-  const recommendations = await Promise.all(
-    page.map(({ track, origin }) =>
-      createFeedItem(
-        track,
-        origin?.type === "friends"
-          ? "friend-recommendation"
-          : "recommendation",
-        userId,
-        origin,
-        likedTrackIds
-      )
-    )
-  );
+  /*
+   * Absolute safety fallback:
+   * If the user's unseen pool is temporarily exhausted, permit an
+   * older recommendation to return again, but NEVER a liked song.
+   * Shared cards remain one-time only through sharedFeedSeen.
+   */
+  if (page.length < limit) {
+    const relaxed =
+      await fetchDeezer(
+        `/chart/0/tracks?limit=100&index=${
+          Math.floor(
+            Math.random() * 900
+          )
+        }`
+      );
 
-  const safeRecommendations = recommendations.filter(
-    (item) =>
-      !likedTrackIds.has(
-        String(item.id || item.listenable_id || "")
+    for (
+      const track of
+        relaxed.data || []
+    ) {
+      const trackId =
+        String(
+          track.id || ""
+        );
+
+      if (
+        !trackId ||
+        likedTrackIds.has(
+          trackId
+        ) ||
+        usedIds.has(trackId)
+      ) {
+        continue;
+      }
+
+      usedIds.add(trackId);
+
+      page.push({
+        track,
+        origin: {
+          type: "genre",
+          title:
+            "Another pick from your music world",
+          artist: "",
+        },
+      });
+
+      if (
+        page.length >= limit
+      ) {
+        break;
+      }
+    }
+  }
+
+  const recommendations =
+    await Promise.all(
+      page.map(
+        ({
+          track,
+          origin,
+        }) =>
+          createFeedItem(
+            track,
+            origin?.type ===
+              "friends"
+              ? "friend-recommendation"
+              : "recommendation",
+            userId,
+            origin,
+            likedTrackIds
+          )
       )
-  );
+    );
+
+  const safeRecommendations =
+    recommendations.filter(
+      (item) =>
+        !likedTrackIds.has(
+          String(
+            item.id ||
+            item.listenable_id ||
+            ""
+          )
+        )
+    );
 
   setImmediate(() => {
     markFeedItemsServed(
@@ -3371,11 +3584,18 @@ app.get("/users/timeline", async (req, res) => {
         likedTrackIds,
         excludeMusicIds: likedTrackIds,
         markSeen: true,
+      }).catch((error) => {
+        console.warn(
+          "[Timeline] Shared activity unavailable; continuing with recommendations:",
+          error.message
+        );
+
+        return [];
       }),
 
       buildPersonalizedRecommendations({
         userId,
-        limit: limit + 4,
+        limit: limit + 6,
         offset,
         refresh,
       }),
@@ -3421,13 +3641,20 @@ app.get("/users/timeline", async (req, res) => {
       if (timeline.length >= limit) break;
     }
 
+    /*
+     * Timeline should always return cards when music is available.
+     */
+    const finalTimeline =
+      timeline.slice(0, limit);
+
     return res.status(200).json({
       ok: true,
-      timeline: timeline.slice(0, limit),
+      timeline: finalTimeline,
       limit,
       offset,
       refresh,
       personalized: true,
+      hasMore: true,
     });
   } catch (error) {
     console.error("GET /users/timeline error:", error);

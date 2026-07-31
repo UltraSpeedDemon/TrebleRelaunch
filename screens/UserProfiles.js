@@ -1509,126 +1509,207 @@ const finalButtonLabel =
         }
       : FALLBACK_AVATAR;
 
-  const openLikedSong =
+  const navigateToSongPage =
     useCallback(
-      async (song) => {
-        const trackId = String(
-          song?.id ||
-          song?.listenableId ||
-          song?.listenable_id ||
-          ""
-        );
+      (track) => {
+        const safeTrack = {
+          ...track,
 
-        if (!trackId) {
-          Alert.alert(
-            "Unable to open song",
-            "This song does not have a valid track ID."
-          );
-          return;
-        }
+          id: String(
+            track?.id ||
+            track?.listenableId ||
+            track?.listenable_id ||
+            ""
+          ),
 
-        let fullTrack = {
-          ...song,
-          id: trackId,
-          listenableId: trackId,
-          listenable_id: trackId,
+          listenableId: String(
+            track?.listenableId ||
+            track?.listenable_id ||
+            track?.id ||
+            ""
+          ),
+
+          listenable_id: String(
+            track?.listenable_id ||
+            track?.listenableId ||
+            track?.id ||
+            ""
+          ),
+
           type: "track",
         };
 
-        try {
-          const response =
-            await getSongFromDeezer(trackId);
+        /*
+         * UserProfiles can be opened from different navigators.
+         * Try the current navigator first, then walk upward.
+         */
+        let currentNavigator =
+          navigation;
 
-          if (response?.ok) {
-            const deezerTrack =
-              await response.json();
+        while (currentNavigator) {
+          try {
+            currentNavigator.navigate(
+              "SongPage",
+              {
+                track: safeTrack,
+              }
+            );
 
-            fullTrack = {
-              ...song,
-              ...deezerTrack,
-              id: String(
-                deezerTrack?.id ||
-                trackId
-              ),
-              listenableId: String(
-                deezerTrack?.listenableId ||
-                deezerTrack?.id ||
-                trackId
-              ),
-              listenable_id: String(
-                deezerTrack?.listenable_id ||
-                deezerTrack?.listenableId ||
-                deezerTrack?.id ||
-                trackId
-              ),
-              type: "track",
-              preview:
-                deezerTrack?.preview ||
-                deezerTrack?.previewUrl ||
-                song?.preview ||
-                song?.previewUrl ||
-                "",
-              previewUrl:
-                deezerTrack?.previewUrl ||
-                deezerTrack?.preview ||
-                song?.previewUrl ||
-                song?.preview ||
-                "",
-            };
+            return;
+          } catch (error) {
+            currentNavigator =
+              currentNavigator.getParent?.();
           }
-        } catch (error) {
-          console.warn(
-            "[UserProfiles] Unable to hydrate song before opening:",
-            error
-          );
         }
 
-        navigation.navigate(
-          "SongPage",
-          {
-            track: fullTrack,
-          }
+        Alert.alert(
+          "Unable to open song",
+          "The Song page could not be opened from this screen."
         );
       },
       [navigation]
     );
 
+  const getTrackFromValue =
+    useCallback((value) => {
+      const candidates = [
+        value,
+        value?.song,
+        value?.song?.song,
+        value?.song?.item_info,
+        value?.item_info,
+        value?.track,
+        value?.track?.item_info,
+        value?.listenable,
+        value?.music,
+        value?.musicData,
+      ].filter(Boolean);
 
-  const openReviewSong =
-    useCallback(
-      async (review) => {
-        const reviewSong =
-          review?.song ||
-          review?.item_info ||
-          review?.track ||
-          {};
+      for (const candidate of candidates) {
+        const id =
+          candidate?.id ||
+          candidate?.listenableId ||
+          candidate?.listenable_id ||
+          candidate?.itemId ||
+          candidate?.item_id ||
+          candidate?.musicId ||
+          candidate?.music_id ||
+          value?.listenableId ||
+          value?.listenable_id ||
+          value?.itemId ||
+          value?.item_id ||
+          value?.musicId ||
+          value?.music_id ||
+          "";
 
-        const trackId = String(
-          reviewSong?.id ||
-          reviewSong?.listenableId ||
-          reviewSong?.listenable_id ||
-          review?.listenableId ||
-          review?.listenable_id ||
-          review?.musicId ||
-          review?.music_id ||
-          ""
-        );
-
-        if (!trackId) {
-          Alert.alert(
-            "Unable to open song",
-            "This review does not have a valid track ID."
-          );
-          return;
+        if (!id) {
+          continue;
         }
 
-        let fullTrack = {
-          ...reviewSong,
-          id: trackId,
-          listenableId: trackId,
-          listenable_id: trackId,
+        return {
+          ...candidate,
+
+          id: String(id),
+          listenableId: String(id),
+          listenable_id: String(id),
           type: "track",
+
+          title:
+            candidate?.title ||
+            candidate?.name ||
+            value?.title ||
+            value?.songTitle ||
+            "Unknown Track",
+
+          name:
+            candidate?.name ||
+            candidate?.title ||
+            value?.title ||
+            value?.songTitle ||
+            "Unknown Track",
+
+          image:
+            candidate?.image ||
+            candidate?.coverArt ||
+            candidate?.album?.cover_xl ||
+            candidate?.album?.cover_big ||
+            value?.image ||
+            value?.coverArt ||
+            "",
+
+          coverArt:
+            candidate?.coverArt ||
+            candidate?.image ||
+            candidate?.album?.cover_xl ||
+            candidate?.album?.cover_big ||
+            value?.coverArt ||
+            value?.image ||
+            "",
+
+          artist:
+            candidate?.artist ||
+            (
+              candidate?.artistName
+                ? {
+                    name:
+                      candidate.artistName,
+                  }
+                : value?.artist ||
+                  (
+                    value?.artistName
+                      ? {
+                          name:
+                            value.artistName,
+                        }
+                      : null
+                  )
+            ),
+
+          artistName:
+            candidate?.artistName ||
+            candidate?.artist?.name ||
+            value?.artistName ||
+            value?.artist?.name ||
+            "",
+
+          album:
+            candidate?.album ||
+            value?.album ||
+            null,
+
+          preview:
+            candidate?.preview ||
+            candidate?.previewUrl ||
+            value?.preview ||
+            value?.previewUrl ||
+            "",
+
+          previewUrl:
+            candidate?.previewUrl ||
+            candidate?.preview ||
+            value?.previewUrl ||
+            value?.preview ||
+            "",
         };
+      }
+
+      return null;
+    }, []);
+
+  const hydrateTrackInBackground =
+    useCallback(
+      async (track) => {
+        const trackId =
+          String(
+            track?.id ||
+            track?.listenableId ||
+            track?.listenable_id ||
+            ""
+          );
+
+        if (!trackId) {
+          return;
+        }
 
         try {
           const response =
@@ -1636,12 +1717,21 @@ const finalButtonLabel =
               trackId
             );
 
-          if (response?.ok) {
-            const deezerTrack =
-              await response.json();
+          if (!response?.ok) {
+            return;
+          }
 
-            fullTrack = {
-              ...reviewSong,
+          const deezerTrack =
+            await response.json();
+
+          /*
+           * Replace the current SongPage parameters when possible.
+           * SongPage may also hydrate itself, so this is only an
+           * enhancement and never blocks navigation.
+           */
+          navigation.setParams?.({
+            track: {
+              ...track,
               ...deezerTrack,
 
               id: String(
@@ -1663,38 +1753,77 @@ const finalButtonLabel =
               ),
 
               type: "track",
-
-              preview:
-                deezerTrack?.preview ||
-                deezerTrack?.previewUrl ||
-                reviewSong?.preview ||
-                reviewSong?.previewUrl ||
-                "",
-
-              previewUrl:
-                deezerTrack?.previewUrl ||
-                deezerTrack?.preview ||
-                reviewSong?.previewUrl ||
-                reviewSong?.preview ||
-                "",
-            };
-          }
+            },
+          });
         } catch (error) {
           console.warn(
-            "[UserProfiles] Unable to hydrate review song before opening:",
+            "[UserProfiles] Background song hydration failed:",
             error
           );
         }
-
-        navigation.navigate(
-          "SongPage",
-          {
-            track: fullTrack,
-          }
-        );
       },
       [navigation]
     );
+
+  const openLikedSong =
+    useCallback(
+      (song) => {
+        const track =
+          getTrackFromValue(song);
+
+        if (!track) {
+          Alert.alert(
+            "Unable to open song",
+            "This song does not have a valid track ID."
+          );
+
+          return;
+        }
+
+        /*
+         * Navigate immediately. Never make the user wait for Deezer.
+         */
+        navigateToSongPage(track);
+
+        hydrateTrackInBackground(
+          track
+        );
+      },
+      [
+        getTrackFromValue,
+        hydrateTrackInBackground,
+        navigateToSongPage,
+      ]
+    );
+
+  const openReviewSong =
+    useCallback(
+      (review) => {
+        const track =
+          getTrackFromValue(review);
+
+        if (!track) {
+          Alert.alert(
+            "Unable to open song",
+            "This review does not contain a valid song."
+          );
+
+          return;
+        }
+
+        navigateToSongPage(track);
+
+        hydrateTrackInBackground(
+          track
+        );
+      },
+      [
+        getTrackFromValue,
+        hydrateTrackInBackground,
+        navigateToSongPage,
+      ]
+    );
+
 
   const renderLikedSongsSection =
     useCallback(
@@ -1762,6 +1891,8 @@ const finalButtonLabel =
                         styles.compactLikedSongCard,
                     ]}
                     activeOpacity={0.82}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Open ${song?.title || song?.name || "song"}`}
                     onPress={() =>
                       openLikedSong(song)
                     }
@@ -1914,6 +2045,8 @@ const finalButtonLabel =
                       styles.reviewSnippetCard
                     }
                     activeOpacity={0.9}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Open ${item?.song?.title || item?.title || "review song"}`}
                     onPress={() =>
                       openReviewSong(item)
                     }
@@ -1938,6 +2071,15 @@ const finalButtonLabel =
                       showReplyInput={false}
                       showComments={false}
                       profileReviewMode
+                      onPress={() =>
+                        openReviewSong(item)
+                      }
+                      onSongPress={() =>
+                        openReviewSong(item)
+                      }
+                      onImagePress={() =>
+                        openReviewSong(item)
+                      }
                     />
                   </TouchableOpacity>
                 )
@@ -2564,6 +2706,15 @@ const finalButtonLabel =
                             showReplyInput={false}
                             showComments={false}
                             profileReviewMode
+                            onPress={() =>
+                              openReviewSong(item)
+                            }
+                            onSongPress={() =>
+                              openReviewSong(item)
+                            }
+                            onImagePress={() =>
+                              openReviewSong(item)
+                            }
                           />
                         </TouchableOpacity>
                       )

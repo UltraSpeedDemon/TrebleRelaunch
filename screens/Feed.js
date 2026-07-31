@@ -112,6 +112,7 @@ export default function Feed({ navigation }) {
   const fetchedInitial = useRef(false);
   const initialRequestInFlight = useRef(false);
   const loadMoreRequestInFlight = useRef(false);
+  const paginationCursorRef = useRef(0);
   const latestFeedRef = useRef([]);
   const tapTimerRef = useRef(null);
   const viewedRecommendationIds = useRef(new Set());
@@ -775,6 +776,9 @@ export default function Feed({ navigation }) {
           safeCachedItems.length
         );
 
+        paginationCursorRef.current =
+          safeCachedItems.length;
+
         setHasMore(true);
         setIsLoading(false);
 
@@ -840,6 +844,9 @@ export default function Feed({ navigation }) {
             timelineItems.length
           );
 
+          paginationCursorRef.current =
+            timelineItems.length;
+
           setRecommendationsOffset(0);
 
           setHasMore(
@@ -890,8 +897,7 @@ export default function Feed({ navigation }) {
     if (
       loadMoreRequestInFlight.current ||
       loadingMore ||
-      isLoading ||
-      !hasMore
+      isLoading
     ) {
       return;
     }
@@ -900,22 +906,87 @@ export default function Feed({ navigation }) {
       true;
 
     setLoadingMore(true);
+    setHasMore(true);
 
     try {
-      const timelineItems =
-        await fetchTimelineItems(
-          timelineOffset,
-          false
+      const existingIds =
+        new Set(
+          latestFeedRef.current
+            .map(
+              (item) =>
+                String(
+                  getItemId(item) ||
+                  ""
+                )
+            )
+            .filter(Boolean)
         );
 
+      const uniqueNewItems = [];
+
+      /*
+       * Try multiple recommendation windows before giving up.
+       * This prevents one duplicate-heavy page from ending the feed.
+       */
+      for (
+        let attempt = 0;
+        attempt < 4;
+        attempt += 1
+      ) {
+        const requestOffset =
+          paginationCursorRef.current;
+
+        const timelineItems =
+          await fetchTimelineItems(
+            requestOffset,
+            attempt > 1
+          );
+
+        paginationCursorRef.current +=
+          Math.max(
+            timelineItems.length,
+            PAGE_SIZE
+          );
+
+        for (
+          const item of
+            timelineItems
+        ) {
+          const itemId =
+            String(
+              getItemId(item) ||
+              ""
+            );
+
+          if (
+            !itemId ||
+            existingIds.has(
+              itemId
+            )
+          ) {
+            continue;
+          }
+
+          existingIds.add(itemId);
+          uniqueNewItems.push(item);
+        }
+
+        if (
+          uniqueNewItems.length >=
+          PAGE_SIZE
+        ) {
+          break;
+        }
+      }
+
       if (
-        timelineItems.length === 0
+        uniqueNewItems.length === 0
       ) {
         /*
-         * Keep the current feed intact. A later manual refresh can
-         * request a new recommendation mix.
+         * Keep infinite scrolling available. Manual refresh can also
+         * generate a completely new mix.
          */
-        setHasMore(false);
+        setHasMore(true);
         return;
       }
 
@@ -923,44 +994,6 @@ export default function Feed({ navigation }) {
 
       setCombinedFeed(
         (currentItems) => {
-          /*
-           * Deduplicate by the actual music ID first.
-           * record_id can differ even when two cards refer
-           * to the same song.
-           */
-          const existingIds =
-            new Set(
-              currentItems
-                .map(
-                  (item) =>
-                    getItemId(item)
-                )
-                .filter(Boolean)
-            );
-
-          const uniqueNewItems =
-            timelineItems.filter(
-              (item) => {
-                const itemId =
-                  getItemId(item);
-
-                if (
-                  !itemId ||
-                  existingIds.has(
-                    itemId
-                  )
-                ) {
-                  return false;
-                }
-
-                existingIds.add(
-                  itemId
-                );
-
-                return true;
-              }
-            );
-
           updatedFeed = [
             ...currentItems,
             ...uniqueNewItems,
@@ -971,15 +1004,10 @@ export default function Feed({ navigation }) {
       );
 
       setTimelineOffset(
-        (currentOffset) =>
-          currentOffset +
-          timelineItems.length
+        paginationCursorRef.current
       );
 
-      setHasMore(
-        timelineItems.length >=
-        PAGE_SIZE
-      );
+      setHasMore(true);
 
       if (
         updatedFeed.length > 0
@@ -993,6 +1021,11 @@ export default function Feed({ navigation }) {
         "[Feed] Load-more error:",
         error
       );
+
+      /*
+       * A temporary request error must not permanently end the feed.
+       */
+      setHasMore(true);
     } finally {
       loadMoreRequestInFlight.current =
         false;
@@ -1002,11 +1035,9 @@ export default function Feed({ navigation }) {
   }, [
     fetchTimelineItems,
     getItemId,
-    hasMore,
     isLoading,
     loadingMore,
     saveFeedCache,
-    timelineOffset,
   ]);
 
 
@@ -1018,6 +1049,7 @@ export default function Feed({ navigation }) {
     setRefreshing(true);
     setHasMore(true);
     setTimelineOffset(0);
+    paginationCursorRef.current = 0;
     setRecommendationsOffset(0);
 
     try {
