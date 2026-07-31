@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -38,6 +39,7 @@ import {
   getUser,
   getUserActivity,
   getUserFavorites,
+  getUserLikes,
   getUserMostUpvoted,
   getUserTopReviews,
   removeUpvoteFromReview,
@@ -47,6 +49,138 @@ import {
 const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const MAX_PROFILE_WIDTH = 1050;
+const BOTTOM_NAV_HEIGHT = 72;
+
+
+function DraggableProfileRow({
+  children,
+  isWeb,
+  contentStyle,
+}) {
+  const webScrollRef = useRef(null);
+  const dragRef = useRef({
+    active: false,
+    startX: 0,
+    startScrollLeft: 0,
+    moved: false,
+  });
+
+  const [dragging, setDragging] =
+    useState(false);
+
+  if (!isWeb) {
+    return (
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        directionalLockEnabled
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={contentStyle}
+      >
+        {children}
+      </ScrollView>
+    );
+  }
+
+  const stopDragging = () => {
+    dragRef.current.active = false;
+    setDragging(false);
+
+    window.setTimeout(() => {
+      dragRef.current.moved = false;
+    }, 60);
+  };
+
+  return React.createElement(
+    "div",
+    {
+      ref: webScrollRef,
+
+      onPointerDown: (event) => {
+        const node = webScrollRef.current;
+
+        if (!node) {
+          return;
+        }
+
+        dragRef.current = {
+          active: true,
+          startX: event.clientX,
+          startScrollLeft: node.scrollLeft,
+          moved: false,
+        };
+
+        setDragging(true);
+      },
+
+      onPointerMove: (event) => {
+        const node = webScrollRef.current;
+
+        if (
+          !node ||
+          !dragRef.current.active
+        ) {
+          return;
+        }
+
+        const movement =
+          event.clientX -
+          dragRef.current.startX;
+
+        if (Math.abs(movement) > 5) {
+          dragRef.current.moved = true;
+
+          node.scrollLeft =
+            dragRef.current.startScrollLeft -
+            movement;
+
+          event.preventDefault();
+        }
+      },
+
+      onPointerUp: stopDragging,
+      onPointerCancel: stopDragging,
+      onPointerLeave: stopDragging,
+
+      onClickCapture: (event) => {
+        if (dragRef.current.moved) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      },
+
+      style: {
+        width: "100%",
+
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "stretch",
+
+        overflowX: "auto",
+        overflowY: "hidden",
+
+        paddingRight: 12,
+
+        boxSizing: "border-box",
+
+        cursor:
+          dragging
+            ? "grabbing"
+            : "grab",
+
+        userSelect: "none",
+        WebkitUserSelect: "none",
+
+        touchAction: "pan-y",
+
+        scrollbarWidth: "none",
+        msOverflowStyle: "none",
+      },
+    },
+    children
+  );
+}
 
 export default function Profile({
   navigation,
@@ -100,6 +234,9 @@ export default function Profile({
     require("../images/avatarIcon.png");
 
   const [topReviews, setTopReviews] =
+    useState([]);
+
+  const [likedSongs, setLikedSongs] =
     useState([]);
 
   const [favorites, setFavorites] =
@@ -196,6 +333,105 @@ export default function Profile({
       );
     }, []);
 
+  const normalizeLikedSong =
+    useCallback((item) => {
+      const song =
+        item?.song ||
+        item?.item_info ||
+        item ||
+        {};
+
+      const id =
+        song?.id ||
+        song?.listenableId ||
+        song?.listenable_id ||
+        item?.listenableId ||
+        item?.listenable_id ||
+        item?.itemId ||
+        item?.id ||
+        "";
+
+      if (!id) {
+        return null;
+      }
+
+      const rawArtist =
+        song?.artist ||
+        item?.artist ||
+        null;
+
+      const artistName =
+        typeof rawArtist === "string"
+          ? rawArtist
+          : rawArtist?.name ||
+            song?.artistName ||
+            item?.artistName ||
+            "Unknown Artist";
+
+      const album =
+        song?.album ||
+        item?.album ||
+        null;
+
+      const image =
+        song?.image ||
+        song?.coverArt ||
+        item?.image ||
+        item?.coverArt ||
+        album?.cover_xl ||
+        album?.cover_big ||
+        album?.cover_medium ||
+        "";
+
+      return {
+        ...item,
+        ...song,
+
+        id: String(id),
+        listenableId: String(id),
+        type: "track",
+
+        title:
+          song?.title ||
+          song?.name ||
+          item?.title ||
+          item?.name ||
+          "Unknown Track",
+
+        name:
+          song?.name ||
+          song?.title ||
+          item?.name ||
+          item?.title ||
+          "Unknown Track",
+
+        artist:
+          typeof rawArtist === "string"
+            ? {
+                name: rawArtist,
+              }
+            : rawArtist || {
+                name: artistName,
+              },
+
+        artistName,
+        album,
+        image,
+
+        coverArt:
+          song?.coverArt ||
+          item?.coverArt ||
+          image,
+
+        preview:
+          song?.preview ||
+          song?.previewUrl ||
+          item?.preview ||
+          item?.previewUrl ||
+          "",
+      };
+    }, []);
+
   const loadReviewSections =
     useCallback(async () => {
       const currentUser =
@@ -203,6 +439,7 @@ export default function Profile({
 
       if (!currentUser?.uid) {
         setTopReviews([]);
+        setLikedSongs([]);
         setFavorites([]);
         setMostUpvoted([]);
         setActivity([]);
@@ -214,11 +451,15 @@ export default function Profile({
       try {
         const [
           topResponse,
+          likedResponse,
           favoritesResponse,
           upvotedResponse,
           activityResponse,
         ] = await Promise.all([
           getUserTopReviews(
+            currentUser.uid
+          ),
+          getUserLikes(
             currentUser.uid
           ),
           getUserFavorites(
@@ -232,100 +473,123 @@ export default function Profile({
           ),
         ]);
 
-        if (topResponse?.ok) {
-          const topData =
-            await topResponse.json();
+        const [
+          topData,
+          likedData,
+          favoritesData,
+          upvotedData,
+          activityData,
+        ] = await Promise.all([
+          topResponse?.ok
+            ? topResponse.json()
+            : [],
+          likedResponse?.ok
+            ? likedResponse.json()
+            : {
+                likes: [],
+              },
+          favoritesResponse?.ok
+            ? favoritesResponse.json()
+            : [],
+          upvotedResponse?.ok
+            ? upvotedResponse.json()
+            : [],
+          activityResponse?.ok
+            ? activityResponse.json()
+            : [],
+        ]);
 
-          const enrichedTop =
-            await enrichReviewsWithSong(
-              Array.isArray(topData)
-                ? topData
-                : []
-            );
-
-          setTopReviews(enrichedTop);
-        } else {
-          setTopReviews([]);
-        }
-
-        if (favoritesResponse?.ok) {
-          const favoritesData =
-            await favoritesResponse.json();
-
-          const enrichedFavorites =
-            await enrichReviewsWithSong(
-              Array.isArray(
-                favoritesData
-              )
-                ? favoritesData
-                : []
-            );
-
-          setFavorites(
-            enrichedFavorites
+        const enrichedTop =
+          await enrichReviewsWithSong(
+            Array.isArray(topData)
+              ? topData
+              : []
           );
-        } else {
-          setFavorites([]);
-        }
 
-        if (upvotedResponse?.ok) {
-          const upvotedData =
-            await upvotedResponse.json();
-
-          const enrichedUpvoted =
-            await enrichReviewsWithSong(
-              Array.isArray(
-                upvotedData
-              )
-                ? upvotedData
-                : []
-            );
-
-          setMostUpvoted(
-            enrichedUpvoted
+        const enrichedFavorites =
+          await enrichReviewsWithSong(
+            Array.isArray(favoritesData)
+              ? favoritesData
+              : []
           );
-        } else {
-          setMostUpvoted([]);
-        }
 
-        if (activityResponse?.ok) {
-          const activityData =
-            await activityResponse.json();
+        const enrichedUpvoted =
+          await enrichReviewsWithSong(
+            Array.isArray(upvotedData)
+              ? upvotedData
+              : []
+          );
 
-          const rawActivity =
-            Array.isArray(activityData)
-              ? activityData
+        const rawActivity =
+          Array.isArray(activityData)
+            ? activityData
+            : [];
+
+        const enrichedActivity =
+          await enrichReviewsWithSong(
+            rawActivity
+          );
+
+        const rawLikes =
+          Array.isArray(likedData?.likes)
+            ? likedData.likes
+            : Array.isArray(likedData)
+              ? likedData
               : [];
 
-          const enrichedActivity =
-            await enrichReviewsWithSong(
-              rawActivity
-            );
+        const normalizedLikedSongs =
+          rawLikes
+            .filter((item) => {
+              const type =
+                String(
+                  item?.type ||
+                  item?.item_info?.type ||
+                  item?.song?.type ||
+                  "track"
+                ).toLowerCase();
 
-          setActivity(
-            enrichedActivity
-          );
+              return (
+                type === "track" ||
+                type === "song"
+              );
+            })
+            .map(normalizeLikedSong)
+            .filter(Boolean)
+            .slice(0, 20);
 
-          setTotalReviews(
-            rawActivity.length
-          );
-        } else {
-          setActivity([]);
-          setTotalReviews(0);
-        }
+        setTopReviews(enrichedTop);
+        setLikedSongs(
+          normalizedLikedSongs
+        );
+        setFavorites(
+          enrichedFavorites
+        );
+        setMostUpvoted(
+          enrichedUpvoted
+        );
+        setActivity(
+          enrichedActivity
+        );
+        setTotalReviews(
+          rawActivity.length
+        );
       } catch (error) {
         console.error(
-          "[Profile] Review-section error:",
+          "[Profile] Profile-section error:",
           error
         );
 
         setTopReviews([]);
+        setLikedSongs([]);
         setFavorites([]);
         setMostUpvoted([]);
         setActivity([]);
         setTotalReviews(0);
       }
-    }, [enrichReviewsWithSong]);
+    }, [
+      enrichReviewsWithSong,
+      normalizeLikedSong,
+    ]);
 
     const normalizeUserArray =
   useCallback((data) => {
@@ -820,6 +1084,179 @@ export default function Profile({
       ]
     );
 
+  const openLikedSong =
+    useCallback(
+      (song) => {
+        if (!song?.id) {
+          Alert.alert(
+            "Unable to open song",
+            "This liked song does not have an ID."
+          );
+
+          return;
+        }
+
+        navigation.navigate(
+          "SongPage",
+          {
+            track: song,
+          }
+        );
+      },
+      [navigation]
+    );
+
+  const renderLikedSongsSection =
+    useCallback(
+      () => (
+        <View style={styles.cardSection}>
+          <View style={styles.sectionHeader}>
+            <View
+              style={
+                styles.sectionHeadingGroup
+              }
+            >
+              <Text style={styles.sectionTitle}>
+                Liked Songs
+              </Text>
+
+              <Text
+                style={
+                  styles.sectionDescription
+                }
+              >
+                Songs you recently liked
+              </Text>
+            </View>
+
+            <Text style={styles.sectionCount}>
+              {likedSongs.length}
+            </Text>
+          </View>
+
+          {likedSongs.length === 0 ? (
+            <View
+              style={
+                styles.sectionEmptyState
+              }
+            >
+              <Text
+                style={
+                  styles.sectionPlaceholder
+                }
+              >
+                No liked songs yet.
+              </Text>
+            </View>
+          ) : (
+            <DraggableProfileRow
+              isWeb={isWeb}
+              contentStyle={
+                styles.horizontalLikedList
+              }
+            >
+              {likedSongs.map((song) => {
+                const imageUri =
+                  song?.image ||
+                  song?.coverArt ||
+                  song?.album?.cover_xl ||
+                  song?.album?.cover_big ||
+                  "";
+
+                return (
+                  <TouchableOpacity
+                    key={String(song.id)}
+                    style={[
+                      styles.likedSongCard,
+                      isCompact &&
+                        styles.compactLikedSongCard,
+                    ]}
+                    activeOpacity={0.82}
+                    onPress={() =>
+                      openLikedSong(song)
+                    }
+                  >
+                    {imageUri ? (
+                      <Image
+                        source={{
+                          uri: imageUri,
+                        }}
+                        style={
+                          styles.likedSongImage
+                        }
+                      />
+                    ) : (
+                      <View
+                        style={
+                          styles.likedSongPlaceholder
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.likedSongPlaceholderText
+                          }
+                        >
+                          ♪
+                        </Text>
+                      </View>
+                    )}
+
+                    <View
+                      style={
+                        styles.likedSongInfo
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.likedSongTitle
+                        }
+                        numberOfLines={1}
+                      >
+                        {song?.title ||
+                          song?.name ||
+                          "Unknown Track"}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.likedSongArtist
+                        }
+                        numberOfLines={1}
+                      >
+                        {song?.artistName ||
+                          song?.artist?.name ||
+                          "Unknown Artist"}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={
+                        styles.likedSongHeartBadge
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.likedSongHeart
+                        }
+                      >
+                        ♥
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </DraggableProfileRow>
+          )}
+        </View>
+      ),
+      [
+        isCompact,
+        isWeb,
+        likedSongs,
+        openLikedSong,
+      ]
+    );
+
   const renderReviewSection =
     useCallback(
       ({
@@ -880,32 +1317,27 @@ export default function Profile({
               </Text>
             </View>
           ) : (
-            <FlatList
-              data={data}
-              horizontal
-              renderItem={
-                renderHorizontalReview
-              }
-              keyExtractor={(
-                item,
-                index
-              ) =>
-                String(
-                  item?.id ||
-                    `${title}-${index}`
-                )
-              }
-              showsHorizontalScrollIndicator={
-                false
-              }
-              contentContainerStyle={
+            <DraggableProfileRow
+              isWeb={isWeb}
+              contentStyle={
                 styles.horizontalReviewList
               }
-              nestedScrollEnabled
-              removeClippedSubviews={
-                false
-              }
-            />
+            >
+              {data.map(
+                (item, index) => (
+                  <React.Fragment
+                    key={String(
+                      item?.id ||
+                        `${title}-${index}`
+                    )}
+                  >
+                    {renderHorizontalReview({
+                      item,
+                    })}
+                  </React.Fragment>
+                )
+              )}
+            </DraggableProfileRow>
           )}
         </View>
       ),
@@ -1255,6 +1687,8 @@ export default function Profile({
               "No top reviews yet.",
           })}
 
+          {renderLikedSongsSection()}
+
           {renderReviewSection({
             title: "Favourites",
             description:
@@ -1500,13 +1934,13 @@ desktopBottomNavBar: {
   ===================================================== */
 
   pageContent: {
-    flex: 1,
-    minHeight: 0,
+  flex: 1,
+  minHeight: 0,
 
-    paddingBottom: 74,
+  paddingBottom: 0,
 
-    overflow: "hidden",
-  },
+  overflow: "hidden",
+},
 
   desktopPageContent: {
     position: "absolute",
@@ -1527,20 +1961,21 @@ desktopBottomNavBar: {
   },
 
   mobilePageContent: {
-    position: "absolute",
+  position: "absolute",
 
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 72,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
 
-    minHeight: 0,
+  minHeight: 0,
 
-    paddingTop: 70,
-    paddingHorizontal: 12,
+  paddingTop: 69,
+  paddingBottom: BOTTOM_NAV_HEIGHT,
+  paddingHorizontal: 12,
 
-    overflow: "hidden",
-  },
+  overflow: "hidden",
+},
 
   profileScroll: {
     flex: 1,
@@ -1911,6 +2346,112 @@ desktopBottomNavBar: {
   compactReviewSnippetCard: {
     width: 285,
     minHeight: 210,
+  },
+
+  horizontalLikedList: {
+    paddingRight: 4,
+  },
+
+  likedSongCard: {
+    position: "relative",
+
+    width: 188,
+
+    flexShrink: 0,
+
+    marginRight: 13,
+
+    overflow: "hidden",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.28)",
+
+    borderRadius: 14,
+
+    backgroundColor:
+      "rgba(12,24,40,0.96)",
+  },
+
+  compactLikedSongCard: {
+    width: 158,
+  },
+
+  likedSongImage: {
+    width: "100%",
+    height: 158,
+
+    resizeMode: "cover",
+
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
+  },
+
+  likedSongPlaceholder: {
+    width: "100%",
+    height: 158,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
+  },
+
+  likedSongPlaceholderText: {
+    color:
+      "rgba(255,255,255,0.65)",
+
+    fontSize: 42,
+  },
+
+  likedSongInfo: {
+    paddingHorizontal: 12,
+    paddingTop: 11,
+    paddingBottom: 13,
+  },
+
+  likedSongTitle: {
+    color: "#ffffff",
+
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "800",
+  },
+
+  likedSongArtist: {
+    color:
+      "rgba(255,255,255,0.54)",
+
+    fontSize: 12,
+    lineHeight: 17,
+
+    marginTop: 2,
+  },
+
+  likedSongHeartBadge: {
+    position: "absolute",
+
+    top: 9,
+    right: 9,
+
+    width: 30,
+    height: 30,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 15,
+
+    backgroundColor:
+      "rgba(0,0,0,0.72)",
+  },
+
+  likedSongHeart: {
+    color: "#ffffff",
+
+    fontSize: 16,
+    lineHeight: 18,
   },
 
   /* =====================================================
