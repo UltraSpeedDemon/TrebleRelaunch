@@ -113,6 +113,14 @@ export default function Feed({ navigation }) {
   const initialRequestInFlight = useRef(false);
   const loadMoreRequestInFlight = useRef(false);
   const paginationCursorRef = useRef(0);
+
+  /*
+   * The first Feed focus should restore the existing feed.
+   * A later focus means the user left the Feed and came back,
+   * so that is when a new feed should be requested.
+   */
+  const hasFocusedFeedOnce = useRef(false);
+  const feedWasBlurred = useRef(false);
   const latestFeedRef = useRef([]);
   const tapTimerRef = useRef(null);
   const viewedRecommendationIds = useRef(new Set());
@@ -783,8 +791,9 @@ export default function Feed({ navigation }) {
         setIsLoading(false);
 
         /*
-         * Once restored, this feed remains active until the user
-         * explicitly presses Refresh Feed or pulls to refresh.
+         * Once restored, this feed remains active while the user
+         * stays on this page. It refreshes after they leave and return,
+         * or when they explicitly press Refresh Feed.
          */
         return true;
       } catch (error) {
@@ -1065,6 +1074,44 @@ export default function Feed({ navigation }) {
       setRefreshing(false);
     }
   }, [fetchInitialFeed]);
+
+  useEffect(() => {
+    /*
+     * Do not refresh while the user is sitting on the Feed.
+     *
+     * Refresh only after:
+     * 1. the Feed has already been focused once,
+     * 2. the user navigates to another page, and
+     * 3. the user comes back to the Feed.
+     */
+    if (!isFocused) {
+      if (hasFocusedFeedOnce.current) {
+        feedWasBlurred.current = true;
+      }
+
+      return;
+    }
+
+    if (!hasFocusedFeedOnce.current) {
+      hasFocusedFeedOnce.current = true;
+      return;
+    }
+
+    if (!feedWasBlurred.current) {
+      return;
+    }
+
+    feedWasBlurred.current = false;
+
+    /*
+     * Keep the old cards visible while the new mix loads.
+     * This is the same safe refresh used by the Refresh Feed button.
+     */
+    handleRefresh();
+  }, [
+    handleRefresh,
+    isFocused,
+  ]);
 
   useEffect(() => {
     if (fetchedInitial.current) {
@@ -2450,7 +2497,7 @@ export default function Feed({ navigation }) {
             </Text>
 
             <Text style={styles.refreshHint}>
-              This mix stays here until you press Refresh Feed.
+              This mix stays while you are here and refreshes when you return.
             </Text>
           </View>
         )}
