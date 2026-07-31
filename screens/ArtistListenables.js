@@ -154,6 +154,17 @@ export default function ArtistListenables({
     isWeb &&
     width < DESKTOP_BREAKPOINT;
 
+  /*
+   * Keep at least two tiles on mobile.
+   * Wider screens gain additional columns.
+   */
+  const gridColumns =
+    width >= 1280
+      ? 4
+      : width >= 900
+        ? 3
+        : 2;
+
   const [
     menuOpen,
     setMenuOpen,
@@ -910,6 +921,11 @@ export default function ArtistListenables({
               data={
                 listenableData
               }
+              numColumns={gridColumns}
+              key={`artist-listenables-${gridColumns}`}
+              columnWrapperStyle={
+                styles.tileRow
+              }
               renderItem={
                 renderListenableItem
               }
@@ -1205,7 +1221,8 @@ const styles =
     listContent: {
       width: "100%",
 
-      paddingBottom: 40,
+      paddingHorizontal: 2,
+      paddingBottom: 56,
     },
 
     emptyListContent: {
@@ -1329,20 +1346,42 @@ const styles =
     },
   
     tileRow: {
+      width: "100%",
+
       gap: 14,
-      paddingHorizontal: 2,
+
+      alignItems: "stretch",
+      justifyContent: "flex-start",
     },
 
     resultTile: {
       flex: 1,
       minWidth: 0,
-      maxWidth: 250,
+
       marginBottom: 14,
+
       overflow: "hidden",
+
       borderRadius: 18,
-      backgroundColor: "rgba(255,255,255,0.045)",
+
+      backgroundColor:
+        "rgba(255,255,255,0.045)",
+
       borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.075)",
+      borderColor:
+        "rgba(255,255,255,0.075)",
+
+      ...(
+        Platform.OS === "web"
+          ? {
+              cursor: "pointer",
+              transitionDuration:
+                "160ms",
+              transitionProperty:
+                "transform, border-color, background-color",
+            }
+          : {}
+      ),
     },
 
     tileImageWrap: {

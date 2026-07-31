@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -19,8 +20,22 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 
 import colours from "../styles/colours";
 
+const DESKTOP_BREAKPOINT = 768;
+
 const SearchBar = () => {
   const navigation = useNavigation();
+
+  const { width } =
+    useWindowDimensions();
+
+  const isDesktopWeb =
+    Platform.OS === "web" &&
+    width >= DESKTOP_BREAKPOINT;
+
+  const placeholderText =
+    isDesktopWeb
+      ? "Search Songs, Albums, Artists and Friends"
+      : "Search Treble";
 
   const [searchQuery, setSearchQuery] =
     useState("");
@@ -75,7 +90,7 @@ const SearchBar = () => {
           setFocused(false)
         }
         style={styles.searchInput}
-        placeholder="Search songs, albums, artists, or users"
+        placeholder={placeholderText}
         placeholderTextColor="rgba(255,255,255,0.38)"
         selectionColor={
           colours.lightblue
@@ -130,16 +145,18 @@ const SearchBar = () => {
           }
         />
 
-        <Text
-          style={[
-            styles.submitButtonText,
+        {isDesktopWeb ? (
+          <Text
+            style={[
+              styles.submitButtonText,
 
-            !cleanedQuery &&
-              styles.submitButtonTextDisabled,
-          ]}
-        >
-          Search
-        </Text>
+              !cleanedQuery &&
+                styles.submitButtonTextDisabled,
+            ]}
+          >
+            Search
+          </Text>
+        ) : null}
       </Pressable>
     </View>
   );
@@ -187,8 +204,10 @@ const styles =
           ? {
               maxWidth: 1040,
               marginHorizontal: "auto",
+
               transitionDuration:
                 "160ms",
+
               transitionProperty:
                 "border-color, background-color, box-shadow",
             }
@@ -267,6 +286,7 @@ const styles =
     },
 
     submitButton: {
+      minWidth: 40,
       minHeight: 40,
 
       flexDirection: "row",
@@ -275,7 +295,10 @@ const styles =
 
       gap: 6,
 
-      paddingHorizontal: 14,
+      paddingHorizontal:
+        Platform.OS === "web"
+          ? 14
+          : 10,
 
       borderRadius: 12,
 
