@@ -1047,14 +1047,20 @@ export default function Feed({ navigation }) {
           );
         }
 
-        const friends =
-          await response.json();
+        const json = await response.json();
 
-        setFriendsList(
-          Array.isArray(friends)
-            ? friends
-            : []
+        const friends = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.friends)
+            ? json.friends
+            : [];
+
+        console.log(
+          "[Feed] Friends response:",
+          json
         );
+
+        setFriendsList(friends);
 
         setCurrentShareItem(item);
         setSelectedUser(null);

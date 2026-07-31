@@ -818,14 +818,50 @@ export default function AlbumPage({ route, navigation }) {
     // -------------------------------------------------------------------------
     const handleModal = async (album) => {
       try {
-        const response = await getFriends(auth.currentUser.uid);
+        const currentUser = auth.currentUser;
+
+        if (!currentUser?.uid) {
+          Alert.alert(
+            "Not signed in",
+            "You must be signed in to share music."
+          );
+          return;
+        }
+
+        const response = await getFriends(currentUser.uid);
         const json = await response.json();
-        setFriendsList(json);
+
+        console.log("[AlbumPage] Friends response:", json);
+
+        if (!response.ok) {
+          throw new Error(
+            json?.error || "Could not load friends."
+          );
+        }
+
+        const friends = Array.isArray(json)
+          ? json
+          : Array.isArray(json?.friends)
+            ? json.friends
+            : [];
+
+        setFriendsList(friends);
+        setSelectedUser(null);
+        setComment("");
         setCurrentShareItem(album);
         setModalVisible(true);
       } catch (error) {
-        console.error("[ERROR] handleModal ->", error);
-        Alert.alert("Error", "Could not load friends list");
+        console.error(
+          "[AlbumPage] Could not load friends:",
+          error
+        );
+
+        setFriendsList([]);
+
+        Alert.alert(
+          "Unable to load friends",
+          error.message || "Please try again."
+        );
       }
     };
   
