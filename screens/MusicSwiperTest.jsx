@@ -285,10 +285,10 @@ const MusicSwiperTest = () => {
           usedIdsRef.current.add(song.id);
         });
 
-        if (reset) {
+        if (reset && collected.length > 0) {
           setSongs(collected);
           setDeckVersion((value) => value + 1);
-        } else if (collected.length > 0) {
+        } else if (!reset && collected.length > 0) {
           setSongs((currentSongs) => [
             ...currentSongs,
             ...collected,
@@ -375,7 +375,6 @@ const MusicSwiperTest = () => {
   return (
     <View style={styles.container}>
       <MusicSwiper
-        key={deckVersion}
         songs={songs}
         onLoadMore={() =>
           loadRecommendations({ reset: false })

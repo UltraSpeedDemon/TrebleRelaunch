@@ -30,6 +30,7 @@ import {
   like,
   postRecommendations,
   setRecommendationServed,
+  getSongFromDeezer,
 } from "../providers/rest";
 
 import { auth } from "../utils/firebase";
@@ -86,12 +87,6 @@ export function MusicSwiper({
   const [audioError, setAudioError] =
     useState("");
 
-  /*
-   * Native apps may autoplay immediately. Mobile browsers require
-   * one direct user tap before audible playback is permitted.
-   */
-  const [audioUnlocked, setAudioUnlocked] =
-    useState(!isMobileWeb);
 
   const translateX =
     useRef(new Animated.Value(0)).current;
@@ -201,44 +196,126 @@ export function MusicSwiper({
     }
   }, []);
 
+  const refreshSongPreview = useCallback(
+    async (
+      song,
+      {
+        forceRefresh = false,
+      } = {}
+    ) => {
+      const trackId =
+        song?.id ||
+        song?.listenableId ||
+        song?.listenable_id;
+
+      if (!trackId) {
+        return null;
+      }
+
+      try {
+        const response =
+          await getSongFromDeezer(
+            String(trackId),
+            {
+              refresh: true,
+              forceRefresh,
+            }
+          );
+
+        if (!response?.ok) {
+          return null;
+        }
+
+        const deezerTrack =
+          await response.json();
+
+        const previewUrl =
+          deezerTrack?.preview ||
+          deezerTrack?.previewUrl ||
+          deezerTrack?.playbackUrl ||
+          "";
+
+        if (!previewUrl) {
+          return null;
+        }
+
+        return {
+          ...song,
+          ...deezerTrack,
+          id: String(
+            deezerTrack?.id ||
+            trackId
+          ),
+          audioUrl: previewUrl,
+          preview: previewUrl,
+          previewUrl,
+          playbackUrl: previewUrl,
+        };
+      } catch (error) {
+        console.warn(
+          `[MusicSwiper] Could not refresh track ${trackId}:`,
+          error
+        );
+
+        return null;
+      }
+    },
+    []
+  );
+
   const playSong = useCallback(
     async (
       song,
       {
-        userInitiated = false,
         restart = true,
       } = {}
     ) => {
-      const previewUrl = getPreviewUrl(song);
+      if (!song?.id) {
+        setAudioError(
+          "This recommendation does not contain a valid track ID."
+        );
+        return false;
+      }
 
-      if (!song?.id || !previewUrl) {
+      /*
+       * Match Feed: use a normal cache-friendly refresh before play.
+       * If that fails, fall back to the preview already on the card.
+       */
+      const refreshedSong =
+        await refreshSongPreview(
+          song,
+          {
+            forceRefresh: false,
+          }
+        );
+
+      const playableSong =
+        refreshedSong || song;
+
+      const previewUrl =
+        getPreviewUrl(playableSong);
+
+      if (!previewUrl) {
         setAudioError(
           "This recommendation does not contain a playable preview."
         );
         return false;
       }
 
-      if (
-        isMobileWeb &&
-        !audioUnlocked &&
-        !userInitiated
-      ) {
-        return false;
-      }
-
-      if (userInitiated && isMobileWeb) {
-        setAudioUnlocked(true);
-      }
-
-      const requestId =
-        playRequestRef.current + 1;
-      playRequestRef.current = requestId;
 
       setLoadingSound(true);
       setAudioError("");
 
       try {
+        /*
+         * Stop the old card first. unloadSound increments the request
+         * token, so the new token must be created after unloading.
+         */
         await unloadSound();
+
+        const requestId =
+          playRequestRef.current + 1;
+        playRequestRef.current = requestId;
 
         /*
          * Configure native audio once before creating the sound.
@@ -311,37 +388,97 @@ export function MusicSwiper({
         setPreviewPlaying(true);
         return true;
       } catch (error) {
-        console.error(
-          "[MusicSwiper] Preview playback failed:",
+        console.warn(
+          "[MusicSwiper] First preview failed. Force-refreshing:",
           error
         );
 
         await unloadSound();
 
-        const message =
-          String(
-            error?.message ||
-            error ||
-            ""
+        /*
+         * Match Feed: only bypass every cache after a real playback
+         * failure, then retry with Deezer's newly returned URL.
+         */
+        try {
+          const forcedSong =
+            await refreshSongPreview(
+              song,
+              {
+                forceRefresh: true,
+              }
+            );
+
+          const forcedPreview =
+            getPreviewUrl(forcedSong);
+
+          if (!forcedSong || !forcedPreview) {
+            throw error;
+          }
+
+          const retryRequestId =
+            playRequestRef.current + 1;
+
+          playRequestRef.current =
+            retryRequestId;
+
+          const retried =
+            await Audio.Sound.createAsync(
+              {
+                uri: forcedPreview,
+              },
+              {
+                shouldPlay: true,
+                isLooping: true,
+                volume: 0.68,
+                positionMillis: 0,
+                progressUpdateIntervalMillis: 250,
+              },
+              undefined,
+              true
+            );
+
+          if (
+            !mountedRef.current ||
+            retryRequestId !==
+              playRequestRef.current
+          ) {
+            await retried.sound
+              .unloadAsync()
+              .catch(() => {});
+
+            return false;
+          }
+
+          soundRef.current =
+            retried.sound;
+
+          retried.sound.setOnPlaybackStatusUpdate(
+            (status) => {
+              if (!status.isLoaded) {
+                return;
+              }
+
+              setPreviewPlaying(
+                Boolean(status.isPlaying)
+              );
+            }
           );
 
-        if (
-          isWeb &&
-          /not allowed|user agent|platform|permission|denied/i.test(
-            message
-          )
-        ) {
-          setAudioUnlocked(false);
-          setAudioError(
-            "Tap the play button once to allow music, then every following card will autoplay."
+          setPreviewPlaying(true);
+          setAudioError("");
+          return true;
+        } catch (retryError) {
+          console.error(
+            "[MusicSwiper] Forced preview retry failed:",
+            retryError
           );
-        } else {
+
           setAudioError(
-            "This preview could not start. Tap Play to retry."
+            "This preview could not start. Swipe to continue or press Play to retry."
           );
+
+          return false;
         }
-
-        return false;
       } finally {
         if (mountedRef.current) {
           setLoadingSound(false);
@@ -349,30 +486,22 @@ export function MusicSwiper({
       }
     },
     [
-      audioUnlocked,
       getPreviewUrl,
       isWeb,
+      refreshSongPreview,
       unloadSound,
     ]
   );
 
-  const unlockAndPlay = useCallback(async () => {
-    setAudioUnlocked(true);
-
-    const played = await playSong(
+  const playCurrentSong = useCallback(async () => {
+    await playSong(
       currentSong,
       {
-        userInitiated: true,
         restart: true,
       }
     );
-
-    if (!played && isMobileWeb) {
-      setAudioUnlocked(false);
-    }
   }, [
     currentSong,
-    isWeb,
     playSong,
   ]);
 
@@ -389,11 +518,11 @@ export function MusicSwiper({
         return;
       }
 
-      await unlockAndPlay();
+      await playCurrentSong();
     }, [
       previewPlaying,
       stopCurrentPreview,
-      unlockAndPlay,
+      playCurrentSong,
     ]);
 
   /*
@@ -402,10 +531,7 @@ export function MusicSwiper({
    * appear to regenerate immediately.
    */
   useEffect(() => {
-    if (
-      !currentSong ||
-      (isMobileWeb && !audioUnlocked)
-    ) {
+    if (!currentSong) {
       return undefined;
     }
 
@@ -414,7 +540,6 @@ export function MusicSwiper({
     const timer = setTimeout(() => {
       if (!cancelled) {
         playSong(currentSong, {
-          userInitiated: false,
           restart: true,
         });
       }
@@ -425,10 +550,8 @@ export function MusicSwiper({
       clearTimeout(timer);
     };
   }, [
-    audioUnlocked,
     currentSong?.id,
     getPreviewUrl(currentSong),
-    isWeb,
     playSong,
   ]);
 
@@ -758,11 +881,23 @@ export function MusicSwiper({
             ),
           ]),
         ]).start(() => {
+          const nextIndex =
+            currentIndexRef.current + 1;
+
           moveToNext();
 
           requestAnimationFrame(() => {
             if (mountedRef.current) {
               setActionLoading(false);
+
+              const next =
+                songsRef.current[nextIndex];
+
+              if (next) {
+                playSong(next, {
+                  restart: true,
+                });
+              }
             }
           });
         });
@@ -774,6 +909,7 @@ export function MusicSwiper({
         leftOpacity,
         markSongHandled,
         moveToNext,
+        playSong,
         resetPosition,
         rightOpacity,
         translateX,
@@ -1010,38 +1146,6 @@ export function MusicSwiper({
           },
         ]}
       >
-        {isMobileWeb && !audioUnlocked ? (
-          <TouchableOpacity
-            style={styles.audioUnlockOverlay}
-            onPress={unlockAndPlay}
-            activeOpacity={0.92}
-          >
-            <View style={styles.audioUnlockPanel}>
-              <View style={styles.audioUnlockIcon}>
-                {loadingSound ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#ffffff"
-                  />
-                ) : (
-                  <FontAwesome
-                    name="play"
-                    size={22}
-                    color="#ffffff"
-                  />
-                )}
-              </View>
-
-              <Text style={styles.audioUnlockTitle}>
-                Tap to Start Music Swipe
-              </Text>
-
-              <Text style={styles.audioUnlockText}>
-                Your mobile browser requires one tap before songs can play automatically.
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ) : null}
 
         {nextSong ? (
           <View
@@ -1702,52 +1806,10 @@ const styles =
       paddingHorizontal: 18,
     },
 
-    audioUnlockOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      zIndex: 200,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: 22,
-      borderRadius: 25,
-      backgroundColor: "rgba(7,11,18,0.80)",
-    },
 
-    audioUnlockPanel: {
-      width: "100%",
-      maxWidth: 330,
-      alignItems: "center",
-      paddingHorizontal: 24,
-      paddingVertical: 24,
-      borderWidth: 1,
-      borderColor: "rgba(53,175,229,0.45)",
-      borderRadius: 22,
-      backgroundColor: "rgba(19,27,39,0.97)",
-    },
 
-    audioUnlockIcon: {
-      width: 54,
-      height: 54,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 27,
-      backgroundColor: colours.lightblue || "#35afe5",
-    },
 
-    audioUnlockTitle: {
-      color: "#ffffff",
-      fontSize: 20,
-      fontWeight: "900",
-      textAlign: "center",
-      marginTop: 14,
-    },
 
-    audioUnlockText: {
-      color: "rgba(255,255,255,0.68)",
-      fontSize: 13,
-      lineHeight: 19,
-      textAlign: "center",
-      marginTop: 8,
-    },
 
     retryButton: {
       flexDirection: "row",
