@@ -340,16 +340,80 @@ export default function SongPage({ route, navigation }) {
   // Fetch current user data
   useEffect(() => {
     console.log("SongPage mounted with track:", track);
-    if(!track.preview) {
-        getSongFromDeezer(track.id).then((res) => {
-            if(res.ok) {
-                res.json().then((data) => {
-                    console.log("Data from Deezer:", data);
-                    setTrack({...track, preview: data.preview});
-                });
-            }
+
+    /*
+     * Always hydrate SongPage from Deezer. Old cards from Feed,
+     * Reviews, Likes, Profiles, Search, Albums, and Recently Viewed
+     * may contain expired preview URLs.
+     */
+    const hydrateFreshTrack = async () => {
+      const trackId =
+        track?.id ||
+        track?.listenableId ||
+        track?.listenable_id;
+
+      if (!trackId) {
+        return;
+      }
+
+      try {
+        const response = await getSongFromDeezer(
+          String(trackId),
+          { refresh: true }
+        );
+
+        if (!response?.ok) {
+          console.warn(
+            "[SongPage] Fresh Deezer hydration failed:",
+            response?.status
+          );
+          return;
         }
-    )}
+
+        const deezerTrack = await response.json();
+
+        setTrack((currentTrack) => ({
+          ...currentTrack,
+          ...deezerTrack,
+          id: String(deezerTrack?.id || trackId),
+          listenableId: String(
+            deezerTrack?.listenableId ||
+            deezerTrack?.id ||
+            trackId
+          ),
+          listenable_id: String(
+            deezerTrack?.listenable_id ||
+            deezerTrack?.listenableId ||
+            deezerTrack?.id ||
+            trackId
+          ),
+          type: "track",
+          preview:
+            deezerTrack?.preview ||
+            deezerTrack?.previewUrl ||
+            deezerTrack?.playbackUrl ||
+            "",
+          previewUrl:
+            deezerTrack?.previewUrl ||
+            deezerTrack?.preview ||
+            deezerTrack?.playbackUrl ||
+            "",
+          playbackUrl:
+            deezerTrack?.playbackUrl ||
+            deezerTrack?.preview ||
+            deezerTrack?.previewUrl ||
+            "",
+        }));
+      } catch (error) {
+        console.warn(
+          "[SongPage] Could not hydrate fresh Deezer track:",
+          error
+        );
+      }
+    };
+
+    hydrateFreshTrack();
+
     setArtistName(track.artist?.name || track.artist);
     setAlbumName(typeof track.album === "object" ? track.album.title || "Unknown Album" : track.album);
     setTrackName(track.title || track.name);
@@ -880,119 +944,209 @@ export default function SongPage({ route, navigation }) {
   // Handle song preview playback
   // Handle song preview playback
 const [sound, setSound] = useState(null);
+const [playLoading, setPlayLoading] = useState(false);
+
+const unloadCurrentSound = async () => {
+  if (sound) {
+    try {
+      await sound.unloadAsync();
+    } catch (error) {
+      console.warn(
+        "[SongPage] Could not unload preview:",
+        error
+      );
+    }
+  }
+
+  setSound(null);
+  setProgress(0);
+  setIsPlaying(false);
+};
 
 const handlePlayPreview = async () => {
-  if (!track?.preview) {
-    Alert.alert(
-      "No Preview",
-      "This song does not have a preview available."
-    );
-
+  if (sound) {
+    await unloadCurrentSound();
     return;
   }
 
-  try {
-    /*
-     * If the preview is already playing,
-     * clicking the button stops it.
-     */
-    if (sound) {
-      await sound.unloadAsync();
+  if (playLoading) {
+    return;
+  }
 
-      setSound(null);
-      setProgress(0);
-      setIsPlaying(false);
+  const trackId =
+    track?.id ||
+    track?.listenableId ||
+    track?.listenable_id;
 
-      return;
-    }
-
-    /*
-     * Read the volume saved on the Settings page.
-     */
-    const savedVolume = await AsyncStorage.getItem(
-      "treble_preview_volume"
+  if (!trackId) {
+    Alert.alert(
+      "No Preview",
+      "This song does not contain a valid Deezer track ID."
     );
+    return;
+  }
+
+  setPlayLoading(true);
+
+  try {
+    const savedVolume =
+      await AsyncStorage.getItem(
+        "treble_preview_volume"
+      );
 
     const parsedVolume =
       savedVolume !== null
         ? Number(savedVolume)
         : 0.65;
 
-    /*
-     * Keep the volume between 0 and 1.
-     */
-    const previewVolume = Number.isFinite(parsedVolume)
-      ? Math.min(1, Math.max(0, parsedVolume))
-      : 0.65;
+    const previewVolume =
+      Number.isFinite(parsedVolume)
+        ? Math.min(1, Math.max(0, parsedVolume))
+        : 0.65;
 
-    console.log(
-      "[SongPage] Preview volume:",
-      previewVolume
-    );
+    const fetchFreshPreview = async () => {
+      const response =
+        await getSongFromDeezer(
+          String(trackId),
+          { refresh: true }
+        );
 
-    /*
-     * Start the preview using the saved volume.
-     */
-    const { sound: newSound } =
-      await Audio.Sound.createAsync(
-        {
-          uri: track.preview,
-        },
-        {
-          shouldPlay: true,
-          volume: previewVolume,
-        }
-      );
-
-    setSound(newSound);
-    setProgress(0);
-    setIsPlaying(true);
-
-    newSound.setOnPlaybackStatusUpdate((status) => {
-      if (!status.isLoaded) {
-        return;
-      }
-
-      if (
-        status.durationMillis &&
-        status.positionMillis !== undefined
-      ) {
-        setProgress(
-          Math.min(
-            100,
-            (status.positionMillis /
-              status.durationMillis) *
-              100
-          )
+      if (!response?.ok) {
+        throw new Error(
+          `Deezer request failed with HTTP ${response?.status}`
         );
       }
 
-      setIsPlaying(Boolean(status.isPlaying));
+      const deezerTrack =
+        await response.json();
 
-      if (status.didJustFinish) {
-        setProgress(0);
-        setIsPlaying(false);
-        setSound(null);
+      const preview =
+        deezerTrack?.preview ||
+        deezerTrack?.previewUrl ||
+        deezerTrack?.playbackUrl ||
+        "";
 
-        newSound
-          .unloadAsync()
-          .catch(() => {});
+      if (!preview) {
+        throw new Error(
+          "Deezer did not return a preview for this track."
+        );
       }
-    });
+
+      setTrack((currentTrack) => ({
+        ...currentTrack,
+        ...deezerTrack,
+        id: String(deezerTrack?.id || trackId),
+        listenableId: String(
+          deezerTrack?.listenableId ||
+          deezerTrack?.id ||
+          trackId
+        ),
+        listenable_id: String(
+          deezerTrack?.listenable_id ||
+          deezerTrack?.listenableId ||
+          deezerTrack?.id ||
+          trackId
+        ),
+        type: "track",
+        preview,
+        previewUrl: preview,
+        playbackUrl: preview,
+      }));
+
+      return preview;
+    };
+
+    const playFreshPreview = async (preview) => {
+      const playableUrl =
+        `${preview}${
+          preview.includes("?")
+            ? "&"
+            : "?"
+        }treble_play=${Date.now()}`;
+
+      const { sound: newSound } =
+        await Audio.Sound.createAsync(
+          { uri: playableUrl },
+          {
+            shouldPlay: true,
+            volume: previewVolume,
+          },
+          undefined,
+          true
+        );
+
+      setSound(newSound);
+      setProgress(0);
+      setIsPlaying(true);
+
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) {
+          if (status?.error) {
+            console.warn(
+              "[SongPage] Playback status error:",
+              status.error
+            );
+          }
+          return;
+        }
+
+        if (
+          status.durationMillis &&
+          status.positionMillis !== undefined
+        ) {
+          setProgress(
+            Math.min(
+              100,
+              (status.positionMillis /
+                status.durationMillis) *
+                100
+            )
+          );
+        }
+
+        setIsPlaying(Boolean(status.isPlaying));
+
+        if (status.didJustFinish) {
+          setProgress(0);
+          setIsPlaying(false);
+          setSound(null);
+          newSound.unloadAsync().catch(() => {});
+        }
+      });
+    };
+
+    let preview =
+      await fetchFreshPreview();
+
+    try {
+      await playFreshPreview(preview);
+    } catch (firstPlaybackError) {
+      console.warn(
+        "[SongPage] First fresh preview failed. Retrying:",
+        firstPlaybackError
+      );
+
+      await unloadCurrentSound();
+
+      preview =
+        await fetchFreshPreview();
+
+      await playFreshPreview(preview);
+    }
   } catch (error) {
     console.error(
-      "[SongPage] Error playing preview:",
+      "[SongPage] Fresh Deezer playback error:",
       error
     );
 
-    setSound(null);
-    setProgress(0);
-    setIsPlaying(false);
+    await unloadCurrentSound();
 
     Alert.alert(
-      "Error",
-      "Unable to play the song preview."
+      "Preview unavailable",
+      "Treble requested this song directly from Deezer, but Deezer did not provide a playable preview for it."
     );
+  } finally {
+    setPlayLoading(false);
   }
 };
 

@@ -1427,6 +1427,44 @@ async function getFriendCatalogRecommendations(
     )
     .slice(0, limit * 3);
 
+  // Resolve friend names once so each "Liked by a friend" card can
+  // identify the friend instead of showing a generic label.
+  const uniqueFriendIds = [
+    ...new Set(
+      ranked.flatMap((candidate) =>
+        [...candidate.friendIds]
+      )
+    ),
+  ];
+
+  const friendNameEntries =
+    await Promise.all(
+      uniqueFriendIds.map(async (friendId) => {
+        try {
+          const friendDoc = await db
+            .collection("users")
+            .doc(String(friendId))
+            .get();
+
+          const friendData = friendDoc.data() || {};
+          const friendName =
+            friendData.username ||
+            friendData.displayName ||
+            friendData.name ||
+            "Friend";
+
+          return [String(friendId), friendName];
+        } catch (error) {
+          console.warn(
+            `[Recommendations] Unable to load friend ${friendId}:`,
+            error.message
+          );
+          return [String(friendId), "Friend"];
+        }
+      })
+    );
+
+  const friendNamesById = new Map(friendNameEntries);
   const results = [];
 
   for (const candidate of ranked) {
@@ -1457,6 +1495,20 @@ async function getFriendCatalogRecommendations(
         score: candidate.score,
         friendCount:
           candidate.friendIds.size,
+        friendIds:
+          [...candidate.friendIds].map(String),
+        friendNames:
+          [...candidate.friendIds].map(
+            (friendId) =>
+              friendNamesById.get(String(friendId)) ||
+              "Friend"
+          ),
+        friendName:
+          candidate.friendIds.size === 1
+            ? friendNamesById.get(
+                String([...candidate.friendIds][0])
+              ) || "Friend"
+            : "",
         reasons:
           [...candidate.reasons],
       },

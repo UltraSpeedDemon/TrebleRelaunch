@@ -60,7 +60,7 @@ const DOUBLE_TAP_DELAY = 300;
  * two minutes. It does not refresh immediately on first render.
  */
 const FEED_AUTO_REFRESH_MS =
-  2 * 60 * 1000;
+  60 * 1000;
 
 const FEED_CACHE_KEY = "treble_feed_cache_v3";
 /*
@@ -115,6 +115,11 @@ export default function Feed({ navigation }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentPreview, setCurrentPreview] = useState(null);
+
+  // Preloaded Expo Audio.Sound instances, keyed by preview URL.
+  // Feed cards prepare these before the user presses Play.
+  const preloadedSoundsRef = useRef(new Map());
+  const preloadInFlightRef = useRef(new Set());
 
   const fetchedInitial = useRef(false);
   const initialRequestInFlight = useRef(false);
@@ -279,9 +284,10 @@ export default function Feed({ navigation }) {
   const stopCurrentPreview = useCallback(async () => {
     if (sound) {
       try {
-        await sound.unloadAsync();
+        await sound.pauseAsync();
+        await sound.setPositionAsync(0);
       } catch (error) {
-        console.warn("[Feed] Could not unload preview:", error);
+        console.warn("[Feed] Could not stop preview:", error);
       }
     }
 
@@ -331,32 +337,30 @@ export default function Feed({ navigation }) {
               )
             : 0.65;
 
-        /*
-         * downloadFirst helps native playback with remote MP3 previews.
-         * A cache-busting query also prevents the device/browser from
-         * reusing a failed response for an expired Deezer URL.
-         */
-        const playableUrl =
-          `${previewUrl}${
-            previewUrl.includes("?")
-              ? "&"
-              : "?"
-          }treble_play=${Date.now()}`;
+        let loadedSound =
+          preloadedSoundsRef.current.get(previewUrl);
 
-        const {
-          sound: loadedSound,
-        } =
-          await Audio.Sound.createAsync(
+        if (!loadedSound) {
+          const created = await Audio.Sound.createAsync(
+            { uri: previewUrl },
             {
-              uri: playableUrl,
-            },
-            {
-              shouldPlay: true,
+              shouldPlay: false,
               volume: previewVolume,
             },
             undefined,
             true
           );
+
+          loadedSound = created.sound;
+          preloadedSoundsRef.current.set(
+            previewUrl,
+            loadedSound
+          );
+        }
+
+        await loadedSound.setVolumeAsync(previewVolume);
+        await loadedSound.setPositionAsync(0);
+        await loadedSound.playAsync();
 
         setSound(loadedSound);
         setCurrentPreview(
@@ -439,11 +443,14 @@ export default function Feed({ navigation }) {
         clearTimeout(tapTimerRef.current);
       }
 
-      if (sound) {
-        sound.unloadAsync().catch(() => {});
+      for (const preloadedSound of
+        preloadedSoundsRef.current.values()) {
+        preloadedSound.unloadAsync().catch(() => {});
       }
+
+      preloadedSoundsRef.current.clear();
     };
-  }, [sound]);
+  }, []);
 
   useEffect(() => {
     if (!isFocused) {
@@ -485,6 +492,157 @@ export default function Feed({ navigation }) {
       keyboardHideListener.remove();
     };
   }, [slideAnim]);
+
+  const preloadPreviewUrl = useCallback(
+    async (previewUrl) => {
+      if (
+        !previewUrl ||
+        preloadedSoundsRef.current.has(previewUrl) ||
+        preloadInFlightRef.current.has(previewUrl)
+      ) {
+        return;
+      }
+
+      preloadInFlightRef.current.add(previewUrl);
+
+      try {
+        const savedVolume =
+          await AsyncStorage.getItem(
+            "treble_preview_volume"
+          );
+
+        const parsedVolume =
+          savedVolume !== null
+            ? Number(savedVolume)
+            : 0.65;
+
+        const previewVolume =
+          Number.isFinite(parsedVolume)
+            ? Math.min(1, Math.max(0, parsedVolume))
+            : 0.65;
+
+        const { sound: preloadedSound } =
+          await Audio.Sound.createAsync(
+            { uri: previewUrl },
+            {
+              shouldPlay: false,
+              volume: previewVolume,
+              progressUpdateIntervalMillis: 250,
+            },
+            undefined,
+            true
+          );
+
+        preloadedSoundsRef.current.set(
+          previewUrl,
+          preloadedSound
+        );
+      } catch (error) {
+        console.warn(
+          "[Feed] Could not preload preview:",
+          error
+        );
+      } finally {
+        preloadInFlightRef.current.delete(previewUrl);
+      }
+    },
+    []
+  );
+
+  const prepareFeedPreviews = useCallback(
+    async (items) => {
+      const trackItems = items.filter(
+        (item) =>
+          getItemType(item) === "track" &&
+          getItemId(item)
+      );
+
+      // Refresh preview URLs in small batches, then preload the audio.
+      const batchSize = 4;
+
+      for (let index = 0; index < trackItems.length; index += batchSize) {
+        const batch = trackItems.slice(index, index + batchSize);
+
+        await Promise.all(
+          batch.map(async (item) => {
+            const itemId = String(getItemId(item));
+            let previewUrl = getPreviewUrl(item);
+
+            try {
+              const response = await getSongFromDeezer(
+                itemId,
+                { refresh: true }
+              );
+
+              if (response?.ok) {
+                const deezerData = await response.json();
+                previewUrl =
+                  deezerData?.preview ||
+                  deezerData?.previewUrl ||
+                  deezerData?.playbackUrl ||
+                  previewUrl;
+              }
+            } catch (error) {
+              console.warn(
+                `[Feed] Could not refresh preview ${itemId}:`,
+                error
+              );
+            }
+
+            if (!previewUrl) return;
+
+            setCombinedFeed((currentItems) =>
+              currentItems.map((feedItem) => {
+                if (String(getItemId(feedItem)) !== itemId) {
+                  return feedItem;
+                }
+
+                const previewFields = {
+                  preview: previewUrl,
+                  previewUrl,
+                  playbackUrl: previewUrl,
+                };
+
+                return feedItem.item_info
+                  ? {
+                      ...feedItem,
+                      ...previewFields,
+                      item_info: {
+                        ...feedItem.item_info,
+                        ...previewFields,
+                      },
+                    }
+                  : {
+                      ...feedItem,
+                      ...previewFields,
+                    };
+              })
+            );
+
+            await preloadPreviewUrl(previewUrl);
+          })
+        );
+      }
+    },
+    [
+      getItemId,
+      getItemType,
+      getPreviewUrl,
+      preloadPreviewUrl,
+    ]
+  );
+
+  useEffect(() => {
+    if (!isFocused || combinedFeed.length === 0) {
+      return;
+    }
+
+    prepareFeedPreviews(combinedFeed);
+  }, [
+    combinedFeed.length,
+    isFocused,
+    prepareFeedPreviews,
+  ]);
 
   const fetchPreviewForItem = useCallback(
     async (item) => {
@@ -545,101 +703,39 @@ export default function Feed({ navigation }) {
 
   const handlePlayItem = useCallback(
     async (item) => {
-      const itemId =
-        String(
-          getItemId(item) ||
-          ""
-        );
+      const itemId = String(getItemId(item) || "");
 
-      if (
-        getItemType(item) !==
-          "track" ||
-        !itemId
-      ) {
+      if (getItemType(item) !== "track" || !itemId) {
         Alert.alert(
           "Preview unavailable",
           "This item does not have a valid Deezer track ID."
         );
-
         return;
       }
 
-      const saveFreshPreview =
-        (preview) => {
-          setCombinedFeed(
-            (items) =>
-              items.map(
-                (feedItem) => {
-                  if (
-                    String(
-                      getItemId(
-                        feedItem
-                      )
-                    ) !== itemId
-                  ) {
-                    return feedItem;
-                  }
+      try {
+        // The normal path is instant because prepareFeedPreviews already
+        // refreshed and loaded this URL when the Feed appeared.
+        let preview = getPreviewUrl(item);
+        let played = preview
+          ? await handlePlayPreview(preview)
+          : false;
 
-                  if (
-                    feedItem.item_info
-                  ) {
-                    return {
-                      ...feedItem,
-                      preview,
-                      previewUrl:
-                        preview,
-                      playbackUrl:
-                        preview,
-
-                      item_info: {
-                        ...feedItem.item_info,
-                        preview,
-                        previewUrl:
-                          preview,
-                        playbackUrl:
-                          preview,
-                      },
-                    };
-                  }
-
-                  return {
-                    ...feedItem,
-                    preview,
-                    previewUrl:
-                      preview,
-                    playbackUrl:
-                      preview,
-                  };
-                }
-              )
+        // Safety fallback for a missing or rotated Deezer URL.
+        if (!played) {
+          const response = await getSongFromDeezer(
+            itemId,
+            { refresh: true }
           );
-        };
-
-      const fetchFreshPreview =
-        async () => {
-          /*
-           * Add refresh=true directly to the REST request URL.
-           * This bypasses memory, Firestore, and permanent-catalog
-           * preview caches on the backend.
-           */
-          const response =
-            await getSongFromDeezer(
-              itemId,
-              {
-                refresh: true,
-              }
-            );
 
           if (!response?.ok) {
             throw new Error(
-              `Fresh preview request failed with status ${response?.status}`
+              `Preview request failed with status ${response?.status}`
             );
           }
 
-          const deezerData =
-            await response.json();
-
-          const preview =
+          const deezerData = await response.json();
+          preview =
             deezerData?.preview ||
             deezerData?.previewUrl ||
             deezerData?.playbackUrl ||
@@ -651,61 +747,33 @@ export default function Feed({ navigation }) {
             );
           }
 
-          saveFreshPreview(
-            preview
-          );
-
-          return preview;
-        };
-
-      try {
-        /*
-         * Do not trust a preview saved in AsyncStorage or Firestore.
-         * Always retrieve the current Deezer preview before playing.
-         */
-        let preview =
-          await fetchFreshPreview();
-
-        let played =
-          await handlePlayPreview(
-            preview
-          );
-
-        if (!played) {
-          /*
-           * Deezer may rotate a URL between requests. Fetch once more
-           * and retry playback with the newest URL.
-           */
-          preview =
-            await fetchFreshPreview();
-
-          played =
-            await handlePlayPreview(
-              preview
-            );
+          await preloadPreviewUrl(preview);
+          played = await handlePlayPreview(preview);
         }
 
         if (!played) {
           throw new Error(
-            "The refreshed Deezer preview could not be played."
+            "The Deezer preview could not be played."
           );
         }
       } catch (error) {
         console.error(
-          "[Feed] Fresh Deezer playback error:",
+          "[Feed] Deezer playback error:",
           error
         );
 
         Alert.alert(
           "Preview error",
-          "Treble refreshed this song from Deezer, but its preview could not be played. This particular track may not currently have a Deezer preview."
+          "This track does not currently have a playable Deezer preview."
         );
       }
     },
     [
       getItemId,
       getItemType,
+      getPreviewUrl,
       handlePlayPreview,
+      preloadPreviewUrl,
     ]
   );
 
@@ -881,15 +949,11 @@ export default function Feed({ navigation }) {
           return false;
         }
 
-        const safeCachedItems = cached.items.filter(
-          (item) =>
-            item?.liked !== true &&
-            item?.item_info?.liked !== true
-        );
-
-        if (safeCachedItems.length === 0) {
-          return false;
-        }
+        /*
+         * Keep liked cards in the current cached feed.
+         * They should not disappear immediately after being liked.
+         */
+        const safeCachedItems = cached.items;
 
         setCombinedFeed(safeCachedItems);
 
@@ -1425,10 +1489,27 @@ export default function Feed({ navigation }) {
 
         if (nextLiked) {
           setCombinedFeed((items) => {
-            const updated = items.filter(
-              (feedItem) =>
-                String(getItemId(feedItem)) !== String(itemId)
-            );
+            const updated = items.map((feedItem) => {
+              if (
+                String(getItemId(feedItem)) !==
+                String(itemId)
+              ) {
+                return feedItem;
+              }
+
+              return {
+                ...feedItem,
+                liked: true,
+                ...(feedItem.item_info
+                  ? {
+                      item_info: {
+                        ...feedItem.item_info,
+                        liked: true,
+                      },
+                    }
+                  : {}),
+              };
+            });
 
             saveFeedCache(updated).catch(() => {});
             return updated;
@@ -1724,11 +1805,22 @@ export default function Feed({ navigation }) {
         item?.item_info?.origin;
 
       if (origin?.type === "friends") {
+        const friendNames = Array.isArray(origin?.friendNames)
+          ? origin.friendNames.filter(Boolean)
+          : [];
+
+        const singleFriendName =
+          origin?.friendName ||
+          friendNames[0] ||
+          "A friend";
+
         return {
           heading:
             origin?.friendCount > 1
-              ? `Popular With ${origin.friendCount} Friends`
-              : "Liked By A Friend",
+              ? `Liked By ${friendNames.length > 0
+                  ? friendNames.join(", ")
+                  : `${origin.friendCount} Friends`}`
+              : `Liked By ${singleFriendName}`,
           description:
             "Recommended from your music circle",
         };
