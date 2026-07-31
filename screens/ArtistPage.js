@@ -42,6 +42,7 @@ import {
 import ReviewCard from "../components/Review";
 import { useIsFocused } from "@react-navigation/native";
 import { Icon } from "@rneui/base";
+import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 
 const DESKTOP_BREAKPOINT = 768;
     const DESKTOP_SIDEBAR_WIDTH = 280;
@@ -1380,8 +1381,20 @@ export default function ArtistPage({ route, navigation }) {
 
                 {/* REVIEW CONTROLS */}
                 <View style={styles.reviewInputContainer}>
-                  <View style={styles.reviewControls}>
-                    <View style={styles.favouriteContainer}>
+                  <View
+                    style={[
+                      styles.reviewControls,
+                      isCompact &&
+                        styles.reviewControlsCompact,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.favouriteContainer,
+                        isCompact &&
+                          styles.favouriteContainerCompact,
+                      ]}
+                    >
                       <TouchableOpacity
                         onPress={(event) => {
                           event?.stopPropagation?.();
@@ -1403,7 +1416,13 @@ export default function ArtistPage({ route, navigation }) {
                       </Text>
                     </View>
 
-                    <View style={styles.starRatingContainer}>
+                    <View
+                      style={[
+                        styles.starRatingContainer,
+                        isCompact &&
+                          styles.starRatingContainerCompact,
+                      ]}
+                    >
                       {[0, 1, 2, 3, 4].map((index) => (
                         <TouchableOpacity
                           key={index}
@@ -1425,7 +1444,11 @@ export default function ArtistPage({ route, navigation }) {
                     </View>
 
                     <TouchableOpacity
-                      style={styles.selectEmojiTab}
+                      style={[
+                        styles.selectEmojiTab,
+                        isCompact &&
+                          styles.selectEmojiTabCompact,
+                      ]}
                       onPress={(event) => {
                         event?.stopPropagation?.();
 
@@ -1434,10 +1457,21 @@ export default function ArtistPage({ route, navigation }) {
                         );
                       }}
                     >
-                      <Image
-                        source={require("../images/selectEmojiIcon.png")}
-                        style={styles.selectEmojiIcon}
-                      />
+                      <View style={styles.emojiIconCircle}>
+                        <MaterialIcons
+                          name={
+                            showEmojiDropdown
+                              ? "sentiment-very-satisfied"
+                              : "add-reaction"
+                          }
+                          size={27}
+                          color={
+                            showEmojiDropdown
+                              ? "#ffffff"
+                              : colours.lightblue
+                          }
+                        />
+                      </View>
                     </TouchableOpacity>
                   </View>
 
@@ -1894,10 +1928,34 @@ desktopBottomNavBar: {
   },
 
   actionButton: {
-    minWidth: 42,
+    minWidth: 104,
+    minHeight: 46,
 
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
+
+    gap: 8,
+
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+
+    borderRadius: 14,
+
+    backgroundColor:
+      "rgba(255,255,255,0.065)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.11)",
+
+    ...(
+      Platform.OS === "web"
+        ? {
+            cursor: "pointer",
+          }
+        : {}
+    ),
   },
 
   actionIcon: {
@@ -2050,22 +2108,54 @@ desktopBottomNavBar: {
 
   reviewControls: {
     width: "100%",
+    minHeight: 70,
 
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+
+    gap: 12,
+
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+
+    borderRadius: 16,
+
+    backgroundColor:
+      "rgba(255,255,255,0.045)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.075)",
+  },
+
+  reviewControlsCompact: {
+    minHeight: 64,
+
+    gap: 5,
+
+    paddingHorizontal: 8,
+    paddingVertical: 9,
   },
 
   favouriteContainer: {
-    minWidth: 65,
+    width: 112,
+    flexShrink: 0,
 
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+
+    gap: 8,
+  },
+
+  favouriteContainerCompact: {
+    width: 88,
   },
 
   smallFavIcon: {
-    width: 25,
-    height: 25,
+    width: 29,
+    height: 29,
 
     resizeMode: "contain",
   },
@@ -2073,23 +2163,32 @@ desktopBottomNavBar: {
   favLabel: {
     color: "#ffffff",
 
-    fontSize: 11,
-    lineHeight: 15,
-
-    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "800",
   },
 
   starRatingContainer: {
+    flex: 1,
+
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
 
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
+  },
+
+  starRatingContainerCompact: {
+    transform: [
+      {
+        scale: 0.88,
+      },
+    ],
   },
 
   starIcon: {
-    width: 27,
-    height: 27,
+    width: 30,
+    height: 30,
 
     marginHorizontal: 3,
 
@@ -2097,12 +2196,32 @@ desktopBottomNavBar: {
   },
 
   selectEmojiTab: {
-    minWidth: 60,
+    width: 112,
+    flexShrink: 0,
+
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+
+  selectEmojiTabCompact: {
+    width: 56,
+  },
+
+  emojiIconCircle: {
+    width: 44,
+    height: 44,
 
     alignItems: "center",
     justifyContent: "center",
 
-    padding: 10,
+    borderRadius: 14,
+
+    backgroundColor:
+      "rgba(53,175,229,0.12)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.38)",
   },
 
   selectEmojiIcon: {
@@ -2156,7 +2275,7 @@ desktopBottomNavBar: {
 
     gap: 10,
 
-    marginTop: 15,
+    marginTop: 12,
   },
 
   reviewInput: {
@@ -2165,16 +2284,21 @@ desktopBottomNavBar: {
     minHeight: 48,
     maxHeight: 110,
 
-    color: "#111111",
+    color: "#ffffff",
 
     fontSize: 15,
 
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
 
-    borderRadius: 11,
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.10)",
 
-    backgroundColor: "#ffffff",
+    borderRadius: 13,
+
+    backgroundColor:
+      "rgba(255,255,255,0.055)",
 
     textAlignVertical: "top",
 

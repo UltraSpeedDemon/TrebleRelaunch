@@ -1577,28 +1577,46 @@ const handlePlayPreview = async () => {
                       event?.stopPropagation?.();
                       handlePlayPreview();
                     }}
-                    style={styles.playButton}
-                    disabled={!track.preview}
+                    style={[
+                      styles.playButton,
+                      isCompact &&
+                        styles.compactPlayButton,
+                      playLoading &&
+                        styles.playButtonLoading,
+                    ]}
+                    disabled={playLoading}
+                    activeOpacity={0.86}
                   >
                     <AnimatedCircularProgress
-                      size={58}
-                      width={4}
+                      size={isCompact ? 72 : 84}
+                      width={5}
                       fill={progress}
-                      tintColor={colours.secondaryblue}
-                      backgroundColor="rgba(255,255,255,0.25)"
+                      tintColor={colours.lightblue}
+                      backgroundColor="rgba(255,255,255,0.26)"
                       rotation={0}
                     >
-                      {() => (
-                        <Icon
-                          name={
-                            isPlaying
-                              ? "stop"
-                              : "play-arrow"
-                          }
-                          size={34}
-                          color="#ffffff"
-                        />
-                      )}
+                      {() =>
+                        playLoading ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="#ffffff"
+                          />
+                        ) : (
+                          <Icon
+                            name={
+                              isPlaying
+                                ? "stop"
+                                : "play-arrow"
+                            }
+                            size={
+                              isCompact
+                                ? 40
+                                : 48
+                            }
+                            color="#ffffff"
+                          />
+                        )
+                      }
                     </AnimatedCircularProgress>
                   </TouchableOpacity>
                 </View>
@@ -1638,8 +1656,20 @@ const handlePlayPreview = async () => {
                 </View>
 
                 {/* REVIEW OPTIONS */}
-                <View style={styles.reviewControls}>
-                  <View style={styles.favouriteContainer}>
+                <View
+                    style={[
+                      styles.reviewControls,
+                      isCompact &&
+                        styles.reviewControlsCompact,
+                    ]}
+                  >
+                  <View
+                      style={[
+                        styles.favouriteContainer,
+                        isCompact &&
+                          styles.favouriteContainerCompact,
+                      ]}
+                    >
                     <TouchableOpacity
                       onPress={(event) => {
                         event?.stopPropagation?.();
@@ -1661,7 +1691,13 @@ const handlePlayPreview = async () => {
                     </Text>
                   </View>
 
-                  <View style={styles.starRatingContainer}>
+                  <View
+                      style={[
+                        styles.starRatingContainer,
+                        isCompact &&
+                          styles.starRatingContainerCompact,
+                      ]}
+                    >
                     {[0, 1, 2, 3, 4].map((index) => (
                       <TouchableOpacity
                         key={index}
@@ -1683,7 +1719,11 @@ const handlePlayPreview = async () => {
                   </View>
 
                   <TouchableOpacity
-                    style={styles.selectEmojiTab}
+                    style={[
+                        styles.selectEmojiTab,
+                        isCompact &&
+                          styles.selectEmojiTabCompact,
+                      ]}
                     onPress={(event) => {
                       event?.stopPropagation?.();
                       setShowEmojiDropdown(
@@ -1691,10 +1731,21 @@ const handlePlayPreview = async () => {
                       );
                     }}
                   >
-                    <Image
-                      source={require("../images/selectEmojiIcon.png")}
-                      style={styles.selectEmojiIcon}
-                    />
+                    <View style={styles.emojiIconCircle}>
+                      <Icon
+                        name={
+                          showEmojiDropdown
+                            ? "sentiment-very-satisfied"
+                            : "add-reaction"
+                        }
+                        size={27}
+                        color={
+                          showEmojiDropdown
+                            ? "#ffffff"
+                            : colours.lightblue
+                        }
+                      />
+                    </View>
                   </TouchableOpacity>
                 </View>
 
@@ -2101,10 +2152,34 @@ desktopBottomNavBar: {
   },
 
   actionButton: {
-    minWidth: 42,
+    minWidth: 104,
+    minHeight: 46,
 
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
+
+    gap: 8,
+
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+
+    borderRadius: 14,
+
+    backgroundColor:
+      "rgba(255,255,255,0.065)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.11)",
+
+    ...(
+      Platform.OS === "web"
+        ? {
+            cursor: "pointer",
+          }
+        : {}
+    ),
   },
 
   actionIcon: {
@@ -2156,25 +2231,62 @@ desktopBottomNavBar: {
   playButton: {
     position: "absolute",
 
-    width: 62,
-    height: 62,
+    /*
+     * Explicitly anchor the preview control to the
+     * exact center of the cover artwork.
+     */
+    top: "50%",
+    left: "50%",
 
-    borderRadius: 31,
+    width: 88,
+    height: 88,
+
+    marginTop: -44,
+    marginLeft: -44,
+
+    borderRadius: 44,
 
     alignItems: "center",
     justifyContent: "center",
 
-    backgroundColor: "rgba(0,0,0,0.72)",
+    backgroundColor:
+      "rgba(7,12,20,0.82)",
+
+    borderWidth: 2,
+    borderColor:
+      "rgba(255,255,255,0.32)",
 
     shadowColor: "#000000",
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 7,
     },
-    shadowOpacity: 0.6,
-    shadowRadius: 6,
+    shadowOpacity: 0.68,
+    shadowRadius: 13,
 
-    elevation: 8,
+    elevation: 12,
+
+    ...(
+      Platform.OS === "web"
+        ? {
+            cursor: "pointer",
+          }
+        : {}
+    ),
+  },
+
+  compactPlayButton: {
+    width: 76,
+    height: 76,
+
+    marginTop: -38,
+    marginLeft: -38,
+
+    borderRadius: 38,
+  },
+
+  playButtonLoading: {
+    opacity: 0.88,
   },
 
   songDetails: {
@@ -2244,27 +2356,54 @@ artist: {
 
   reviewControls: {
     width: "100%",
+    minHeight: 70,
 
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
 
-    paddingTop: 15,
+    gap: 12,
 
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+
+    borderRadius: 16,
+
+    backgroundColor:
+      "rgba(255,255,255,0.045)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.075)",
+  },
+
+  reviewControlsCompact: {
+    minHeight: 64,
+
+    gap: 5,
+
+    paddingHorizontal: 8,
+    paddingVertical: 9,
   },
 
   favouriteContainer: {
-    minWidth: 65,
+    width: 112,
+    flexShrink: 0,
 
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+
+    gap: 8,
+  },
+
+  favouriteContainerCompact: {
+    width: 88,
   },
 
   smallFavIcon: {
-    width: 25,
-    height: 25,
+    width: 29,
+    height: 29,
 
     resizeMode: "contain",
   },
@@ -2272,25 +2411,32 @@ artist: {
   favLabel: {
     color: "#ffffff",
 
-    fontSize: 11,
-    lineHeight: 15,
-
-    marginTop: 3,
-
-    textAlign: "center",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "800",
   },
 
   starRatingContainer: {
+    flex: 1,
+
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
 
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
+  },
+
+  starRatingContainerCompact: {
+    transform: [
+      {
+        scale: 0.88,
+      },
+    ],
   },
 
   starIcon: {
-    width: 27,
-    height: 27,
+    width: 30,
+    height: 30,
 
     marginHorizontal: 3,
 
@@ -2298,12 +2444,32 @@ artist: {
   },
 
   selectEmojiTab: {
-    minWidth: 60,
+    width: 112,
+    flexShrink: 0,
+
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+
+  selectEmojiTabCompact: {
+    width: 56,
+  },
+
+  emojiIconCircle: {
+    width: 44,
+    height: 44,
 
     alignItems: "center",
     justifyContent: "center",
 
-    padding: 10,
+    borderRadius: 14,
+
+    backgroundColor:
+      "rgba(53,175,229,0.12)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.38)",
   },
 
   selectEmojiIcon: {
@@ -2357,7 +2523,7 @@ artist: {
 
     gap: 10,
 
-    marginTop: 15,
+    marginTop: 12,
   },
 
   reviewInput: {
@@ -2366,16 +2532,21 @@ artist: {
     minHeight: 48,
     maxHeight: 110,
 
-    color: "#111111",
+    color: "#ffffff",
 
     fontSize: 15,
 
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
 
-    borderRadius: 11,
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.10)",
 
-    backgroundColor: "#ffffff",
+    borderRadius: 13,
+
+    backgroundColor:
+      "rgba(255,255,255,0.055)",
 
     textAlignVertical: "top",
 
