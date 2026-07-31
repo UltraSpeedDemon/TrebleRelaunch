@@ -6,7 +6,10 @@ const requiredVariables = [
   "NEO4J_PASSWORD",
 ];
 
-for (const variableName of requiredVariables) {
+for (
+  const variableName of
+  requiredVariables
+) {
   if (!process.env[variableName]) {
     throw new Error(
       `[Neo4j] Missing environment variable: ${variableName}`
@@ -16,6 +19,7 @@ for (const variableName of requiredVariables) {
 
 const driver = neo4j.driver(
   process.env.NEO4J_URI,
+
   neo4j.auth.basic(
     process.env.NEO4J_USERNAME,
     process.env.NEO4J_PASSWORD
@@ -23,7 +27,8 @@ const driver = neo4j.driver(
 );
 
 const database =
-  process.env.NEO4J_DATABASE || "neo4j";
+  process.env.NEO4J_DATABASE ||
+  "neo4j";
 
 async function verifyNeo4jConnection() {
   const serverInfo =
@@ -33,8 +38,6 @@ async function verifyNeo4jConnection() {
     "[Neo4j] Connected:",
     serverInfo.address
   );
-
-  return serverInfo;
 }
 
 async function closeNeo4j() {

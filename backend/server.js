@@ -8,6 +8,10 @@ const {
 } = require("./providers/neo4j");
 
 const {
+  syncGraphToNeo4j,
+} = require("./services/neo4jSync");
+
+const {
   initializeApp,
   cert,
   getApps,
@@ -8453,6 +8457,354 @@ app.get("/users/:uid/friend-recommendations", async (req, res) => {
   }
 });
 
+
+/* =========================================================
+   FIRESTORE -> NEO4J AURA SYNCHRONIZATION
+========================================================= */
+
+const NEO4J_SYNC_INTERVAL_MS =
+  Math.max(
+    Number(
+      process.env.NEO4J_SYNC_INTERVAL_MS ||
+      15 * 60 * 1000
+    ),
+    60 * 1000
+  );
+
+const NEO4J_AUTO_SYNC_ENABLED =
+  String(
+    process.env.NEO4J_AUTO_SYNC_ENABLED ||
+    "true"
+  ).toLowerCase() !== "false";
+
+let neo4jSyncRunning = false;
+let lastNeo4jSyncResult = null;
+let neo4jSyncInterval = null;
+
+/*
+ * Build the complete graph from the permanent Firestore
+ * catalog and the graph-edge collection.
+ *
+ * Firestore remains the application's source of truth.
+ * Neo4j is the synchronized visual and relationship layer.
+ */
+async function buildCompleteMusicGraph() {
+  const [
+    tracksSnapshot,
+    albumsSnapshot,
+    artistsSnapshot,
+    usersSnapshot,
+    edgesSnapshot,
+  ] = await Promise.all([
+    db
+      .collection(
+        MUSIC_TRACKS_COLLECTION
+      )
+      .get(),
+
+    db
+      .collection(
+        MUSIC_ALBUMS_COLLECTION
+      )
+      .get(),
+
+    db
+      .collection(
+        MUSIC_ARTISTS_COLLECTION
+      )
+      .get(),
+
+    db
+      .collection("users")
+      .get(),
+
+    db
+      .collection(
+        MUSIC_GRAPH_EDGES_COLLECTION
+      )
+      .get(),
+  ]);
+
+  const nodes = [];
+
+  artistsSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      nodes.push({
+        id:
+          `artist:${document.id}`,
+
+        rawId:
+          document.id,
+
+        type:
+          "artist",
+
+        label:
+          data.name ||
+          data.title ||
+          "Artist",
+
+        image:
+          data.picture ||
+          data.image ||
+          "",
+      });
+    }
+  );
+
+  albumsSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      nodes.push({
+        id:
+          `album:${document.id}`,
+
+        rawId:
+          document.id,
+
+        type:
+          "album",
+
+        label:
+          data.title ||
+          data.name ||
+          "Album",
+
+        image:
+          data.image ||
+          data.coverArt ||
+          "",
+      });
+    }
+  );
+
+  tracksSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      nodes.push({
+        id:
+          `track:${document.id}`,
+
+        rawId:
+          document.id,
+
+        type:
+          "track",
+
+        label:
+          data.title ||
+          data.name ||
+          "Song",
+
+        image:
+          data.image ||
+          data.coverArt ||
+          "",
+      });
+    }
+  );
+
+  usersSnapshot.docs.forEach(
+    (document) => {
+      const data =
+        document.data() || {};
+
+      nodes.push({
+        id:
+          `user:${document.id}`,
+
+        rawId:
+          document.id,
+
+        type:
+          "user",
+
+        label:
+          data.username ||
+          data.displayName ||
+          data.name ||
+          "User",
+
+        image:
+          data.avatar ||
+          data.avatarLong ||
+          data.profilePicture ||
+          data.photoURL ||
+          "",
+      });
+    }
+  );
+
+  const nodeIds =
+    new Set(
+      nodes.map(
+        (node) => node.id
+      )
+    );
+
+  let skippedEdges = 0;
+
+  const edges =
+    edgesSnapshot.docs
+      .map((document) => {
+        const data =
+          document.data() || {};
+
+        return {
+          id:
+            document.id,
+
+          source:
+            `${data.fromType}:${data.fromId}`,
+
+          target:
+            `${data.toType}:${data.toId}`,
+
+          relationship:
+            data.relationship ||
+            "RELATED",
+
+          weight:
+            Number(
+              data.weight || 1
+            ),
+
+          metadata:
+            data.metadata || {},
+        };
+      })
+      .filter((edge) => {
+        const valid =
+          nodeIds.has(
+            edge.source
+          ) &&
+          nodeIds.has(
+            edge.target
+          );
+
+        if (!valid) {
+          skippedEdges += 1;
+        }
+
+        return valid;
+      });
+
+  return {
+    nodes,
+    edges,
+
+    counts: {
+      nodes:
+        nodes.length,
+
+      edges:
+        edges.length,
+
+      skippedEdges,
+
+      tracks:
+        tracksSnapshot.size,
+
+      albums:
+        albumsSnapshot.size,
+
+      artists:
+        artistsSnapshot.size,
+
+      users:
+        usersSnapshot.size,
+
+      storedGraphEdges:
+        edgesSnapshot.size,
+    },
+  };
+}
+
+async function runNeo4jSync(
+  reason = "manual"
+) {
+  if (neo4jSyncRunning) {
+    console.log(
+      `[Neo4j] Sync skipped because another sync is already running. Reason: ${reason}`
+    );
+
+    return {
+      ok: true,
+      skipped: true,
+      reason:
+        "Another synchronization is already running.",
+      running:
+        true,
+      lastResult:
+        lastNeo4jSyncResult,
+    };
+  }
+
+  neo4jSyncRunning = true;
+
+  const startedAt =
+    new Date().toISOString();
+
+  try {
+    console.log(
+      `[Neo4j] Building complete Firestore graph. Reason: ${reason}`
+    );
+
+    const graph =
+      await buildCompleteMusicGraph();
+
+    console.log(
+      `[Neo4j] Firestore graph ready: ${graph.counts.nodes} nodes, ${graph.counts.edges} valid relationships, ${graph.counts.skippedEdges} skipped relationships`
+    );
+
+    const syncResult =
+      await syncGraphToNeo4j(
+        graph
+      );
+
+    lastNeo4jSyncResult = {
+      ok: true,
+      reason,
+      startedAt,
+      completedAt:
+        new Date().toISOString(),
+      sourceCounts:
+        graph.counts,
+      ...syncResult,
+    };
+
+    return lastNeo4jSyncResult;
+  } catch (error) {
+    console.error(
+      "[Neo4j] Synchronization failed:",
+      error
+    );
+
+    lastNeo4jSyncResult = {
+      ok: false,
+      reason,
+      startedAt,
+      completedAt:
+        new Date().toISOString(),
+      error:
+        error?.message ||
+        "Neo4j synchronization failed.",
+    };
+
+    throw error;
+  } finally {
+    neo4jSyncRunning = false;
+  }
+}
+
+
 app.get("/admin/music-graph", async (req, res) => {
   try {
     const parsedLimit =
@@ -8666,6 +9018,99 @@ app.get("/admin/music-graph", async (req, res) => {
     });
   }
 });
+
+/*
+ * Manually trigger a complete Firestore -> Neo4j sync.
+ *
+ * Header required:
+ * x-admin-sync-key: value of NEO4J_SYNC_SECRET
+ */
+app.post(
+  "/admin/neo4j-sync",
+  async (req, res) => {
+    try {
+      const configuredSecret =
+        String(
+          process.env
+            .NEO4J_SYNC_SECRET ||
+          ""
+        );
+
+      const receivedSecret =
+        String(
+          req.get(
+            "x-admin-sync-key"
+          ) ||
+          ""
+        );
+
+      if (!configuredSecret) {
+        return res
+          .status(503)
+          .json({
+            ok: false,
+            error:
+              "NEO4J_SYNC_SECRET is not configured.",
+          });
+      }
+
+      if (
+        !receivedSecret ||
+        receivedSecret !==
+          configuredSecret
+      ) {
+        return res
+          .status(401)
+          .json({
+            ok: false,
+            error:
+              "Unauthorized.",
+          });
+      }
+
+      const result =
+        await runNeo4jSync(
+          "manual-api"
+        );
+
+      return res.json(
+        result
+      );
+    } catch (error) {
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          error:
+            error?.message ||
+            "Unable to synchronize Neo4j.",
+        });
+    }
+  }
+);
+
+/*
+ * Safe status endpoint. It does not expose credentials.
+ */
+app.get(
+  "/admin/neo4j-sync-status",
+  (req, res) => {
+    return res.json({
+      ok: true,
+      enabled:
+        NEO4J_AUTO_SYNC_ENABLED,
+      running:
+        neo4jSyncRunning,
+      intervalMilliseconds:
+        NEO4J_SYNC_INTERVAL_MS,
+      lastResult:
+        lastNeo4jSyncResult,
+    });
+  }
+);
+
+
+
 
 
 
@@ -9001,10 +9446,55 @@ const server = app.listen(
 
     try {
       await verifyNeo4jConnection();
+
+      if (
+        NEO4J_AUTO_SYNC_ENABLED
+      ) {
+        /*
+         * Perform the first complete import immediately after
+         * DigitalOcean starts. The API stays available while
+         * the synchronization runs in the background.
+         */
+        setImmediate(() => {
+          runNeo4jSync(
+            "server-startup"
+          ).catch((error) => {
+            console.error(
+              "[Neo4j] Startup sync failed:",
+              error
+            );
+          });
+        });
+
+        /*
+         * Keep Aura refreshed automatically.
+         */
+        neo4jSyncInterval =
+          setInterval(() => {
+            runNeo4jSync(
+              "automatic-interval"
+            ).catch((error) => {
+              console.error(
+                "[Neo4j] Automatic sync failed:",
+                error
+              );
+            });
+          }, NEO4J_SYNC_INTERVAL_MS);
+
+        console.log(
+          `[Neo4j] Automatic synchronization enabled every ${Math.round(
+            NEO4J_SYNC_INTERVAL_MS /
+            60000
+          )} minute(s).`
+        );
+      } else {
+        console.log(
+          "[Neo4j] Automatic synchronization is disabled."
+        );
+      }
     } catch (error) {
       /*
        * Keep the API online if Neo4j is temporarily unavailable.
-       * The failure will be visible in DigitalOcean Runtime Logs.
        */
       console.error(
         "[Neo4j] Startup connection failed:",
@@ -9033,6 +9523,14 @@ async function shutdown(signal) {
   console.log(
     `[Server] ${signal} received. Stopping Treble backend...`
   );
+
+  if (neo4jSyncInterval) {
+    clearInterval(
+      neo4jSyncInterval
+    );
+
+    neo4jSyncInterval = null;
+  }
 
   try {
     await closeNeo4j();
