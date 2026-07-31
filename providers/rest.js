@@ -111,19 +111,38 @@ export async function postSearchResults(
   });
 }
 
+// Merge these functions into your existing providers/rest.js.
+// Keep your existing API_URL/API helper names if they differ.
+
 export async function getSongFromDeezer(
-  listenableId,
-  options = {}
+  trackId,
+  {
+    refresh = false,
+    forceRefresh = false,
+  } = {}
 ) {
+  if (!trackId) {
+    throw new Error(
+      "getSongFromDeezer requires a Deezer track ID."
+    );
+  }
+
   return await serverGet(
     "search/getSongFromDeezer",
     {
-      listenable_id: listenableId,
-      refresh: options.refresh ? "true" : "false",
+      listenable_id: String(trackId),
+      refresh:
+        refresh
+          ? "true"
+          : "false",
+      force_refresh:
+        forceRefresh
+          ? "true"
+          : "false",
+      _ts: String(Date.now()),
     }
   );
 }
-//#endregion
 
 //#region User endpoints
 export async function createUser(userData) {

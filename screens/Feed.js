@@ -424,6 +424,10 @@ export default function Feed({ navigation }) {
               setCurrentPreview(null);
               setSound(null);
 
+              preloadedSoundsRef.current.delete(
+                previewUrl
+              );
+
               loadedSound
                 .unloadAsync()
                 .catch(() => {});
@@ -737,7 +741,10 @@ export default function Feed({ navigation }) {
         if (!played) {
           const response = await getSongFromDeezer(
             itemId,
-            { refresh: true }
+            {
+              refresh: true,
+              forceRefresh: true,
+            }
           );
 
           if (!response?.ok) {

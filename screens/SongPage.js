@@ -1043,11 +1043,16 @@ const handlePlayPreview = async () => {
         ? Math.min(1, Math.max(0, parsedVolume))
         : 0.65;
 
-    const fetchFreshPreview = async () => {
+    const fetchFreshPreview = async ({
+      forceRefresh = false,
+    } = {}) => {
       const response =
         await getSongFromDeezer(
           String(trackId),
-          { refresh: true }
+          {
+            refresh: true,
+            forceRefresh,
+          }
         );
 
       if (!response?.ok) {
@@ -1155,7 +1160,9 @@ const handlePlayPreview = async () => {
     };
 
     let preview =
-      await fetchFreshPreview();
+      await fetchFreshPreview({
+        forceRefresh: false,
+      });
 
     try {
       await playFreshPreview(preview);
@@ -1168,7 +1175,9 @@ const handlePlayPreview = async () => {
       await unloadCurrentSound();
 
       preview =
-        await fetchFreshPreview();
+        await fetchFreshPreview({
+          forceRefresh: true,
+        });
 
       await playFreshPreview(preview);
     }

@@ -25,7 +25,6 @@ import {
   useFocusEffect,
   useNavigation,
 } from "@react-navigation/native";
-import { Audio } from "expo-av";
 
 import {
   like,
@@ -36,6 +35,7 @@ import {
 import { auth } from "../utils/firebase";
 import colours from "../styles/colours";
 import { SongCardSwipe } from "./SongCardSwipe";
+import { usePlayablePreview } from "../hooks/usePlayablePreview";
 
 const SWIPE_THRESHOLD = 105;
 const SWIPE_DISTANCE = 520;
@@ -57,23 +57,6 @@ export function MusicSwiper({
   const [currentIndex, setCurrentIndex] =
     useState(0);
 
-  const [isMuted, setIsMuted] =
-    useState(false);
-
-  const [loadingSound, setLoadingSound] =
-    useState(false);
-
-  const [sound, setSound] =
-    useState(null);
-
-  const soundRef = useRef(null);
-
-  const [audioNeedsTap, setAudioNeedsTap] =
-    useState(false);
-
-  const [audioError, setAudioError] =
-    useState("");
-
   const [isDragging, setIsDragging] =
     useState(false);
 
@@ -94,6 +77,20 @@ export function MusicSwiper({
 
   const nextSong =
     songs[currentIndex + 1] || null;
+
+  const {
+    playing: previewPlaying,
+    loading: loadingSound,
+    error: audioError,
+    play: playCurrentPreview,
+    stop: stopCurrentPreview,
+  } = usePlayablePreview(currentSong, {
+    loop: true,
+    autoPlay: true,
+  });
+
+  const audioNeedsTap = isWeb && !previewPlaying && Boolean(currentSong);
+
 
   const cardWidth =
     Math.min(
@@ -143,137 +140,12 @@ export function MusicSwiper({
       extrapolate: "clamp",
     });
 
-  const stopSound =
-    useCallback(async () => {
-      const activeSound = soundRef.current;
+  const stopSound = stopCurrentPreview;
 
-      soundRef.current = null;
-      setSound(null);
-
-      if (!activeSound) {
-        return;
-      }
-
-      try {
-        await activeSound.unloadAsync();
-      } catch (error) {
-        console.warn(
-          "[MusicSwiper] Unable to unload sound:",
-          error
-        );
-      }
-    }, []);
-
-  const loadAndPlayPreview =
-    useCallback(
-      async ({ userInitiated = false } = {}) => {
-        await stopSound();
-
-        if (!currentSong?.audioUrl) {
-          setAudioError("This track does not currently have a playable preview.");
-          setAudioNeedsTap(false);
-          return false;
-        }
-
-        setLoadingSound(true);
-        setAudioError("");
-
-        try {
-          await Audio.setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
-            playThroughEarpieceAndroid: false,
-          });
-
-          const { sound: loadedSound } =
-            await Audio.Sound.createAsync(
-              { uri: currentSong.audioUrl },
-              {
-                shouldPlay: userInitiated || !isWeb,
-                isLooping: true,
-                isMuted,
-                volume: 0.68,
-              }
-            );
-
-          soundRef.current = loadedSound;
-          setSound(loadedSound);
-
-          if (isWeb && !userInitiated) {
-            try {
-              await loadedSound.playAsync();
-              setAudioNeedsTap(false);
-            } catch {
-              setAudioNeedsTap(true);
-            }
-          } else {
-            setAudioNeedsTap(false);
-          }
-
-          return true;
-        } catch (error) {
-          console.error(
-            "[MusicSwiper] Preview error:",
-            error
-          );
-
-          setAudioNeedsTap(isWeb);
-          setAudioError(
-            isWeb
-              ? "Click the sound button to start this preview."
-              : "The preview could not be played. Try the next song."
-          );
-
-          return false;
-        } finally {
-          setLoadingSound(false);
-        }
-      },
-      [
-        currentSong?.audioUrl,
-        currentSong?.id,
-        isMuted,
-        isWeb,
-        stopSound,
-      ]
-    );
-
-  useEffect(() => {
-    let active = true;
-
-    const start = async () => {
-      if (!active) return;
-      await loadAndPlayPreview({
-        userInitiated: false,
-      });
-    };
-
-    start();
-
-    return () => {
-      active = false;
-      stopSound();
-    };
-  }, [
-    currentSong?.id,
-    currentSong?.audioUrl,
-  ]);
-
-  useEffect(() => {
-    if (!sound) {
-      return;
-    }
-
-    sound
-      .setIsMutedAsync(isMuted)
-      .catch((error) => {
-        console.warn(
-          "[MusicSwiper] Mute error:",
-          error
-        );
-      });
-  }, [isMuted, sound]);
+  const loadAndPlayPreview = useCallback(
+    async () => playCurrentPreview({ userInitiated: true }),
+    [playCurrentPreview]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -610,7 +482,7 @@ export function MusicSwiper({
         event.key.toLowerCase() === "m"
       ) {
         event.preventDefault();
-        setIsMuted((value) => !value);
+        previewPlaying ? stopCurrentPreview() : playCurrentPreview({ userInitiated: true });
       }
     };
 
@@ -859,14 +731,11 @@ export function MusicSwiper({
             styles.muteButton,
           ]}
           onPress={async () => {
-            if (!sound || audioNeedsTap) {
-              await loadAndPlayPreview({
-                userInitiated: true,
-              });
-              return;
+            if (previewPlaying) {
+              await stopCurrentPreview();
+            } else {
+              await loadAndPlayPreview();
             }
-
-            setIsMuted((value) => !value);
           }}
           activeOpacity={0.8}
         >
@@ -878,11 +747,9 @@ export function MusicSwiper({
           ) : (
             <FontAwesome
               name={
-                audioNeedsTap || !sound
-                  ? "play"
-                  : isMuted
-                    ? "volume-off"
-                    : "volume-up"
+                previewPlaying
+                  ? "volume-up"
+                  : "play"
               }
               size={24}
               color="#ffffff"

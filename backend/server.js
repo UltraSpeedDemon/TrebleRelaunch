@@ -4095,10 +4095,16 @@ app.get("/search/getSongFromDeezer", async (req, res) => {
      * no playable preview. A normal refresh=true request no longer
      * forces a network call when Treble already has a preview.
      */
-    if (
-      refreshRequested &&
-      !cachedPreview
-    ) {
+    const forceRefreshRequested =
+      String(req.query.force_refresh || "").toLowerCase() === "true";
+
+    /*
+     * A play failure usually means an existing Deezer preview URL has
+     * expired. force_refresh=true must bypass every cache and obtain a
+     * new preview URL. Normal refresh=true remains cache-friendly and
+     * only refreshes records that have no preview.
+     */
+    if (forceRefreshRequested || (refreshRequested && !cachedPreview)) {
       track = await fetchDeezer(
         `/track/${encodeURIComponent(trackId)}`,
         {
@@ -5427,11 +5433,42 @@ app.get("/review/reviewSong", async (req, res) => {
     const type = review.type || "track";
 
     if (type === "track") {
-      const track = await fetchDeezer(
-        `/track/${encodeURIComponent(listenableId)}`
+      let track = await fetchDeezer(
+        `/track/${encodeURIComponent(listenableId)}`,
+        {
+          forceRefresh: false,
+          ttl: DEEZER_CACHE_TTL.track,
+        }
       );
 
-      return res.json(normalizeDeezerTrack(track));
+      let preview =
+        track?.preview ||
+        track?.previewUrl ||
+        track?.playbackUrl ||
+        "";
+
+      if (!preview) {
+        track = await fetchDeezer(
+          `/track/${encodeURIComponent(listenableId)}`,
+          {
+            forceRefresh: true,
+            ttl: DEEZER_CACHE_TTL.track,
+          }
+        );
+
+        preview =
+          track?.preview ||
+          track?.previewUrl ||
+          track?.playbackUrl ||
+          "";
+      }
+
+      return res.json({
+        ...normalizeDeezerTrack(track),
+        preview,
+        previewUrl: preview,
+        playbackUrl: preview,
+      });
     }
 
     if (type === "album") {

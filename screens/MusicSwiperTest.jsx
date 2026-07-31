@@ -73,6 +73,7 @@ const MusicSwiperTest = () => {
     try {
       const response = await getSongFromDeezer(String(id), {
         refresh: true,
+        forceRefresh: true,
       });
 
       if (!response?.ok) {
