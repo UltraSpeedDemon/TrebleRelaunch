@@ -70,6 +70,7 @@ export function MusicSwiper({
 
   const isWeb = Platform.OS === "web";
   const isCompact = width < 700;
+  const isMobileWeb = isWeb && isCompact;
 
   const [currentIndex, setCurrentIndex] =
     useState(0);
@@ -90,7 +91,7 @@ export function MusicSwiper({
    * one direct user tap before audible playback is permitted.
    */
   const [audioUnlocked, setAudioUnlocked] =
-    useState(!isWeb);
+    useState(!isMobileWeb);
 
   const translateX =
     useRef(new Animated.Value(0)).current;
@@ -218,26 +219,30 @@ export function MusicSwiper({
       }
 
       if (
-        isWeb &&
+        isMobileWeb &&
         !audioUnlocked &&
         !userInitiated
       ) {
         return false;
       }
 
-      if (userInitiated && isWeb) {
+      if (userInitiated && isMobileWeb) {
         setAudioUnlocked(true);
       }
-
-      const requestId =
-        playRequestRef.current + 1;
-      playRequestRef.current = requestId;
 
       setLoadingSound(true);
       setAudioError("");
 
       try {
+        /*
+         * Cancel and unload the previous sound first. Only after that
+         * create the request id for this new playback attempt.
+         */
         await unloadSound();
+
+        const requestId =
+          playRequestRef.current + 1;
+        playRequestRef.current = requestId;
 
         /*
          * Configure native audio once before creating the sound.
@@ -333,7 +338,7 @@ export function MusicSwiper({
           );
 
         if (
-          isWeb &&
+          isMobileWeb &&
           /not allowed|user agent|platform|permission|denied/i.test(
             message
           )
@@ -344,7 +349,9 @@ export function MusicSwiper({
           );
         } else {
           setAudioError(
-            "This preview could not start. Tap Play to retry."
+            isWeb
+              ? "Browser autoplay was blocked. Press the center Play button once."
+              : "This preview could not start. Tap Play to retry."
           );
         }
 
@@ -358,6 +365,7 @@ export function MusicSwiper({
     [
       audioUnlocked,
       getPreviewUrl,
+      isMobileWeb,
       isWeb,
       unloadSound,
     ]
@@ -374,12 +382,12 @@ export function MusicSwiper({
       }
     );
 
-    if (!played && isWeb) {
+    if (!played && isMobileWeb) {
       setAudioUnlocked(false);
     }
   }, [
     currentSong,
-    isWeb,
+    isMobileWeb,
     playSong,
   ]);
 
@@ -411,7 +419,7 @@ export function MusicSwiper({
   useEffect(() => {
     if (
       !currentSong ||
-      (isWeb && !audioUnlocked)
+      (isMobileWeb && !audioUnlocked)
     ) {
       return undefined;
     }
@@ -435,7 +443,7 @@ export function MusicSwiper({
     audioUnlocked,
     currentSong?.id,
     getPreviewUrl(currentSong),
-    isWeb,
+    isMobileWeb,
     playSong,
   ]);
 
@@ -1017,7 +1025,7 @@ export function MusicSwiper({
           },
         ]}
       >
-        {isWeb && !audioUnlocked ? (
+        {isMobileWeb && !audioUnlocked ? (
           <TouchableOpacity
             style={styles.audioUnlockOverlay}
             onPress={unlockAndPlay}
@@ -1044,7 +1052,7 @@ export function MusicSwiper({
               </Text>
 
               <Text style={styles.audioUnlockText}>
-                Your mobile browser requires one tap before songs can play automatically.
+                Tap once to allow audio. Every following song will then play automatically.
               </Text>
             </View>
           </TouchableOpacity>

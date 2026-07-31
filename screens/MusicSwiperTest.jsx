@@ -24,9 +24,9 @@ import {
 import { auth } from "../utils/firebase";
 import colours from "../styles/colours";
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 20;
 const MAX_LOAD_ATTEMPTS = 4;
-const MINIMUM_DECK_SIZE = 6;
+const MINIMUM_DECK_SIZE = 12;
 
 const MusicSwiperTest = () => {
   const [songs, setSongs] = useState([]);
@@ -40,6 +40,11 @@ const MusicSwiperTest = () => {
   const offsetRef = useRef(0);
   const loadingRef = useRef(false);
   const usedIdsRef = useRef(new Set());
+  const songsRef = useRef([]);
+
+  useEffect(() => {
+    songsRef.current = songs;
+  }, [songs]);
 
   const parseResponse = useCallback(async (response) => {
     if (!response) {
@@ -71,10 +76,17 @@ const MusicSwiperTest = () => {
 
   const fetchFreshTrack = useCallback(async (id) => {
     try {
-      const response = await getSongFromDeezer(String(id), {
+      let response = await getSongFromDeezer(String(id), {
         refresh: true,
-        forceRefresh: true,
+        forceRefresh: false,
       });
+
+      if (!response?.ok) {
+        response = await getSongFromDeezer(String(id), {
+          refresh: true,
+          forceRefresh: true,
+        });
+      }
 
       if (!response?.ok) {
         return null;
@@ -308,7 +320,7 @@ const MusicSwiperTest = () => {
 
         setLoadError(error.message || "Unable to load music.");
 
-        if (reset && songs.length === 0) {
+        if (reset && songsRef.current.length === 0) {
           const message =
             `Unable to load recommendations: ${error.message}`;
 
@@ -326,7 +338,7 @@ const MusicSwiperTest = () => {
         setLoadingMore(false);
       }
     },
-    [requestRecommendationPage, songs.length]
+    [requestRecommendationPage]
   );
 
   useEffect(() => {
