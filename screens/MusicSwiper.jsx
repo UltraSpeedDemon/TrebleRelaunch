@@ -46,6 +46,7 @@ export function MusicSwiper({
   onLoadMore,
   loadingMore = false,
   hasMore = true,
+  onRetry,
 }) {
   const navigation = useNavigation();
   const { width, height } = useWindowDimensions();
@@ -64,6 +65,14 @@ export function MusicSwiper({
 
   const [sound, setSound] =
     useState(null);
+
+  const soundRef = useRef(null);
+
+  const [audioNeedsTap, setAudioNeedsTap] =
+    useState(false);
+
+  const [audioError, setAudioError] =
+    useState("");
 
   const [isDragging, setIsDragging] =
     useState(false);
@@ -136,79 +145,119 @@ export function MusicSwiper({
 
   const stopSound =
     useCallback(async () => {
-      if (!sound) {
+      const activeSound = soundRef.current;
+
+      soundRef.current = null;
+      setSound(null);
+
+      if (!activeSound) {
         return;
       }
 
       try {
-        await sound.unloadAsync();
+        await activeSound.unloadAsync();
       } catch (error) {
         console.warn(
           "[MusicSwiper] Unable to unload sound:",
           error
         );
-      } finally {
-        setSound(null);
       }
-    }, [sound]);
+    }, []);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadAndPlayPreview =
+    useCallback(
+      async ({ userInitiated = false } = {}) => {
+        await stopSound();
 
-    const playPreview = async () => {
-      await stopSound();
+        if (!currentSong?.audioUrl) {
+          setAudioError("This track does not currently have a playable preview.");
+          setAudioNeedsTap(false);
+          return false;
+        }
 
-      if (
-        !currentSong?.audioUrl ||
-        cancelled
-      ) {
-        return;
-      }
+        setLoadingSound(true);
+        setAudioError("");
 
-      setLoadingSound(true);
+        try {
+          await Audio.setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+            shouldDuckAndroid: true,
+            playThroughEarpieceAndroid: false,
+          });
 
-      try {
-        const {
-          sound: loadedSound,
-        } =
-          await Audio.Sound.createAsync(
-            {
-              uri: currentSong.audioUrl,
-            },
-            {
-              shouldPlay: true,
-              isLooping: true,
-              isMuted,
-              volume: 0.68,
+          const { sound: loadedSound } =
+            await Audio.Sound.createAsync(
+              { uri: currentSong.audioUrl },
+              {
+                shouldPlay: userInitiated || !isWeb,
+                isLooping: true,
+                isMuted,
+                volume: 0.68,
+              }
+            );
+
+          soundRef.current = loadedSound;
+          setSound(loadedSound);
+
+          if (isWeb && !userInitiated) {
+            try {
+              await loadedSound.playAsync();
+              setAudioNeedsTap(false);
+            } catch {
+              setAudioNeedsTap(true);
             }
+          } else {
+            setAudioNeedsTap(false);
+          }
+
+          return true;
+        } catch (error) {
+          console.error(
+            "[MusicSwiper] Preview error:",
+            error
           );
 
-        if (cancelled) {
-          await loadedSound.unloadAsync();
-          return;
-        }
+          setAudioNeedsTap(isWeb);
+          setAudioError(
+            isWeb
+              ? "Click the sound button to start this preview."
+              : "The preview could not be played. Try the next song."
+          );
 
-        setSound(loadedSound);
-      } catch (error) {
-        console.error(
-          "[MusicSwiper] Preview error:",
-          error
-        );
-      } finally {
-        if (!cancelled) {
+          return false;
+        } finally {
           setLoadingSound(false);
         }
-      }
+      },
+      [
+        currentSong?.audioUrl,
+        currentSong?.id,
+        isMuted,
+        isWeb,
+        stopSound,
+      ]
+    );
+
+  useEffect(() => {
+    let active = true;
+
+    const start = async () => {
+      if (!active) return;
+      await loadAndPlayPreview({
+        userInitiated: false,
+      });
     };
 
-    playPreview();
+    start();
 
     return () => {
-      cancelled = true;
+      active = false;
+      stopSound();
     };
   }, [
-    currentSong?.audioUrl,
     currentSong?.id,
+    currentSong?.audioUrl,
   ]);
 
   useEffect(() => {
@@ -233,6 +282,17 @@ export function MusicSwiper({
       };
     }, [stopSound])
   );
+
+  useEffect(() => {
+    if (songs.length === 0) {
+      setCurrentIndex(0);
+      return;
+    }
+
+    if (currentIndex >= songs.length) {
+      setCurrentIndex(0);
+    }
+  }, [currentIndex, songs.length]);
 
   useEffect(() => {
     const remaining =
@@ -591,9 +651,26 @@ export function MusicSwiper({
             </Text>
 
             <Text style={styles.emptyText}>
-              Like and review more music to
-              improve your recommendations.
+              We could not build the deck right now.
+              Check the connection and try again.
             </Text>
+
+            {typeof onRetry === "function" ? (
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={onRetry}
+                activeOpacity={0.8}
+              >
+                <FontAwesome
+                  name="refresh"
+                  size={16}
+                  color="#ffffff"
+                />
+                <Text style={styles.retryButtonText}>
+                  Reload songs
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </>
         )}
       </View>
@@ -781,9 +858,16 @@ export function MusicSwiper({
             styles.controlButton,
             styles.muteButton,
           ]}
-          onPress={() =>
-            setIsMuted((value) => !value)
-          }
+          onPress={async () => {
+            if (!sound || audioNeedsTap) {
+              await loadAndPlayPreview({
+                userInitiated: true,
+              });
+              return;
+            }
+
+            setIsMuted((value) => !value);
+          }}
           activeOpacity={0.8}
         >
           {loadingSound ? (
@@ -794,9 +878,11 @@ export function MusicSwiper({
           ) : (
             <FontAwesome
               name={
-                isMuted
-                  ? "volume-off"
-                  : "volume-up"
+                audioNeedsTap || !sound
+                  ? "play"
+                  : isMuted
+                    ? "volume-off"
+                    : "volume-up"
               }
               size={24}
               color="#ffffff"
@@ -825,6 +911,12 @@ export function MusicSwiper({
           />
         </TouchableOpacity>
       </View>
+
+      {audioNeedsTap || audioError ? (
+        <Text style={styles.audioStatusText}>
+          {audioError || "Tap the play button to hear this preview."}
+        </Text>
+      ) : null}
 
       {isCompact ? (
         <View style={styles.mobileFooter}>
@@ -1292,6 +1384,32 @@ const styles =
 
       fontSize: 12,
 
+      marginLeft: 8,
+    },
+
+    audioStatusText: {
+      color: "rgba(255,255,255,0.62)",
+      fontSize: 12,
+      textAlign: "center",
+      marginTop: 9,
+      paddingHorizontal: 18,
+    },
+
+    retryButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 18,
+      paddingHorizontal: 18,
+      paddingVertical: 11,
+      borderRadius: 14,
+      backgroundColor: colours.lightblue || "#35afe5",
+    },
+
+    retryButtonText: {
+      color: "#ffffff",
+      fontSize: 14,
+      fontWeight: "800",
       marginLeft: 8,
     },
 

@@ -2044,6 +2044,152 @@ async function createFeedItem(
 
 
 /* =========================================================
+   MUSIC SWIPE PLAYABLE TRACK SAFETY
+   ========================================================= */
+
+async function getPlayableRecommendationTrack(track) {
+  if (!track || !track.id) {
+    return null;
+  }
+
+  const existingPreview =
+    track.preview ||
+    track.previewUrl ||
+    track.playbackUrl ||
+    "";
+
+  if (existingPreview) {
+    return {
+      ...track,
+      preview: existingPreview,
+    };
+  }
+
+  const trackId = String(track.id);
+
+  try {
+    const refreshed = await fetchDeezer(
+      `/track/${encodeURIComponent(trackId)}`,
+      { forceRefresh: true }
+    );
+
+    const refreshedPreview =
+      refreshed?.preview ||
+      refreshed?.previewUrl ||
+      refreshed?.playbackUrl ||
+      "";
+
+    if (refreshedPreview) {
+      return {
+        ...track,
+        ...refreshed,
+        preview: refreshedPreview,
+      };
+    }
+  } catch (error) {
+    console.warn(
+      `[Music Swipe] Unable to refresh preview for ${trackId}:`,
+      error.message
+    );
+  }
+
+  try {
+    const snapshot = await db
+      .collection(MUSIC_TRACKS_COLLECTION)
+      .doc(trackId)
+      .get();
+
+    if (snapshot.exists) {
+      const stored = snapshot.data();
+      const storedPreview =
+        stored.preview ||
+        stored.previewUrl ||
+        stored.playbackUrl ||
+        stored.raw?.preview ||
+        "";
+
+      if (storedPreview) {
+        return {
+          ...(stored.raw ||
+            permanentEntityToDeezerShape("track", stored)),
+          preview: storedPreview,
+        };
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `[Music Swipe] Catalog fallback failed for ${trackId}:`,
+      error.message
+    );
+  }
+
+  return null;
+}
+
+async function getPlayableCatalogFallbackTracks({
+  limit,
+  excludedTrackIds,
+  usedTrackIds,
+}) {
+  try {
+    const snapshot = await db
+      .collection(MUSIC_TRACKS_COLLECTION)
+      .limit(Math.max(limit * 20, 200))
+      .get();
+
+    const tracks = [];
+
+    for (const document of snapshot.docs) {
+      const data = document.data() || {};
+      const trackId = String(data.id || document.id || "");
+      const preview =
+        data.preview ||
+        data.previewUrl ||
+        data.playbackUrl ||
+        data.raw?.preview ||
+        "";
+
+      if (
+        !trackId ||
+        !preview ||
+        excludedTrackIds.has(trackId) ||
+        usedTrackIds.has(trackId)
+      ) {
+        continue;
+      }
+
+      const rawTrack =
+        data.raw ||
+        permanentEntityToDeezerShape("track", data);
+
+      if (!rawTrack) {
+        continue;
+      }
+
+      usedTrackIds.add(trackId);
+      tracks.push({
+        ...rawTrack,
+        id: trackId,
+        preview,
+      });
+
+      if (tracks.length >= limit) {
+        break;
+      }
+    }
+
+    return tracks;
+  } catch (error) {
+    console.warn(
+      "[Music Swipe] Permanent catalog fallback unavailable:",
+      error.message
+    );
+    return [];
+  }
+}
+
+
+/* =========================================================
    TREBLE MUSIC SHARING
    ========================================================= */
 
@@ -3526,17 +3672,70 @@ async function buildPersonalizedRecommendations({
     }
   }
 
+  /*
+   * Hydrate every card before returning it. Music Swipe should never
+   * receive a card without a usable preview URL.
+   */
+  const playablePage = [];
+  const playableIds = new Set();
+
+  for (const candidate of page) {
+    const playableTrack =
+      await getPlayableRecommendationTrack(
+        candidate.track
+      );
+
+    const trackId = String(
+      playableTrack?.id || ""
+    );
+
+    if (
+      !playableTrack ||
+      !trackId ||
+      likedTrackIds.has(trackId) ||
+      playableIds.has(trackId)
+    ) {
+      continue;
+    }
+
+    playableIds.add(trackId);
+    playablePage.push({
+      ...candidate,
+      track: playableTrack,
+    });
+
+    if (playablePage.length >= limit) {
+      break;
+    }
+  }
+
+  if (playablePage.length < limit) {
+    const catalogTracks =
+      await getPlayableCatalogFallbackTracks({
+        limit: limit - playablePage.length,
+        excludedTrackIds: likedTrackIds,
+        usedTrackIds: playableIds,
+      });
+
+    catalogTracks.forEach((track) => {
+      playablePage.push({
+        track,
+        origin: {
+          type: "discovery",
+          title: "A playable pick from the Treble catalog",
+          artist: "",
+        },
+      });
+    });
+  }
+
   const recommendations =
     await Promise.all(
-      page.map(
-        ({
-          track,
-          origin,
-        }) =>
+      playablePage.map(
+        ({ track, origin }) =>
           createFeedItem(
             track,
-            origin?.type ===
-              "friends"
+            origin?.type === "friends"
               ? "friend-recommendation"
               : "recommendation",
             userId,
@@ -3547,30 +3746,32 @@ async function buildPersonalizedRecommendations({
     );
 
   const safeRecommendations =
-    recommendations.filter(
-      (item) =>
-        !likedTrackIds.has(
-          String(
-            item.id ||
-            item.listenable_id ||
-            ""
-          )
-        )
-    );
+    recommendations.filter((item) => {
+      const trackId = String(
+        item.id ||
+        item.listenable_id ||
+        ""
+      );
 
-  setImmediate(() => {
-    markFeedItemsServed(
-      userId,
-      safeRecommendations,
-      "recommendation"
-    ).catch((error) => {
-      console.warn(
-        "[Recommendations] Unable to mark recommendations served:",
-        error.message
+      const preview =
+        item.preview ||
+        item.item_info?.preview ||
+        item.item_info?.previewUrl ||
+        item.item_info?.playbackUrl ||
+        "";
+
+      return (
+        trackId &&
+        preview &&
+        !likedTrackIds.has(trackId)
       );
     });
-  });
 
+  /*
+   * IMPORTANT: Do not mark these as served here. Merely opening or
+   * refreshing Music Swipe must not consume the user's recommendations.
+   * The frontend marks a card served only after the user swipes it.
+   */
   return safeRecommendations;
 }
 
@@ -3762,6 +3963,7 @@ app.get("/users/recommendations", async (req, res) => {
       limit,
       offset,
       personalized: true,
+      hasMore: true,
     });
   } catch (error) {
     console.error(
