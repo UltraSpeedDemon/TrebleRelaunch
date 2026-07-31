@@ -128,7 +128,7 @@ const DEEZER_MEMORY_CACHE_MAX_ITEMS =
  */
 const DEEZER_CACHE_TTL = {
   track:
-    7 * 24 * 60 * 60 * 1000,
+    6 * 60 * 60 * 1000,
 
   album:
     7 * 24 * 60 * 60 * 1000,
@@ -348,6 +348,20 @@ function buildGraphEdgeId({
       ].join("|")
     )
     .digest("hex");
+}
+
+function runGraphWrite(
+  promise,
+  description
+) {
+  Promise.resolve(promise).catch(
+    (error) => {
+      console.warn(
+        `[GRAPH] ${description} failed:`,
+        error.message
+      );
+    }
+  );
 }
 
 async function upsertGraphEdge({
@@ -686,7 +700,7 @@ async function savePermanentAlbum(
     );
 
   if (album.artistId) {
-    await upsertGraphEdge({
+    runGraphWrite(upsertGraphEdge({
       fromType: "artist",
       fromId: album.artistId,
       relationship: "CREATED",
@@ -696,7 +710,7 @@ async function savePermanentAlbum(
         artistName: album.artistName,
         albumTitle: album.title,
       },
-    });
+    }), "artist-created-album");
   }
 
   return album;
@@ -733,6 +747,12 @@ async function savePermanentTrack(rawTrack) {
           FieldValue.serverTimestamp(),
         lastSeenAt:
           FieldValue.serverTimestamp(),
+        ...(track.preview
+          ? {
+              previewUpdatedAt:
+                FieldValue.serverTimestamp(),
+            }
+          : {}),
       },
       {
         merge: true,
@@ -740,7 +760,7 @@ async function savePermanentTrack(rawTrack) {
     );
 
   if (track.artistId) {
-    await upsertGraphEdge({
+    runGraphWrite(upsertGraphEdge({
       fromType: "artist",
       fromId: track.artistId,
       relationship: "PERFORMED",
@@ -750,11 +770,11 @@ async function savePermanentTrack(rawTrack) {
         artistName: track.artistName,
         trackTitle: track.title,
       },
-    });
+    }), "artist-performed-track");
   }
 
   if (track.albumId) {
-    await upsertGraphEdge({
+    runGraphWrite(upsertGraphEdge({
       fromType: "album",
       fromId: track.albumId,
       relationship: "CONTAINS",
@@ -764,7 +784,7 @@ async function savePermanentTrack(rawTrack) {
         albumTitle: track.albumTitle,
         trackTitle: track.title,
       },
-    });
+    }), "album-contains-track");
   }
 
   return track;
@@ -900,6 +920,11 @@ function collectDeezerEntities(
   return entities;
 }
 
+const catalogPersistenceQueue = [];
+const catalogPersistenceQueuedPaths = new Set();
+let catalogPersistenceWorkers = 0;
+const CATALOG_PERSISTENCE_MAX_WORKERS = 2;
+
 async function persistDeezerPayload(
   path,
   payload
@@ -908,26 +933,38 @@ async function persistDeezerPayload(
     const entities =
       collectDeezerEntities(payload);
 
-    for (
-      const artist of entities.artists.values()
-    ) {
-      await savePermanentArtist(artist);
-    }
+    /*
+     * Maps already remove duplicate IDs inside the same payload.
+     * Firestore document IDs are the Deezer IDs, so loading the
+     * same song again updates the existing document instead of
+     * creating a duplicate.
+     */
+    await Promise.all(
+      [
+        ...entities.artists.values(),
+      ].map((artist) =>
+        savePermanentArtist(artist)
+      )
+    );
 
-    for (
-      const album of entities.albums.values()
-    ) {
-      await savePermanentAlbum(
-        album,
-        album.artist
-      );
-    }
+    await Promise.all(
+      [
+        ...entities.albums.values(),
+      ].map((album) =>
+        savePermanentAlbum(
+          album,
+          album.artist
+        )
+      )
+    );
 
-    for (
-      const track of entities.tracks.values()
-    ) {
-      await savePermanentTrack(track);
-    }
+    await Promise.all(
+      [
+        ...entities.tracks.values(),
+      ].map((track) =>
+        savePermanentTrack(track)
+      )
+    );
 
     if (
       entities.tracks.size ||
@@ -944,6 +981,70 @@ async function persistDeezerPayload(
       error.message
     );
   }
+}
+
+function runCatalogPersistenceQueue() {
+  while (
+    catalogPersistenceWorkers <
+      CATALOG_PERSISTENCE_MAX_WORKERS &&
+    catalogPersistenceQueue.length > 0
+  ) {
+    const job =
+      catalogPersistenceQueue.shift();
+
+    catalogPersistenceWorkers += 1;
+
+    Promise.resolve()
+      .then(() =>
+        persistDeezerPayload(
+          job.path,
+          job.payload
+        )
+      )
+      .catch((error) => {
+        console.warn(
+          `[CATALOG] Background save failed for ${job.path}:`,
+          error.message
+        );
+      })
+      .finally(() => {
+        catalogPersistenceWorkers -= 1;
+        catalogPersistenceQueuedPaths.delete(
+          job.path
+        );
+        setImmediate(
+          runCatalogPersistenceQueue
+        );
+      });
+  }
+}
+
+function scheduleCatalogPersistence(
+  path,
+  payload
+) {
+  /*
+   * Never make the app wait for catalog or graph writes.
+   * The API response is returned first and Firestore is
+   * updated safely in the background.
+   */
+  if (
+    !payload ||
+    catalogPersistenceQueuedPaths.has(path)
+  ) {
+    return;
+  }
+
+  catalogPersistenceQueuedPaths.add(path);
+
+  catalogPersistenceQueue.push({
+    path,
+    payload,
+  });
+
+  setImmediate(
+    runCatalogPersistenceQueue
+  );
 }
 
 function getPermanentEntityRequest(path) {
@@ -1034,6 +1135,71 @@ function permanentEntityToDeezerShape(
   return data;
 }
 
+function permanentTimestampMilliseconds(
+  value
+) {
+  if (!value) return 0;
+
+  if (
+    typeof value.toMillis ===
+    "function"
+  ) {
+    return value.toMillis();
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  const parsed =
+    new Date(value).getTime();
+
+  return Number.isFinite(parsed)
+    ? parsed
+    : 0;
+}
+
+function isPermanentEntityUsable(
+  request,
+  data
+) {
+  if (!request || !data) {
+    return false;
+  }
+
+  if (request.type !== "track") {
+    return true;
+  }
+
+  const preview =
+    data.preview ||
+    data.previewUrl ||
+    data.playbackUrl ||
+    data.raw?.preview ||
+    "";
+
+  if (!preview) {
+    return false;
+  }
+
+  /*
+   * Deezer preview links can expire. Use a stored track only
+   * while its preview metadata is recent; otherwise continue
+   * to the API cache/Deezer and refresh it.
+   */
+  const refreshedAt =
+    permanentTimestampMilliseconds(
+      data.previewUpdatedAt ||
+      data.lastSeenAt
+    );
+
+  return (
+    refreshedAt > 0 &&
+    Date.now() - refreshedAt <
+      DEEZER_CACHE_TTL.track
+  );
+}
+
 async function getPermanentEntity(
   request
 ) {
@@ -1050,9 +1216,21 @@ async function getPermanentEntity(
     return null;
   }
 
+  const data =
+    snapshot.data() || {};
+
+  if (
+    !isPermanentEntityUsable(
+      request,
+      data
+    )
+  ) {
+    return null;
+  }
+
   return permanentEntityToDeezerShape(
     request.type,
-    snapshot.data()
+    data
   );
 }
 
@@ -1283,36 +1461,6 @@ async function fetchDeezer(
       ? path
       : `/${path}`;
 
-  const permanentRequest =
-    getPermanentEntityRequest(
-      normalizedPath
-    );
-
-  if (
-    !options.forceRefresh &&
-    permanentRequest
-  ) {
-    try {
-      const permanentEntity =
-        await getPermanentEntity(
-          permanentRequest
-        );
-
-      if (permanentEntity) {
-        console.log(
-          `[CATALOG] PERMANENT HIT ${normalizedPath}`
-        );
-
-        return permanentEntity;
-      }
-    } catch (error) {
-      console.warn(
-        `[CATALOG] Permanent lookup failed for ${normalizedPath}:`,
-        error.message
-      );
-    }
-  }
-
   const cacheKey =
     normalizedPath;
 
@@ -1366,6 +1514,49 @@ async function fetchDeezer(
     );
 
     return memoryEntry.data;
+  }
+
+  /*
+   * PERMANENT CATALOG CHECK
+   *
+   * Memory is always checked first. The permanent catalog is
+   * used only after a memory miss, and track previews must be
+   * recent enough to play.
+   */
+  const permanentRequest =
+    getPermanentEntityRequest(
+      normalizedPath
+    );
+
+  if (
+    !forceRefresh &&
+    permanentRequest
+  ) {
+    try {
+      const permanentEntity =
+        await getPermanentEntity(
+          permanentRequest
+        );
+
+      if (permanentEntity) {
+        saveToDeezerMemoryCache(
+          cacheKey,
+          permanentEntity,
+          Date.now() + ttl
+        );
+
+        console.log(
+          `[CATALOG] PERMANENT HIT ${normalizedPath}`
+        );
+
+        return permanentEntity;
+      }
+    } catch (error) {
+      console.warn(
+        `[CATALOG] Permanent lookup failed for ${normalizedPath}:`,
+        error.message
+      );
+    }
   }
 
   /*
@@ -1444,7 +1635,7 @@ async function fetchDeezer(
               `[DEEZER CACHE] FIRESTORE HIT ${normalizedPath}`
             );
 
-            await persistDeezerPayload(
+            scheduleCatalogPersistence(
               normalizedPath,
               storedCache.data
             );
@@ -1597,7 +1788,7 @@ async function fetchDeezer(
           );
         }
 
-        await persistDeezerPayload(
+        scheduleCatalogPersistence(
           normalizedPath,
           data
         );
@@ -1913,7 +2104,7 @@ app.post("/users/share", async (req, res) => {
       comment,
     });
 
-    await upsertGraphEdge({
+    runGraphWrite(upsertGraphEdge({
       fromType: "user",
       fromId: fromUserId,
       relationship: "SHARED",
@@ -1925,9 +2116,9 @@ app.post("/users/share", async (req, res) => {
         shareId: shareRef.id,
         comment,
       },
-    });
+    }), "user-shared-track");
 
-    await upsertGraphEdge({
+    runGraphWrite(upsertGraphEdge({
       fromType: "user",
       fromId: toUserId,
       relationship: "RECEIVED",
@@ -1938,7 +2129,7 @@ app.post("/users/share", async (req, res) => {
         fromUserId,
         shareId: shareRef.id,
       },
-    });
+    }), "user-received-track");
 
     console.log(
       `[SHARE] ${fromUserId} shared ${type} ${itemId} with ${toUserId}`
@@ -3278,7 +3469,7 @@ app.post("/users/like", async (req, res) => {
       { merge: true }
     );
 
-    await upsertGraphEdge({
+    runGraphWrite(upsertGraphEdge({
       fromType: "user",
       fromId: String(user_id),
       relationship: "LIKED",
@@ -3293,7 +3484,7 @@ app.post("/users/like", async (req, res) => {
         artistName:
           String(artist_name || ""),
       },
-    });
+    }), "user-liked-track");
 
     return res.status(201).json({
       ok: true,
@@ -3328,7 +3519,7 @@ app.post("/users/unlike", async (req, res) => {
 
     await db.collection("likes").doc(likeId).delete();
 
-    await deleteGraphEdge({
+    runGraphWrite(deleteGraphEdge({
       fromType: "user",
       fromId: String(user_id),
       relationship: "LIKED",
@@ -3337,7 +3528,7 @@ app.post("/users/unlike", async (req, res) => {
           ? "track"
           : String(type || "track").toLowerCase(),
       toId: String(music_id),
-    });
+    }), "user-liked-track");
 
     return res.status(200).json({
       ok: true,
@@ -3759,7 +3950,7 @@ app.post("/review", async (req, res) => {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    await upsertGraphEdge({
+    runGraphWrite(upsertGraphEdge({
       fromType: "user",
       fromId: userId,
       relationship: "REVIEWED",
@@ -3788,7 +3979,7 @@ app.post("/review", async (req, res) => {
         hearted:
           Boolean(hearted),
       },
-    });
+    }), "user-reviewed-track");
 
     return res.status(201).json({
       ok: true,
@@ -4610,7 +4801,7 @@ app.post("/users/recently-viewed", async (req, res) => {
       );
     }
 
-    await upsertGraphEdge({
+    runGraphWrite(upsertGraphEdge({
       fromType: "user",
       fromId: userId,
       relationship: "VIEWED",
@@ -4621,7 +4812,7 @@ app.post("/users/recently-viewed", async (req, res) => {
         title:
           viewedItem.title,
       },
-    });
+    }), "user-viewed-track");
 
     return res.status(201).json({
       ok: true,

@@ -111,7 +111,7 @@
 
     <input
       id="apiUrl"
-      value="/admin/music-graph?limit=1000"
+      value="https://monkfish-app-4bxi3.ondigitalocean.app/admin/music-graph?limit=1000"
       aria-label="Graph API URL"
     />
 
@@ -189,8 +189,19 @@
         const response =
           await fetch(apiUrl);
 
-        const data =
-          await response.json();
+        const responseText =
+          await response.text();
+
+        let data;
+
+        try {
+          data =
+            JSON.parse(responseText);
+        } catch {
+          throw new Error(
+            `The graph API returned HTML instead of JSON. Check the API URL.`
+          );
+        }
 
         if (!response.ok || !data.ok) {
           throw new Error(
