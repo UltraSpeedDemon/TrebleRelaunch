@@ -34,8 +34,8 @@ const SearchBar = () => {
 
   const placeholderText =
     isDesktopWeb
-      ? "Search Songs, Albums, Artists and Friends"
-      : "Search Treble";
+      ? "Search for Songs, Albums, Artists and Friends"
+      : "Search for Music";
 
   const [searchQuery, setSearchQuery] =
     useState("");

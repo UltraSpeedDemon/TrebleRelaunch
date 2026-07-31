@@ -68,6 +68,13 @@ export default function FollowingList({
     isWeb &&
     width < DESKTOP_BREAKPOINT;
 
+  const gridColumns =
+    width >= 1180
+      ? 4
+      : width >= 820
+        ? 3
+        : 2;
+
   const [
     followingList,
     setFollowingList,
@@ -985,6 +992,11 @@ export default function FollowingList({
               data={
                 followingList
               }
+              numColumns={gridColumns}
+              key={`${followingList}-grid-${gridColumns}`}
+              columnWrapperStyle={
+                styles.userTileRow
+              }
               renderItem={
                 renderFollowingUser
               }
@@ -1384,91 +1396,132 @@ const styles =
     userListContent: {
       width: "100%",
 
-      paddingBottom: 45,
+      paddingHorizontal: 2,
+      paddingBottom: 56,
     },
 
     emptyListContent: {
       flexGrow: 1,
     },
 
-    userCard: {
+    userTileRow: {
       width: "100%",
-      minHeight: 78,
+      gap: 14,
+      alignItems: "stretch",
+      justifyContent: "flex-start",
+    },
 
-      flexDirection: "row",
+    userCard: {
+      flex: 1,
+      minWidth: 0,
+      maxWidth: 270,
+
       alignItems: "center",
 
-      paddingVertical: 11,
-      paddingHorizontal: 13,
+      paddingHorizontal: 15,
+      paddingTop: 18,
+      paddingBottom: 16,
 
-      marginBottom: 12,
+      marginBottom: 14,
 
       borderWidth: 1,
       borderColor:
-        "rgba(255,255,255,0.1)",
+        "rgba(255,255,255,0.075)",
 
-      borderRadius: 15,
+      borderRadius: 18,
 
       backgroundColor:
-        "rgba(255,255,255,0.95)",
+        "rgba(255,255,255,0.045)",
+
+      ...(
+        Platform.OS === "web"
+          ? {
+              cursor: "pointer",
+              transitionDuration:
+                "160ms",
+              transitionProperty:
+                "transform, border-color, background-color",
+            }
+          : {}
+      ),
     },
 
     userAvatar: {
-      width: 56,
-      height: 56,
+      width: 88,
+      height: 88,
 
-      flexShrink: 0,
-
-      borderRadius: 12,
+      borderRadius: 44,
 
       resizeMode: "cover",
 
       backgroundColor:
-        "rgba(0,0,0,0.14)",
+        "rgba(255,255,255,0.06)",
+
+      borderWidth: 2,
+      borderColor:
+        "rgba(53,175,229,0.22)",
+
+      marginBottom: 13,
     },
 
     userInformation: {
-      flex: 1,
+      width: "100%",
       minWidth: 0,
 
+      alignItems: "center",
       justifyContent: "center",
 
-      marginLeft: 14,
-      marginRight: 14,
+      marginBottom: 14,
     },
 
     username: {
       width: "100%",
 
-      color: "#111111",
+      color: "#ffffff",
 
       fontSize: 16,
-      lineHeight: 21,
+      lineHeight: 22,
       fontWeight: "900",
+
+      textAlign: "center",
     },
 
     profileStatus: {
+      width: "100%",
+
       color:
-        "rgba(0,0,0,0.52)",
+        "rgba(255,255,255,0.50)",
 
-      fontSize: 12,
-      lineHeight: 17,
+      fontSize: 11,
+      lineHeight: 16,
 
-      marginTop: 3,
+      textAlign: "center",
+
+      marginTop: 4,
+    },
+
+    privacyStatus: {
+      color:
+        "rgba(255,255,255,0.36)",
+
+      fontSize: 10,
+      lineHeight: 14,
+
+      textAlign: "center",
+
+      marginTop: 2,
     },
 
     followButton: {
-      minWidth: 108,
-      height: 40,
-
-      flexShrink: 0,
+      width: "100%",
+      minHeight: 39,
 
       alignItems: "center",
       justifyContent: "center",
 
-      paddingHorizontal: 17,
+      paddingHorizontal: 13,
 
-      borderRadius: 20,
+      borderRadius: 12,
 
       backgroundColor:
         colours.lightblue ||
@@ -1477,7 +1530,20 @@ const styles =
 
     followingButton: {
       backgroundColor:
-        "#247fa8",
+        "rgba(53,175,229,0.16)",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(53,175,229,0.44)",
+    },
+
+    requestedButton: {
+      backgroundColor:
+        "rgba(255,255,255,0.07)",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.12)",
     },
 
     disabledButton: {
@@ -1487,27 +1553,25 @@ const styles =
     followButtonText: {
       color: "#ffffff",
 
-      fontSize: 14,
+      fontSize: 12,
       fontWeight: "900",
     },
 
     youBadge: {
-      minWidth: 58,
-      height: 35,
-
-      flexShrink: 0,
+      width: "100%",
+      minHeight: 37,
 
       alignItems: "center",
       justifyContent: "center",
 
-      paddingHorizontal: 14,
+      paddingHorizontal: 13,
 
       borderWidth: 1,
       borderColor:
         colours.lightblue ||
         "#35afe5",
 
-      borderRadius: 18,
+      borderRadius: 12,
 
       backgroundColor:
         "rgba(53,175,229,0.12)",
@@ -1518,7 +1582,7 @@ const styles =
         colours.lightblue ||
         "#35afe5",
 
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: "900",
     },
 

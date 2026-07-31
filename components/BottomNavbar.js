@@ -88,11 +88,11 @@ const BottomNavbar = () => {
                       ? item.activeIcon
                       : item.icon
                   }
-                  size={25}
+                  size={29}
                   color={
                     active
                       ? "#ffffff"
-                      : "rgba(255,255,255,0.52)"
+                      : "rgba(255,255,255,0.58)"
                   }
                 />
               </View>
@@ -110,7 +110,9 @@ const BottomNavbar = () => {
 
               {active ? (
                 <View
-                  style={styles.activeIndicator}
+                  style={
+                    styles.activeIndicator
+                  }
                 />
               ) : null}
             </Pressable>
@@ -127,37 +129,37 @@ const styles =
       width: "100%",
 
       backgroundColor:
-        "rgba(16,16,16,0.97)",
+        "rgba(16,16,16,0.98)",
 
       borderTopWidth: 1,
 
       borderTopColor:
-        "rgba(53,175,229,0.45)",
+        "rgba(53,175,229,0.50)",
 
-      paddingTop: 7,
+      paddingTop: 9,
 
       paddingBottom:
         Platform.OS === "ios"
-          ? 20
-          : 8,
+          ? 23
+          : 11,
 
       shadowColor: "#000000",
 
       shadowOffset: {
         width: 0,
-        height: -4,
+        height: -5,
       },
 
-      shadowOpacity: 0.24,
-      shadowRadius: 12,
+      shadowOpacity: 0.28,
+      shadowRadius: 14,
 
-      elevation: 18,
+      elevation: 20,
     },
 
     bottomNavBar: {
       width: "100%",
 
-      maxWidth: 720,
+      maxWidth: 780,
 
       alignSelf: "center",
 
@@ -165,7 +167,7 @@ const styles =
       alignItems: "center",
       justifyContent: "space-around",
 
-      paddingHorizontal: 12,
+      paddingHorizontal: 14,
     },
 
     bottomNavItem: {
@@ -173,14 +175,14 @@ const styles =
 
       flex: 1,
 
-      minHeight: 57,
+      minHeight: 66,
 
       alignItems: "center",
       justifyContent: "center",
 
-      marginHorizontal: 4,
+      marginHorizontal: 5,
 
-      borderRadius: 15,
+      borderRadius: 17,
 
       ...(
         Platform.OS === "web"
@@ -199,39 +201,39 @@ const styles =
 
     bottomNavItemActive: {
       backgroundColor:
-        "rgba(53,175,229,0.10)",
+        "rgba(53,175,229,0.12)",
     },
 
     bottomNavItemHovered: {
       backgroundColor:
-        "rgba(255,255,255,0.055)",
+        "rgba(255,255,255,0.065)",
     },
 
     iconContainer: {
-      width: 34,
-      height: 30,
+      width: 40,
+      height: 36,
 
       alignItems: "center",
       justifyContent: "center",
 
-      borderRadius: 11,
+      borderRadius: 12,
     },
 
     activeIconContainer: {
       backgroundColor:
-        "rgba(53,175,229,0.15)",
+        "rgba(53,175,229,0.18)",
     },
 
     navText: {
       color:
-        "rgba(255,255,255,0.52)",
+        "rgba(255,255,255,0.58)",
 
-      fontSize: 10,
-      lineHeight: 14,
+      fontSize: 12,
+      lineHeight: 16,
 
       fontWeight: "800",
 
-      marginTop: 2,
+      marginTop: 3,
     },
 
     activeNavText: {
@@ -241,10 +243,10 @@ const styles =
     activeIndicator: {
       position: "absolute",
 
-      bottom: -7,
+      bottom: -9,
 
-      width: 28,
-      height: 3,
+      width: 34,
+      height: 4,
 
       borderRadius: 2,
 

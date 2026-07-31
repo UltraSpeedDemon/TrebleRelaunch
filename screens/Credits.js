@@ -32,7 +32,7 @@ const CREDITS = [
     name: "Connor McElroy",
     studentNumber: "1152990",
     role:
-      "Front-End and Back-End Development",
+      "Front-End and Back-End Development, Feed Page, Recommendation System, and Search Functionality",
   },
   {
     name: "Aleks Zheleznov",

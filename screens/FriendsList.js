@@ -24,7 +24,6 @@ import {
 
 import { auth } from "../utils/firebase";
 
-import MusicCard from "../components/MusicCard";
 import BottomNavbar from "../components/BottomNavbar";
 import Sidebar from "../components/Sidebar";
 import SearchBar from "../components/SearchBar";
@@ -63,6 +62,13 @@ export default function FriendsList({
   const isMobileWeb =
     isWeb &&
     width < DESKTOP_BREAKPOINT;
+
+  const gridColumns =
+    width >= 1180
+      ? 4
+      : width >= 820
+        ? 3
+        : 2;
 
   const isCompact =
     width < 600;
@@ -637,10 +643,12 @@ export default function FriendsList({
           );
 
         const isFollowing =
-          Object.prototype.hasOwnProperty.call(
-            followingUsers,
-            userId
-          )
+          Object.prototype
+            .hasOwnProperty
+            .call(
+              followingUsers,
+              userId
+            )
             ? Boolean(
                 followingUsers[
                   userId
@@ -657,70 +665,114 @@ export default function FriendsList({
             ]
           );
 
-        /*
-         * MusicCard originally receives an avatar URI.
-         * Keep this value as a string for compatibility.
-         */
-        const avatar =
-          item?.avatar &&
-          typeof item.avatar ===
-            "string"
-            ? item.avatar
-            : "";
+        const username =
+          formatUsername(
+            item?.username
+          );
 
         return (
-          <View
-            style={[
-              styles.friendCardWrapper,
-              isDesktopWeb &&
-                styles.desktopFriendCardWrapper,
-            ]}
-          >
-            <MusicCard
-              id={userId}
-              name={formatUsername(
-                item?.username
-              )}
-              image={avatar}
-              imageSource={getAvatarSource(
-                avatar
-              )}
-              isFollowing={
-                isFollowing
-              }
-              userCard
-              canFollow
-              followLoading={
-                isUpdating
-              }
-              disabled={
-                isUpdating
-              }
-              onFollow={() => {
-                if (isUpdating) {
-                  return;
+          <TouchableOpacity
+            style={styles.userCard}
+            activeOpacity={0.82}
+            onPress={() =>
+              navigation.navigate(
+                "UserProfiles",
+                {
+                  userId,
                 }
+              )
+            }
+          >
+            <View
+              style={
+                styles.avatarContainer
+              }
+            >
+              <Image
+                source={getAvatarSource(
+                  item?.avatar
+                )}
+                style={styles.userAvatar}
+              />
+
+              <View
+                style={
+                  styles.friendBadge
+                }
+              >
+                <Text
+                  style={
+                    styles.friendBadgeText
+                  }
+                >
+                  FRIEND
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={
+                styles.userInformation
+              }
+            >
+              <Text
+                style={styles.username}
+                numberOfLines={1}
+              >
+                {username}
+              </Text>
+
+              <Text
+                style={
+                  styles.profileStatus
+                }
+                numberOfLines={2}
+              >
+                Friends · Music sharing enabled
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.followButton,
+
+                isFollowing &&
+                  styles.followingButton,
+
+                isUpdating &&
+                  styles.disabledButton,
+              ]}
+              disabled={isUpdating}
+              onPress={(event) => {
+                event
+                  ?.stopPropagation
+                  ?.();
 
                 if (isFollowing) {
-                  handleUnfollow(
-                    item
-                  );
+                  handleUnfollow(item);
                 } else {
-                  handleFollow(
-                    item
-                  );
+                  handleFollow(item);
                 }
               }}
-              onPressCard={() =>
-                navigation.navigate(
-                  "UserProfiles",
-                  {
-                    userId,
+            >
+              {isUpdating ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#ffffff"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.followButtonText
                   }
-                )
-              }
-            />
-          </View>
+                >
+                  {isFollowing
+                    ? "Friends"
+                    : "Follow"}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </TouchableOpacity>
         );
       },
       [
@@ -730,7 +782,6 @@ export default function FriendsList({
         getAvatarSource,
         handleFollow,
         handleUnfollow,
-        isDesktopWeb,
         navigation,
       ]
     );
@@ -980,6 +1031,11 @@ export default function FriendsList({
               data={
                 friendsList
               }
+              numColumns={gridColumns}
+              key={`${friendsList}-grid-${gridColumns}`}
+              columnWrapperStyle={
+                styles.userTileRow
+              }
               renderItem={
                 renderFriend
               }
@@ -993,8 +1049,6 @@ export default function FriendsList({
               ]}
               contentContainerStyle={[
                 styles.friendsListContent,
-                isDesktopWeb &&
-                  styles.desktopFriendsListContent,
                 friendsList.length ===
                   0 &&
                   styles.emptyListContent,
@@ -1423,17 +1477,158 @@ const styles = StyleSheet.create({
     paddingBottom: 50,
   },
 
-  friendCardWrapper: {
+  userTileRow: {
     width: "100%",
 
-    alignSelf: "center",
+    gap: 14,
+
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+  },
+
+  userCard: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 270,
+
+    alignItems: "center",
+
+    paddingHorizontal: 15,
+    paddingTop: 18,
+    paddingBottom: 16,
+
+    marginBottom: 14,
+
+    overflow: "hidden",
+
+    borderRadius: 18,
+
+    backgroundColor:
+      "rgba(255,255,255,0.045)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.075)",
+  },
+
+  avatarContainer: {
+    position: "relative",
+
+    alignItems: "center",
+    justifyContent: "center",
 
     marginBottom: 13,
   },
 
-  desktopFriendCardWrapper: {
+  userAvatar: {
+    width: 88,
+    height: 88,
+
+    borderRadius: 44,
+
+    resizeMode: "cover",
+
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
+
+    borderWidth: 2,
+    borderColor:
+      "rgba(53,175,229,0.25)",
+  },
+
+  friendBadge: {
+    position: "absolute",
+
+    right: -6,
+    bottom: 0,
+
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+
+    borderRadius: 8,
+
+    backgroundColor:
+      colours.lightblue ||
+      "#35afe5",
+  },
+
+  friendBadgeText: {
+    color: "#ffffff",
+
+    fontSize: 7,
+    fontWeight: "900",
+
+    letterSpacing: 0.6,
+  },
+
+  userInformation: {
     width: "100%",
-    maxWidth: 760,
+
+    alignItems: "center",
+
+    marginBottom: 14,
+  },
+
+  username: {
+    width: "100%",
+
+    color: "#ffffff",
+
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: "900",
+
+    textAlign: "center",
+  },
+
+  profileStatus: {
+    width: "100%",
+
+    color:
+      "rgba(255,255,255,0.50)",
+
+    fontSize: 11,
+    lineHeight: 16,
+
+    textAlign: "center",
+
+    marginTop: 4,
+  },
+
+  followButton: {
+    width: "100%",
+    minHeight: 39,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    paddingHorizontal: 13,
+
+    borderRadius: 12,
+
+    backgroundColor:
+      colours.lightblue ||
+      "#35afe5",
+  },
+
+  followingButton: {
+    backgroundColor:
+      "rgba(53,175,229,0.16)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.44)",
+  },
+
+  disabledButton: {
+    opacity: 0.62,
+  },
+
+  followButtonText: {
+    color: "#ffffff",
+
+    fontSize: 12,
+    fontWeight: "900",
   },
 
   /* =====================================================
