@@ -938,18 +938,6 @@ export default function Settings({
                 Quiet
               </Text>
 
-              <View style={styles.resetVolumeArea}>
-                <TouchableOpacity
-                  style={styles.resetVolumeButton}
-                  onPress={handleResetVolume}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.resetVolumeText}>
-                    Reset to 25%
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
               <Text style={styles.volumeLabelText}>
                 Loud
               </Text>
