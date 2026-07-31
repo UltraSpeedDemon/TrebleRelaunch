@@ -1542,12 +1542,10 @@ const styles =
       flex: 1,
       minHeight: 0,
 
-      paddingBottom:
-        BOTTOM_NAV_HEIGHT,
+      paddingBottom: 0,
 
       overflow: "hidden",
     },
-
     desktopPageContent: {
       position: "absolute",
 
@@ -1570,22 +1568,21 @@ const styles =
     },
 
     mobilePageContent: {
-      position: "absolute",
+    position: "absolute",
 
-      top: 0,
-      left: 0,
-      right: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
 
-      bottom:
-        BOTTOM_NAV_HEIGHT,
+    minHeight: 0,
 
-      minHeight: 0,
+    paddingTop: 69,
+    paddingBottom: BOTTOM_NAV_HEIGHT,
+    paddingHorizontal: 12,
 
-      paddingTop: 69,
-      paddingHorizontal: 12,
-
-      overflow: "hidden",
-    },
+    overflow: "hidden",
+  },
 
     /*
      * The header and search bar share this exact wrapper.
@@ -1757,7 +1754,7 @@ const styles =
 
       alignSelf: "center",
 
-      paddingBottom: 65,
+      paddingBottom: 20,
     },
 
     loadingContainer: {
