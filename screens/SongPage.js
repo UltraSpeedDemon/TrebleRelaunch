@@ -1710,10 +1710,7 @@ desktopBottomNavBar: {
   pageContent: {
     flex: 1,
     minHeight: 0,
-
-    paddingBottom: 0,
-
-    overflow: "hidden",
+    paddingBottom: 75,
   },
 
   desktopPageContent: {
@@ -1735,16 +1732,14 @@ desktopBottomNavBar: {
 
   mobilePageContent: {
     position: "absolute",
-
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: 70,
 
     minHeight: 0,
 
-    paddingTop: 69,
-    paddingBottom: BOTTOM_NAV_HEIGHT,
+    paddingTop: 70,
     paddingHorizontal: 12,
 
     overflow: "hidden",
