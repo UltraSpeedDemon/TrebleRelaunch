@@ -3806,11 +3806,14 @@ desktopBottomNavBar: {
   },
 
   detailReviewToolbar: {
+    position: "relative",
+
     width: "100%",
     minHeight: 82,
 
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
 
     paddingHorizontal: 18,
     paddingVertical: 13,
@@ -3828,7 +3831,7 @@ desktopBottomNavBar: {
   detailReviewToolbarCompact: {
     minHeight: 72,
 
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 10,
 
     borderRadius: 15,
@@ -3869,20 +3872,29 @@ desktopBottomNavBar: {
   },
 
   detailStarsZone: {
-    flex: 1,
-    flexBasis: 0,
-    minWidth: 0,
+    position: "absolute",
+
+    left: "50%",
+
+    width: 190,
+    marginLeft: -95,
 
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
 
     flexWrap: "nowrap",
+
+    /*
+     * Keep the stars visually centred while allowing
+     * the heart and reaction controls to remain tappable.
+     */
+    pointerEvents: "box-none",
   },
 
   detailStarsZoneCompact: {
-    flex: 1.35,
-    flexBasis: 0,
+    width: 122,
+    marginLeft: -61,
   },
 
   detailStarIcon: {
@@ -3902,17 +3914,20 @@ desktopBottomNavBar: {
   },
 
   detailReactionZone: {
-    flex: 1,
-    flexBasis: 0,
-    minWidth: 0,
+    width: 52,
+    flexGrow: 0,
+    flexShrink: 0,
 
     alignItems: "flex-end",
     justifyContent: "center",
+
+    marginLeft: "auto",
   },
 
   detailReactionZoneCompact: {
-    flex: 0.65,
-    flexBasis: 0,
+    width: 48,
+    flexGrow: 0,
+    flexShrink: 0,
   },
 
   detailReactionButton: {
@@ -3955,18 +3970,21 @@ desktopBottomNavBar: {
   ========================================================= */
 
   detailHeartZone: {
-    flex: 1,
-    flexBasis: 0,
-    minWidth: 0,
+    width: 52,
+    flexGrow: 0,
+    flexShrink: 0,
 
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
+
+    marginRight: "auto",
   },
 
   detailHeartZoneCompact: {
-    flex: 1,
-    flexBasis: 0,
+    width: 48,
+    flexGrow: 0,
+    flexShrink: 0,
   },
 
   detailHeartIcon: {
