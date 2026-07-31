@@ -37,6 +37,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../utils/firebase";
 import { deleteSession } from "../utils/session";
 import colours from "../styles/colours";
+import Icon from "react-native-vector-icons/MaterialIcons";
 
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const MOBILE_SIDEBAR_MAX_WIDTH = 300;
@@ -651,9 +652,10 @@ const handleLogout = useCallback(() => {
           style={styles.hamburgerButton}
           activeOpacity={0.8}
         >
-          <Image
-            source={require("../images/blackHamburger.png")}
-            style={styles.hamburgerIcon}
+          <Icon
+            name="menu"
+            size={28}
+            color="#ffffff"
           />
         </TouchableOpacity>
       ) : null}
@@ -794,105 +796,91 @@ const handleLogout = useCallback(() => {
 
           {/* MAIN MENU */}
           <View style={styles.menuSection}>
+            <Text style={styles.sectionLabel}>LIBRARY</Text>
+
             <MenuItem
-              icon={require("../images/blackClockIcon.png")}
+              iconName="history"
               label="Recently Viewed"
-              onPress={() =>
-                navigateTo(
-                  "RecentlyViewed"
-                )
-              }
+              onPress={() => navigateTo("RecentlyViewed")}
             />
 
             <MenuItem
-              icon={require("../images/friendsIcon.png")}
-              label="Friends List"
-              onPress={() =>
-                navigateTo("FriendsList")
-              }
-              iconStyle={
-                styles.friendsIcon
-              }
-            />
-
-            <MenuItem
-              icon={require("../images/groupsIcon.png")}
-              label="Community"
-              onPress={() =>
-                navigateTo("Groups")
-              }
-            />
-
-            <MenuItem
-              icon={require("../images/messagesIcon.png")}
-              label="Messages"
-              onPress={() =>
-                navigateTo("Messages")
-              }
-              iconStyle={
-                styles.largeMenuIcon
-              }
-            />
-
-            <MenuItem
-              icon={require("../images/notificationsIcon2.png")}
-              label="Notifications"
-              onPress={() =>
-                navigateTo(
-                  "Notifications"
-                )
-              }
-              badgeCount={
-                notificationsCount
-              }
-            />
-
-            <MenuItem
-              icon={require("../images/favouritesIcon2.png")}
+              iconName="favorite-border"
               label="Liked"
-              onPress={() =>
-                navigateTo("Favourites")
-              }
-              iconStyle={
-                styles.favouritesIcon
-              }
-              dividerAfter
+              onPress={() => navigateTo("Favourites")}
             />
 
             <MenuItem
-              icon={require("../images/cardgame.png")}
+              iconName="auto-awesome"
               label="Swipe to Discover"
-              onPress={() =>
-                navigateTo(
-                  "MusicSwiperTest"
-                )
-              }
-              iconStyle={
-                styles.cardGameIcon
-              }
+              onPress={() => navigateTo("MusicSwiperTest")}
               dividerAfter
             />
 
+            <Text style={styles.sectionLabel}>SOCIAL</Text>
+
             <MenuItem
-              icon={require("../images/connectionsIcon.png")}
+              iconName="people-outline"
+              label="Friends List"
+              onPress={() => navigateTo("FriendsList")}
+            />
+
+            <MenuItem
+              iconName="groups"
+              label="Community"
+              onPress={() => navigateTo("Groups")}
+            />
+
+            <MenuItem
+              iconName="chat-bubble-outline"
+              label="Messages"
+              onPress={() => navigateTo("Messages")}
+            />
+
+            <MenuItem
+              iconName="notifications-none"
+              label="Notifications"
+              onPress={() => navigateTo("Notifications")}
+              badgeCount={notificationsCount}
+              dividerAfter
+            />
+
+            <Text style={styles.sectionLabel}>YOUR TREBLE</Text>
+
+            <MenuItem
+              iconName="hub"
               label="Connections"
-              onPress={() =>
-                navigateTo("Connections")
-              }
+              onPress={() => navigateTo("Connections")}
             />
 
             <MenuItem
-              icon={require("../images/settingsIcon.png")}
+              iconName="emoji-events"
+              label="Achievements"
+              onPress={() => navigateTo("Achievements")}
+              badgeText="NEW"
+            />
+
+            <MenuItem
+              iconName="settings"
               label="Settings"
-              onPress={() =>
-                navigateTo("Settings")
-              }
+              onPress={() => navigateTo("Settings")}
             />
 
             <MenuItem
+              iconName="logout"
               label="Logout"
               onPress={handleLogout}
             />
+          </View>
+
+          <View style={styles.sidebarFooter}>
+            <MenuItem
+              iconName="movie-filter"
+              label="Credits"
+              onPress={() => navigateTo("Credits")}
+              compact
+            />
+            <Text style={styles.footerBrand}>TREBLE</Text>
           </View>
         </ScrollView>
       </Animated.View>
@@ -901,12 +889,13 @@ const handleLogout = useCallback(() => {
 }
 
 function MenuItem({
-  icon,
+  iconName,
   label,
   onPress,
   badgeCount = 0,
-  iconStyle,
+  badgeText = "",
   dividerAfter = false,
+  compact = false,
 }) {
   return (
     <TouchableOpacity
@@ -914,47 +903,42 @@ function MenuItem({
       activeOpacity={0.72}
       style={[
         styles.menuItem,
-        dividerAfter &&
-          styles.menuItemDivider,
+        compact && styles.compactMenuItem,
+        dividerAfter && styles.menuItemDivider,
       ]}
     >
-      {icon ? (
-        <Image
-          source={icon}
-          style={[
-            styles.menuIcon,
-            iconStyle,
-          ]}
+      <View style={styles.menuIconContainer}>
+        <Icon
+          name={iconName}
+          size={21}
+          color={colours.lightblue}
         />
-      ) : (
-        <View
-          style={styles.menuIconPlaceholder}
-        />
-      )}
+      </View>
 
-      <Text
-        style={styles.menuText}
-        numberOfLines={1}
-      >
+      <Text style={styles.menuText} numberOfLines={1}>
         {label}
       </Text>
 
+      {badgeText ? (
+        <View style={styles.newBadge}>
+          <Text style={styles.newBadgeText}>{badgeText}</Text>
+        </View>
+      ) : null}
+
       {badgeCount > 0 ? (
-        <View
-          style={
-            styles.notificationBadge
-          }
-        >
-          <Text
-            style={
-              styles.notificationBadgeText
-            }
-          >
-            {badgeCount > 99
-              ? "99+"
-              : badgeCount}
+        <View style={styles.notificationBadge}>
+          <Text style={styles.notificationBadgeText}>
+            {badgeCount > 99 ? "99+" : badgeCount}
           </Text>
         </View>
+      ) : null}
+
+      {!badgeText && badgeCount <= 0 ? (
+        <Icon
+          name="chevron-right"
+          size={19}
+          color="rgba(255,255,255,0.32)"
+        />
       ) : null}
     </TouchableOpacity>
   );
@@ -1099,7 +1083,7 @@ const styles = StyleSheet.create({
 
   sidebarScrollContent: {
     flexGrow: 1,
-    paddingBottom: 24,
+    paddingBottom: 14,
   },
 
   /* =========================================================
@@ -1186,16 +1170,33 @@ const styles = StyleSheet.create({
 
   menuSection: {
     flex: 1,
+    paddingTop: 10,
+  },
+
+  sectionLabel: {
+    color: "rgba(255,255,255,0.38)",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.5,
+    marginTop: 10,
+    marginBottom: 5,
+    paddingHorizontal: 22,
   },
 
   menuItem: {
-    minHeight: 55,
-
+    minHeight: 49,
     flexDirection: "row",
     alignItems: "center",
+    marginHorizontal: 10,
+    marginVertical: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+  },
 
-    paddingVertical: 13,
-    paddingHorizontal: 18,
+  compactMenuItem: {
+    minHeight: 45,
+    backgroundColor: "rgba(255,255,255,0.055)",
   },
 
   menuItemDivider: {
@@ -1204,59 +1205,14 @@ const styles = StyleSheet.create({
       colours.secondaryblue,
   },
 
-  menuIcon: {
-    width: 21,
-    height: 21,
-
-    marginRight: 15,
-
-    resizeMode: "contain",
-  },
-
-  largeMenuIcon: {
-    width: 25,
-    height: 25,
-
-    marginLeft: -2,
-    marginRight: 13,
-  },
-
-  friendsIcon: {
-    width: 23,
-    height: 23,
-
-    marginLeft: -1,
-    marginRight: 14,
-  },
-
-  favouritesIcon: {
-    width: 19,
-    height: 19,
-
-    marginLeft: 1,
-    marginRight: 17,
-  },
-
-  /*
-   * The two-card Swipe to Discover artwork contains more
-   * empty transparent space than the other sidebar icons,
-   * so it needs its own larger dimensions.
-   */
-  cardGameIcon: {
+  menuIconContainer: {
     width: 34,
     height: 34,
-
-    marginLeft: -6,
-    marginRight: 9,
-
-    resizeMode: "contain",
-  },
-
-  menuIconPlaceholder: {
-    width: 21,
-    height: 21,
-
-    marginRight: 15,
+    marginRight: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.065)",
   },
 
   menuText: {
@@ -1266,6 +1222,37 @@ const styles = StyleSheet.create({
 
     fontSize: 15,
     lineHeight: 21,
+  },
+
+  newBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: colours.secondaryblue,
+  },
+
+  newBadgeText: {
+    color: "#ffffff",
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+
+  sidebarFooter: {
+    marginTop: "auto",
+    paddingTop: 10,
+    paddingBottom: 2,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.10)",
+  },
+
+  footerBrand: {
+    color: "rgba(255,255,255,0.18)",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 3,
+    textAlign: "center",
+    marginTop: 7,
   },
 
   notificationBadge: {

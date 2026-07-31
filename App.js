@@ -1,10 +1,5 @@
-import React, {
-  useEffect,
-} from "react";
-
-import {
-  Platform,
-} from "react-native";
+import React, { useEffect } from "react";
+import { Platform } from "react-native";
 
 import {
   NavigationContainer,
@@ -44,24 +39,50 @@ import UserProfiles from "./screens/UserProfiles";
 import SongPage from "./screens/SongPage";
 import AlbumPage from "./screens/AlbumPage";
 import ArtistPage from "./screens/ArtistPage";
-import { MusicSwiper } from "./screens/MusicSwiper";
-import { SongCardSwipe } from "./screens/SongCardSwipe";
 import MusicSwiperTest from "./screens/MusicSwiperTest";
 import UpdateReviewPage from "./screens/UpdateReview";
 import ArtistListenables from "./screens/ArtistListenables";
 
+/*
+ * New sidebar pages.
+ */
+import Achievements from "./screens/Achievements";
+import Credits from "./screens/Credits";
+
+import {
+  MusicSwiper,
+} from "./screens/MusicSwiper";
+
+import {
+  SongCardSwipe,
+} from "./screens/SongCardSwipe";
+
 SplashScreen.preventAutoHideAsync().catch(() => {
-  // The splash screen may already be prevented from auto-hiding.
+  /*
+   * The splash screen may already be prevented
+   * from auto-hiding.
+   */
 });
 
 const Stack = createStackNavigator();
 
 export default function App() {
   const [fontsLoaded] = useFonts({
-    Pacifico: require("./assets/fonts/Pacifico-Regular.ttf"),
-    Domine: require("./assets/fonts/Domine-VariableFont_wght.ttf"),
-    Lobster: require("./assets/fonts/Lobster-Regular.ttf"),
-    Lilita: require("./assets/fonts/LilitaOne-Regular.ttf"),
+    Pacifico: require(
+      "./assets/fonts/Pacifico-Regular.ttf"
+    ),
+
+    Domine: require(
+      "./assets/fonts/Domine-VariableFont_wght.ttf"
+    ),
+
+    Lobster: require(
+      "./assets/fonts/Lobster-Regular.ttf"
+    ),
+
+    Lilita: require(
+      "./assets/fonts/LilitaOne-Regular.ttf"
+    ),
   });
 
   useEffect(() => {
@@ -90,8 +111,8 @@ export default function App() {
           animation: "none",
 
           /*
-           * Prevent browser-style transition animations
-           * when running through React Native Web.
+           * Disable browser-style page transition
+           * animations on React Native Web.
            */
           ...(Platform.OS === "web"
             ? {
@@ -255,6 +276,18 @@ export default function App() {
         <Stack.Screen
           name="ArtistListenables"
           component={ArtistListenables}
+        />
+
+        {/* NEW ACHIEVEMENTS PAGE */}
+        <Stack.Screen
+          name="Achievements"
+          component={Achievements}
+        />
+
+        {/* NEW CREDITS PAGE */}
+        <Stack.Screen
+          name="Credits"
+          component={Credits}
         />
       </Stack.Navigator>
 
