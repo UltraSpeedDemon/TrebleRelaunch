@@ -219,14 +219,14 @@ export function MusicSwiper({
       }
 
       if (
-        isWeb &&
+        isMobileWeb &&
         !audioUnlocked &&
         !userInitiated
       ) {
         return false;
       }
 
-      if (userInitiated && isWeb) {
+      if (userInitiated && isMobileWeb) {
         setAudioUnlocked(true);
       }
 
@@ -255,9 +255,8 @@ export function MusicSwiper({
         }
 
         /*
-         * Deezer preview URLs can be signed. Appending custom query
-         * parameters may invalidate the URL, so play it exactly as
-         * Deezer returned it.
+         * Play Deezer's URL exactly as returned. Appending custom
+         * parameters can invalidate signed preview URLs.
          */
         const created =
           await Audio.Sound.createAsync(
@@ -368,7 +367,7 @@ export function MusicSwiper({
       }
     );
 
-    if (!played && isWeb) {
+    if (!played && isMobileWeb) {
       setAudioUnlocked(false);
     }
   }, [
@@ -405,7 +404,7 @@ export function MusicSwiper({
   useEffect(() => {
     if (
       !currentSong ||
-      (isWeb && !audioUnlocked)
+      (isMobileWeb && !audioUnlocked)
     ) {
       return undefined;
     }

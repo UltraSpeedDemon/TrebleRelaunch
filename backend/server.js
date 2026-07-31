@@ -5433,42 +5433,11 @@ app.get("/review/reviewSong", async (req, res) => {
     const type = review.type || "track";
 
     if (type === "track") {
-      let track = await fetchDeezer(
-        `/track/${encodeURIComponent(listenableId)}`,
-        {
-          forceRefresh: false,
-          ttl: DEEZER_CACHE_TTL.track,
-        }
+      const track = await fetchDeezer(
+        `/track/${encodeURIComponent(listenableId)}`
       );
 
-      let preview =
-        track?.preview ||
-        track?.previewUrl ||
-        track?.playbackUrl ||
-        "";
-
-      if (!preview) {
-        track = await fetchDeezer(
-          `/track/${encodeURIComponent(listenableId)}`,
-          {
-            forceRefresh: true,
-            ttl: DEEZER_CACHE_TTL.track,
-          }
-        );
-
-        preview =
-          track?.preview ||
-          track?.previewUrl ||
-          track?.playbackUrl ||
-          "";
-      }
-
-      return res.json({
-        ...normalizeDeezerTrack(track),
-        preview,
-        previewUrl: preview,
-        playbackUrl: preview,
-      });
+      return res.json(normalizeDeezerTrack(track));
     }
 
     if (type === "album") {

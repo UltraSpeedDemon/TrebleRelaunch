@@ -424,10 +424,6 @@ export default function Feed({ navigation }) {
               setCurrentPreview(null);
               setSound(null);
 
-              preloadedSoundsRef.current.delete(
-                previewUrl
-              );
-
               loadedSound
                 .unloadAsync()
                 .catch(() => {});
