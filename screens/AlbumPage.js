@@ -54,6 +54,7 @@ import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 
   const DESKTOP_BREAKPOINT = 768;
   const DESKTOP_SIDEBAR_WIDTH = 280;
+  const BOTTOM_NAV_HEIGHT = 72;
 
 export default function AlbumPage({ route, navigation }) {
     const { width } = useWindowDimensions();
@@ -2149,7 +2150,9 @@ desktopBottomNavBar: {
   pageContent: {
     flex: 1,
     minHeight: 0,
-    paddingBottom: 76,
+
+    paddingBottom: 0,
+
     overflow: "hidden",
   },
 
@@ -2172,14 +2175,16 @@ desktopBottomNavBar: {
 
   mobilePageContent: {
     position: "absolute",
+
     top: 0,
     left: 0,
     right: 0,
-    bottom: 72,
+    bottom: 0,
 
     minHeight: 0,
 
-    paddingTop: 70,
+    paddingTop: 69,
+    paddingBottom: BOTTOM_NAV_HEIGHT,
     paddingHorizontal: 12,
 
     overflow: "hidden",

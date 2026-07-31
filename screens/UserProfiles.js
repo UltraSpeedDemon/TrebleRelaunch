@@ -255,13 +255,19 @@ export default function UserProfiles({
     );
 
   const formatUsername =
-    useCallback((name) => {
-      const cleanName =
-        String(name || "").trim();
+  useCallback((name) => {
+    const cleanName =
+      String(name || "").trim();
 
-      return cleanName ||
-        "Treble User";
-    }, []);
+    if (!cleanName) {
+      return "Treble User";
+    }
+
+    return (
+      cleanName.charAt(0).toUpperCase() +
+      cleanName.slice(1)
+    );
+  }, []);
 
   const normalizeArray =
   useCallback((data) => {
