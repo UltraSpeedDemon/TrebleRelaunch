@@ -93,9 +93,6 @@ export default function Feed({ navigation }) {
     width >= 768 &&
     width < 1100;
 
-  const isWideDesktop =
-    isDesktopWeb &&
-    width >= 1180;
 
   const isCompact = width < 768;
 
@@ -2825,125 +2822,7 @@ export default function Feed({ navigation }) {
       refreshing,
     ]);
 
-  const renderDesktopRail = () => {
-    if (!isWideDesktop) {
-      return null;
-    }
-
-    return (
-      <View style={styles.desktopRail}>
-        <View style={styles.desktopRailCard}>
-          <Text style={styles.railEyebrow}>
-            YOUR FEED
-          </Text>
-
-          <Text style={styles.railTitle}>
-            Today on Treble
-          </Text>
-
-          <View style={styles.railStatRow}>
-            <View style={styles.railStat}>
-              <Text style={styles.railStatValue}>
-                {feedStats.friendActivity}
-              </Text>
-
-              <Text style={styles.railStatLabel}>
-                Friend posts
-              </Text>
-            </View>
-
-            <View style={styles.railStat}>
-              <Text style={styles.railStatValue}>
-                {feedStats.recommendations}
-              </Text>
-
-              <Text style={styles.railStatLabel}>
-                For you
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.railStatFull}>
-            <Icon
-              name="favorite"
-              size={18}
-              color="#ff526f"
-            />
-
-            <Text style={styles.railStatFullText}>
-              {feedStats.liked} songs liked
-              in this mix
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.desktopRailCard}>
-          <Text style={styles.railEyebrow}>
-            KEEP DISCOVERING
-          </Text>
-
-          {[
-            {
-              icon: "explore",
-              label: "Explore trending music",
-              route: "Explore",
-            },
-            {
-              icon: "auto-awesome",
-              label: "Swipe to discover",
-              route: "MusicSwiperTest",
-            },
-            {
-              icon: "people-outline",
-              label: "See your friends",
-              route: "FriendsList",
-            },
-          ].map((item) => (
-            <TouchableOpacity
-              key={item.route}
-              style={styles.railLink}
-              onPress={() =>
-                navigation.navigate(
-                  item.route
-                )
-              }
-              activeOpacity={0.8}
-            >
-              <View
-                style={styles.railLinkIcon}
-              >
-                <Icon
-                  name={item.icon}
-                  size={19}
-                  color={
-                    colours.lightblue ||
-                    "#35afe5"
-                  }
-                />
-              </View>
-
-              <Text style={styles.railLinkText}>
-                {item.label}
-              </Text>
-
-              <Icon
-                name="chevron-right"
-                size={19}
-                color="rgba(255,255,255,0.32)"
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.desktopRailHint}>
-          Scroll for more music. Your feed
-          loads continuously.
-        </Text>
-      </View>
-    );
-  };
-
-    return (
+  return (
     <View
       style={[
         styles.container,
@@ -3024,13 +2903,9 @@ export default function Feed({ navigation }) {
         style={[
           styles.content,
           isDesktopWeb && styles.desktopContent,
-          isWideDesktop &&
-            styles.wideDesktopContent,
           isMobileWeb && styles.mobileWebContent,
         ]}
       >
-        {renderDesktopRail()}
-
         {isLoading ? (
 
           <View style={styles.loadingContainer}>
@@ -3460,15 +3335,14 @@ desktopBottomNavBar: {
 
     paddingTop: 18,
     paddingBottom: 0,
-    paddingLeft: 28,
-    paddingRight: 28,
+    paddingLeft: 24,
+    paddingRight: 24,
+
+    alignItems: "center",
 
     overflow: "hidden",
   },
 
-  wideDesktopContent: {
-    paddingRight: 332,
-  },
 
   mobileWebContent: {
     position: "absolute",
@@ -3641,7 +3515,11 @@ desktopBottomNavBar: {
   feedList: {
     flex: 1,
     minHeight: 0,
+
     width: "100%",
+    maxWidth: 780,
+
+    alignSelf: "center",
   },
 
   webFeedList: {
@@ -3672,6 +3550,10 @@ desktopBottomNavBar: {
 
   webFeedContent: {
     width: "100%",
+    maxWidth: 780,
+
+    alignSelf: "center",
+
     paddingTop: 2,
     paddingBottom: 80,
   },
@@ -3682,7 +3564,7 @@ desktopBottomNavBar: {
 
   feedHeaderBlock: {
     width: "100%",
-    maxWidth: 720,
+    maxWidth: 780,
 
     alignSelf: "center",
 
@@ -3848,196 +3730,6 @@ desktopBottomNavBar: {
 
     marginTop: 7,
   },
-
-  desktopRail: {
-    position: "absolute",
-
-    top: 4,
-    right: 26,
-
-    width: 278,
-
-    zIndex: 10,
-  },
-
-  desktopRailCard: {
-    width: "100%",
-
-    padding: 17,
-    marginBottom: 14,
-
-    borderRadius: 18,
-
-    backgroundColor:
-      "rgba(255,255,255,0.04)",
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.07)",
-  },
-
-  railEyebrow: {
-    color:
-      colours.lightblue ||
-      "#35afe5",
-
-    fontSize: 9,
-    fontWeight: "900",
-
-    letterSpacing: 1.2,
-
-    marginBottom: 5,
-  },
-
-  railTitle: {
-    color: "#ffffff",
-
-    fontSize: 18,
-    lineHeight: 23,
-
-    fontWeight: "900",
-
-    marginBottom: 14,
-  },
-
-  railStatRow: {
-    flexDirection: "row",
-
-    gap: 8,
-  },
-
-  railStat: {
-    flex: 1,
-
-    padding: 11,
-
-    borderRadius: 13,
-
-    backgroundColor:
-      "rgba(255,255,255,0.045)",
-  },
-
-  railStatValue: {
-    color: "#ffffff",
-
-    fontSize: 20,
-    fontWeight: "900",
-  },
-
-  railStatLabel: {
-    color:
-      "rgba(255,255,255,0.44)",
-
-    fontSize: 10,
-    lineHeight: 14,
-
-    marginTop: 2,
-  },
-
-  railStatFull: {
-    flexDirection: "row",
-    alignItems: "center",
-
-    gap: 8,
-
-    marginTop: 10,
-    padding: 10,
-
-    borderRadius: 12,
-
-    backgroundColor:
-      "rgba(255,82,111,0.08)",
-  },
-
-  railStatFullText: {
-    flex: 1,
-
-    color:
-      "rgba(255,255,255,0.64)",
-
-    fontSize: 11,
-    lineHeight: 16,
-  },
-
-  railLink: {
-    minHeight: 49,
-
-    flexDirection: "row",
-    alignItems: "center",
-
-    paddingHorizontal: 5,
-
-    borderBottomWidth: 1,
-    borderBottomColor:
-      "rgba(255,255,255,0.055)",
-  },
-
-  railLinkIcon: {
-    width: 34,
-    height: 34,
-
-    alignItems: "center",
-    justifyContent: "center",
-
-    borderRadius: 11,
-
-    backgroundColor:
-      "rgba(53,175,229,0.10)",
-
-    marginRight: 10,
-  },
-
-  railLinkText: {
-    flex: 1,
-
-    color:
-      "rgba(255,255,255,0.76)",
-
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  desktopRailHint: {
-    color:
-      "rgba(255,255,255,0.30)",
-
-    fontSize: 10,
-    lineHeight: 15,
-
-    textAlign: "center",
-
-    paddingHorizontal: 16,
-  },
-
-  mediaTypeBadge: {
-    position: "absolute",
-
-    top: 11,
-    left: 11,
-
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-
-    borderRadius: 8,
-
-    backgroundColor:
-      "rgba(0,0,0,0.72)",
-  },
-
-  mediaTypeText: {
-    color:
-      colours.lightblue ||
-      "#35afe5",
-
-    fontSize: 8,
-    fontWeight: "900",
-
-    letterSpacing: 0.7,
-  },
-
-  /* =========================================================
-     FEED CARDS
-  ========================================================= */
 
   card: {
     width: "100%",

@@ -1258,8 +1258,17 @@ const handlePlayPreview = async () => {
     );
   }
 
-  const trackImage = track.image
-    ? { uri: track.image }
+  const trackImageUrl =
+    track?.image ||
+    track?.coverArt ||
+    track?.album?.cover_xl ||
+    track?.album?.cover_big ||
+    track?.album?.cover_medium ||
+    track?.album?.cover ||
+    "";
+
+  const trackImage = trackImageUrl
+    ? { uri: trackImageUrl }
     : require("../images/albumImage.jpg");
 
     return (
@@ -2783,5 +2792,357 @@ artist: {
     color: "#ffffff",
     fontWeight: "700",
   },
+
+
+
+  /* =========================================================
+     2026 TREBLE DETAIL PAGE REDESIGN
+  ========================================================= */
+
+  pageContent: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: colours.background || "#101010",
+    overflow: "hidden",
+  },
+
+  desktopPageContent: {
+    position: "absolute",
+    top: 0,
+    left: DESKTOP_SIDEBAR_WIDTH,
+    right: 0,
+    bottom: BOTTOM_NAV_HEIGHT,
+    minHeight: 0,
+    paddingTop: 28,
+    paddingHorizontal: 24,
+    paddingBottom: 0,
+    alignItems: "center",
+    overflow: "hidden",
+  },
+
+  mobilePageContent: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: BOTTOM_NAV_HEIGHT,
+    minHeight: 0,
+    paddingTop: 76,
+    paddingHorizontal: 12,
+    paddingBottom: 0,
+    overflow: "hidden",
+  },
+
+  reviewsList: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    maxWidth: 980,
+    alignSelf: "center",
+  },
+
+  webReviewsList: {
+    height: "100%",
+    overflowY: "auto",
+    overflowX: "hidden",
+    WebkitOverflowScrolling: "touch",
+    overscrollBehaviorY: "contain",
+    touchAction: "pan-y",
+    scrollbarWidth: "none",
+    msOverflowStyle: "none",
+  },
+
+  reviewsContainer: {
+    width: "100%",
+    maxWidth: 980,
+    alignSelf: "center",
+    paddingBottom: 110,
+  },
+
+  desktopReviewsContainer: {
+    paddingBottom: 80,
+  },
+
+  card: {
+    width: "100%",
+    maxWidth: 980,
+    alignSelf: "center",
+    overflow: "hidden",
+    padding: 24,
+    marginBottom: 24,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.045)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.09)",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+
+  desktopCard: {
+    width: "100%",
+    maxWidth: 980,
+    padding: 30,
+    borderRadius: 30,
+  },
+
+  compactCard: {
+    padding: 16,
+    borderRadius: 22,
+  },
+
+  cardInformation: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 18,
+    marginBottom: 22,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+
+  titleContainer: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: "flex-start",
+  },
+
+  boldTitle: {
+    color: colours.lightblue || "#35afe5",
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: "900",
+    letterSpacing: 1.7,
+    textTransform: "uppercase",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 9,
+    backgroundColor: "rgba(53,175,229,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(53,175,229,0.24)",
+  },
+
+  actionButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  actionButton: {
+    minWidth: 74,
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.055)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  actionIcon: {
+    width: 20,
+    height: 20,
+    resizeMode: "contain",
+  },
+
+  actionText: {
+    color: "#ffffff",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "800",
+    marginTop: 0,
+  },
+
+  title: {
+    color: "#ffffff",
+    fontSize: 34,
+    lineHeight: 41,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  compactImage: {
+    width: "100%",
+    height: undefined,
+    aspectRatio: 1,
+  },
+
+  reviewControls: {
+    width: "100%",
+    marginTop: 26,
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+  },
+
+  favouriteContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  favLabel: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  reviewInputRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 10,
+    marginTop: 14,
+  },
+
+  reviewInput: {
+    flex: 1,
+    minHeight: 52,
+    color: "#ffffff",
+    fontSize: 14,
+    lineHeight: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.09)",
+    outlineStyle: "none",
+  },
+
+  reviewButton: {
+    minWidth: 104,
+    minHeight: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 15,
+    borderRadius: 14,
+    backgroundColor: colours.lightblue || "#35afe5",
+  },
+
+  reviewButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  reviewCardWrapper: {
+    width: "100%",
+    maxWidth: 980,
+    alignSelf: "center",
+    marginBottom: 14,
+    padding: 3,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.025)",
+  },
+
+  noReviewsContainer: {
+    width: "100%",
+    maxWidth: 980,
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 38,
+    marginBottom: 18,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+
+  noReviewsTitle: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  noReviewsText: {
+    color: "rgba(255,255,255,0.50)",
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 6,
+  },
+
+  imageContainer: {
+    position: "relative",
+    width: "100%",
+    maxWidth: 470,
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    borderRadius: 26,
+    backgroundColor: "rgba(53,175,229,0.065)",
+    borderWidth: 1,
+    borderColor: "rgba(53,175,229,0.16)",
+  },
+
+  image: {
+    width: "100%",
+    height: undefined,
+    aspectRatio: 1,
+    borderRadius: 20,
+    resizeMode: "cover",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+
+  playButton: {
+    position: "absolute",
+    right: 26,
+    bottom: 26,
+    width: 66,
+    height: 66,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 33,
+    backgroundColor: "rgba(0,0,0,0.74)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.20)",
+  },
+
+  songDetails: {
+    width: "100%",
+    maxWidth: 650,
+    alignSelf: "center",
+    alignItems: "center",
+    paddingTop: 24,
+    paddingHorizontal: 12,
+  },
+
+  artist: {
+    color: colours.lightblue || "#35afe5",
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: "800",
+    textAlign: "center",
+    marginTop: 7,
+  },
+
+  album: {
+    color: "rgba(255,255,255,0.48)",
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 4,
+  },
+
+  ...(Platform.OS === "web"
+    ? {
+        actionButton: {
+          cursor: "pointer",
+        },
+      }
+    : {}),
 
 });
