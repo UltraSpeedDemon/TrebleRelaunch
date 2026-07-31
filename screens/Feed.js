@@ -55,6 +55,13 @@ import {
 const PAGE_SIZE = 10;
 const DOUBLE_TAP_DELAY = 300;
 
+/*
+ * While the Feed remains open, quietly request a new mix every
+ * two minutes. It does not refresh immediately on first render.
+ */
+const FEED_AUTO_REFRESH_MS =
+  2 * 60 * 1000;
+
 const FEED_CACHE_KEY = "treble_feed_cache_v3";
 /*
  * The visible feed stays in place until the user manually refreshes.
@@ -179,7 +186,20 @@ export default function Feed({ navigation }) {
   }, []);
 
   const getPreviewUrl = useCallback((item) => {
-    return item?.preview || item?.item_info?.preview || null;
+    const itemInfo =
+      item?.item_info ||
+      item ||
+      {};
+
+    return (
+      itemInfo?.preview ||
+      itemInfo?.previewUrl ||
+      itemInfo?.playbackUrl ||
+      item?.preview ||
+      item?.previewUrl ||
+      item?.playbackUrl ||
+      null
+    );
   }, []);
 
   const getImageUrl = useCallback((item) => {
@@ -272,108 +292,147 @@ export default function Feed({ navigation }) {
   }, [sound]);
 
   const handlePlayPreview = useCallback(
-  async (previewUrl) => {
-    if (!previewUrl) {
-      Alert.alert(
-        "Preview unavailable",
-        "This item does not have a music preview."
-      );
-
-      return;
-    }
-
-    try {
-      if (currentPreview === previewUrl && sound) {
-        await stopCurrentPreview();
-        return;
+    async (previewUrl) => {
+      if (!previewUrl) {
+        return false;
       }
 
-      await stopCurrentPreview();
+      try {
+        if (
+          currentPreview === previewUrl &&
+          sound
+        ) {
+          await stopCurrentPreview();
+          return true;
+        }
 
-      const savedVolume = await AsyncStorage.getItem(
-        "treble_preview_volume"
-      );
+        await stopCurrentPreview();
 
-      const parsedVolume =
-        savedVolume !== null
-          ? Number(savedVolume)
-          : 0.65;
+        const savedVolume =
+          await AsyncStorage.getItem(
+            "treble_preview_volume"
+          );
 
-      const previewVolume = Number.isFinite(parsedVolume)
-        ? Math.min(1, Math.max(0, parsedVolume))
-        : 0.65;
+        const parsedVolume =
+          savedVolume !== null
+            ? Number(savedVolume)
+            : 0.65;
 
-      console.log(
-        "[Feed] Preview volume:",
-        previewVolume
-      );
+        const previewVolume =
+          Number.isFinite(
+            parsedVolume
+          )
+            ? Math.min(
+                1,
+                Math.max(
+                  0,
+                  parsedVolume
+                )
+              )
+            : 0.65;
 
-      const { sound: loadedSound } =
-        await Audio.Sound.createAsync(
-          {
-            uri: previewUrl,
-          },
-          {
-            shouldPlay: true,
-            volume: previewVolume,
+        /*
+         * downloadFirst helps native playback with remote MP3 previews.
+         * A cache-busting query also prevents the device/browser from
+         * reusing a failed response for an expired Deezer URL.
+         */
+        const playableUrl =
+          `${previewUrl}${
+            previewUrl.includes("?")
+              ? "&"
+              : "?"
+          }treble_play=${Date.now()}`;
+
+        const {
+          sound: loadedSound,
+        } =
+          await Audio.Sound.createAsync(
+            {
+              uri: playableUrl,
+            },
+            {
+              shouldPlay: true,
+              volume: previewVolume,
+            },
+            undefined,
+            true
+          );
+
+        setSound(loadedSound);
+        setCurrentPreview(
+          previewUrl
+        );
+        setIsPlaying(true);
+        setProgress(0);
+
+        loadedSound.setOnPlaybackStatusUpdate(
+          (status) => {
+            if (!status.isLoaded) {
+              if (status?.error) {
+                console.warn(
+                  "[Feed] Playback status error:",
+                  status.error
+                );
+              }
+
+              return;
+            }
+
+            if (
+              status.durationMillis &&
+              status.positionMillis !==
+                undefined
+            ) {
+              setProgress(
+                Math.min(
+                  100,
+                  (
+                    status.positionMillis /
+                    status.durationMillis
+                  ) * 100
+                )
+              );
+            }
+
+            setIsPlaying(
+              Boolean(
+                status.isPlaying
+              )
+            );
+
+            if (
+              status.didJustFinish
+            ) {
+              setProgress(0);
+              setIsPlaying(false);
+              setCurrentPreview(null);
+              setSound(null);
+
+              loadedSound
+                .unloadAsync()
+                .catch(() => {});
+            }
           }
         );
 
-      setSound(loadedSound);
-      setCurrentPreview(previewUrl);
-      setIsPlaying(true);
-      setProgress(0);
+        return true;
+      } catch (error) {
+        console.warn(
+          "[Feed] Preview URL failed:",
+          error
+        );
 
-      loadedSound.setOnPlaybackStatusUpdate((status) => {
-        if (!status.isLoaded) {
-          return;
-        }
+        await stopCurrentPreview();
+        return false;
+      }
+    },
+    [
+      currentPreview,
+      sound,
+      stopCurrentPreview,
+    ]
+  );
 
-        if (
-          status.durationMillis &&
-          status.positionMillis !== undefined
-        ) {
-          setProgress(
-            Math.min(
-              100,
-              (status.positionMillis /
-                status.durationMillis) *
-                100
-            )
-          );
-        }
-
-        setIsPlaying(Boolean(status.isPlaying));
-
-        if (status.didJustFinish) {
-          setProgress(0);
-          setIsPlaying(false);
-          setCurrentPreview(null);
-          setSound(null);
-
-          loadedSound
-            .unloadAsync()
-            .catch(() => {});
-        }
-      });
-    } catch (error) {
-      console.error(
-        "[Feed] Preview error:",
-        error
-      );
-
-      Alert.alert(
-        "Preview error",
-        "The music preview could not be played."
-      );
-    }
-  },
-  [
-    currentPreview,
-    sound,
-    stopCurrentPreview,
-  ]
-);
   useEffect(() => {
     return () => {
       if (tapTimerRef.current) {
@@ -486,116 +545,170 @@ export default function Feed({ navigation }) {
 
   const handlePlayItem = useCallback(
     async (item) => {
-      const existingPreview =
-        getPreviewUrl(item);
-
-      if (existingPreview) {
-        await handlePlayPreview(
-          existingPreview
-        );
-        return;
-      }
-
       const itemId =
-        getItemId(item);
+        String(
+          getItemId(item) ||
+          ""
+        );
 
       if (
-        getItemType(item) !== "track" ||
+        getItemType(item) !==
+          "track" ||
         !itemId
       ) {
         Alert.alert(
           "Preview unavailable",
-          "This item does not have a music preview."
+          "This item does not have a valid Deezer track ID."
         );
+
         return;
       }
 
+      const saveFreshPreview =
+        (preview) => {
+          setCombinedFeed(
+            (items) =>
+              items.map(
+                (feedItem) => {
+                  if (
+                    String(
+                      getItemId(
+                        feedItem
+                      )
+                    ) !== itemId
+                  ) {
+                    return feedItem;
+                  }
+
+                  if (
+                    feedItem.item_info
+                  ) {
+                    return {
+                      ...feedItem,
+                      preview,
+                      previewUrl:
+                        preview,
+                      playbackUrl:
+                        preview,
+
+                      item_info: {
+                        ...feedItem.item_info,
+                        preview,
+                        previewUrl:
+                          preview,
+                        playbackUrl:
+                          preview,
+                      },
+                    };
+                  }
+
+                  return {
+                    ...feedItem,
+                    preview,
+                    previewUrl:
+                      preview,
+                    playbackUrl:
+                      preview,
+                  };
+                }
+              )
+          );
+        };
+
+      const fetchFreshPreview =
+        async () => {
+          /*
+           * Add refresh=true directly to the REST request URL.
+           * This bypasses memory, Firestore, and permanent-catalog
+           * preview caches on the backend.
+           */
+          const response =
+            await getSongFromDeezer(
+              itemId,
+              {
+                refresh: true,
+              }
+            );
+
+          if (!response?.ok) {
+            throw new Error(
+              `Fresh preview request failed with status ${response?.status}`
+            );
+          }
+
+          const deezerData =
+            await response.json();
+
+          const preview =
+            deezerData?.preview ||
+            deezerData?.previewUrl ||
+            deezerData?.playbackUrl ||
+            "";
+
+          if (!preview) {
+            throw new Error(
+              "Deezer did not return a playable preview."
+            );
+          }
+
+          saveFreshPreview(
+            preview
+          );
+
+          return preview;
+        };
+
       try {
-        const response =
-          await getSongFromDeezer(
-            itemId
+        /*
+         * Do not trust a preview saved in AsyncStorage or Firestore.
+         * Always retrieve the current Deezer preview before playing.
+         */
+        let preview =
+          await fetchFreshPreview();
+
+        let played =
+          await handlePlayPreview(
+            preview
           );
 
-        if (!response?.ok) {
+        if (!played) {
+          /*
+           * Deezer may rotate a URL between requests. Fetch once more
+           * and retry playback with the newest URL.
+           */
+          preview =
+            await fetchFreshPreview();
+
+          played =
+            await handlePlayPreview(
+              preview
+            );
+        }
+
+        if (!played) {
           throw new Error(
-            `Preview request failed with status ${response?.status}`
+            "The refreshed Deezer preview could not be played."
           );
         }
-
-        const deezerData =
-          await response.json();
-
-        const preview =
-          deezerData?.preview ||
-          deezerData?.previewUrl ||
-          deezerData?.playbackUrl ||
-          "";
-
-        if (!preview) {
-          Alert.alert(
-            "Preview unavailable",
-            "This item does not currently have a playable preview."
-          );
-          return;
-        }
-
-        setCombinedFeed((items) =>
-          items.map((feedItem) => {
-            if (
-              getItemId(feedItem) !==
-              itemId
-            ) {
-              return feedItem;
-            }
-
-            if (feedItem.item_info) {
-              return {
-                ...feedItem,
-                preview,
-                item_info: {
-                  ...feedItem.item_info,
-                  preview,
-                  previewUrl:
-                    preview,
-                  playbackUrl:
-                    preview,
-                },
-              };
-            }
-
-            return {
-              ...feedItem,
-              preview,
-              previewUrl:
-                preview,
-              playbackUrl:
-                preview,
-            };
-          })
-        );
-
-        await handlePlayPreview(
-          preview
-        );
       } catch (error) {
         console.error(
-          "[Feed] Lazy preview error:",
+          "[Feed] Fresh Deezer playback error:",
           error
         );
 
         Alert.alert(
           "Preview error",
-          "The music preview could not be loaded."
+          "Treble refreshed this song from Deezer, but its preview could not be played. This particular track may not currently have a Deezer preview."
         );
       }
     },
     [
       getItemId,
       getItemType,
-      getPreviewUrl,
       handlePlayPreview,
     ]
   );
+
 
 
   const fetchTimelineItems = useCallback(
@@ -1111,6 +1224,37 @@ export default function Feed({ navigation }) {
   }, [
     handleRefresh,
     isFocused,
+  ]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      return undefined;
+    }
+
+    /*
+     * The first automatic refresh waits the full interval.
+     * Friend/share cards therefore remain readable instead of
+     * disappearing immediately when Feed opens.
+     */
+    const intervalId =
+      setInterval(() => {
+        if (
+          !refreshing &&
+          !initialRequestInFlight.current
+        ) {
+          handleRefresh();
+        }
+      }, FEED_AUTO_REFRESH_MS);
+
+    return () => {
+      clearInterval(
+        intervalId
+      );
+    };
+  }, [
+    handleRefresh,
+    isFocused,
+    refreshing,
   ]);
 
   useEffect(() => {

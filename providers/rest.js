@@ -111,8 +111,17 @@ export async function postSearchResults(
   });
 }
 
-export async function getSongFromDeezer(listenable_id) {
-  return await serverGet("search/getSongFromDeezer", { listenable_id });
+export async function getSongFromDeezer(
+  listenableId,
+  options = {}
+) {
+  return await serverGet(
+    "search/getSongFromDeezer",
+    {
+      listenable_id: listenableId,
+      refresh: options.refresh ? "true" : "false",
+    }
+  );
 }
 //#endregion
 

@@ -3798,11 +3798,31 @@ app.get("/search/getSongFromDeezer", async (req, res) => {
       });
     }
 
+    const forceRefresh =
+      String(
+        req.query.refresh ||
+        req.query.force_refresh ||
+        ""
+      ).toLowerCase() === "true";
+
+    /*
+     * Deezer preview URLs can expire even when the track metadata
+     * itself is still valid. Playback callers can request a fresh
+     * track directly from Deezer and bypass every cache layer.
+     */
     const track = await fetchDeezer(
-      `/track/${encodeURIComponent(trackId)}`
+      `/track/${encodeURIComponent(trackId)}`,
+      {
+        forceRefresh,
+        ttl: DEEZER_CACHE_TTL.track,
+      }
     );
 
-    return res.json(normalizeDeezerTrack(track));
+    return res.json({
+      ...normalizeDeezerTrack(track),
+      previewRefreshed:
+        forceRefresh,
+    });
   } catch (error) {
     console.error("GET /search/getSongFromDeezer error:", error);
 
