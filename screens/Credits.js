@@ -144,11 +144,19 @@ export default function Credits({
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
         <View
-          style={styles.backgroundOrbOne}
+          style={[
+            styles.backgroundOrbOne,
+            isCompact &&
+              styles.backgroundOrbOneCompact,
+          ]}
         />
 
         <View
-          style={styles.backgroundOrbTwo}
+          style={[
+            styles.backgroundOrbTwo,
+            isCompact &&
+              styles.backgroundOrbTwoCompact,
+          ]}
         />
 
         <TouchableOpacity
@@ -201,6 +209,8 @@ export default function Credits({
             <Animated.View
               style={[
                 styles.logoGlow,
+                isCompact &&
+                  styles.logoGlowCompact,
                 {
                   opacity: glow,
                 },
@@ -220,20 +230,42 @@ export default function Credits({
                 source={require(
                   "../assets/treblelogo.png"
                 )}
-                style={styles.logoImage}
+                style={[
+                  styles.logoImage,
+                  isCompact &&
+                    styles.logoImageCompact,
+                ]}
                 resizeMode="contain"
               />
             </Animated.View>
 
-            <Text style={styles.kicker}>
+            <Text
+              style={[
+                styles.kicker,
+                isCompact &&
+                  styles.kickerCompact,
+              ]}
+            >
               A TREBLE PRODUCTION
             </Text>
 
-            <Text style={styles.title}>
+            <Text
+              style={[
+                styles.title,
+                isCompact &&
+                  styles.titleCompact,
+              ]}
+            >
               Credits
             </Text>
 
-            <Text style={styles.subtitle}>
+            <Text
+              style={[
+                styles.subtitle,
+                isCompact &&
+                  styles.subtitleCompact,
+              ]}
+            >
               Built by music lovers, for
               music lovers.
             </Text>
@@ -262,7 +294,10 @@ export default function Credits({
                         <Icon
                           name="star"
                           size={14}
-                          color="#ffffff"
+                          color={
+                            colours.lightblue ||
+                            "#35afe5"
+                          }
                         />
 
                         <Text
@@ -277,14 +312,6 @@ export default function Credits({
 
                     <Text style={styles.name}>
                       {credit.name}
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.studentNumber
-                      }
-                    >
-                      Student #{credit.studentNumber}
                     </Text>
 
                     <Text style={styles.roleLabel}>
@@ -411,6 +438,24 @@ const styles = StyleSheet.create({
       "rgba(118,92,255,0.12)",
   },
 
+  backgroundOrbOneCompact: {
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    top: -110,
+    right: -145,
+    opacity: 0.72,
+  },
+
+  backgroundOrbTwoCompact: {
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    bottom: -150,
+    left: -135,
+    opacity: 0.72,
+  },
+
   backButton: {
     position: "absolute",
 
@@ -453,7 +498,7 @@ const styles = StyleSheet.create({
   scrollContentCompact: {
     justifyContent: "flex-start",
 
-    paddingTop: 88,
+    paddingTop: 78,
     paddingHorizontal: 14,
     paddingBottom: 150,
   },
@@ -480,7 +525,8 @@ const styles = StyleSheet.create({
 
   creditsCardCompact: {
     paddingHorizontal: 16,
-    paddingVertical: 30,
+    paddingTop: 28,
+    paddingBottom: 36,
     borderRadius: 20,
   },
 
@@ -502,6 +548,35 @@ const styles = StyleSheet.create({
     width: 116,
     height: 116,
     marginBottom: 24,
+  },
+
+  logoGlowCompact: {
+    display: "none",
+  },
+
+  logoImageCompact: {
+    width: 92,
+    height: 92,
+    marginBottom: 28,
+  },
+
+  kickerCompact: {
+    fontSize: 9,
+    lineHeight: 14,
+    letterSpacing: 2.2,
+    marginBottom: 10,
+  },
+
+  titleCompact: {
+    fontSize: 39,
+    lineHeight: 46,
+  },
+
+  subtitleCompact: {
+    maxWidth: 280,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 6,
   },
 
   kicker: {
@@ -584,19 +659,25 @@ const styles = StyleSheet.create({
 
     gap: 5,
 
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
 
     borderRadius: 9,
 
     backgroundColor:
-      colours.secondaryblue,
+      "rgba(0,0,0,0.28)",
 
-    marginBottom: 11,
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.65)",
+
+    marginBottom: 13,
   },
 
   featuredPillText: {
-    color: "#ffffff",
+    color:
+      colours.lightblue ||
+      "#35afe5",
 
     fontSize: 8,
     fontWeight: "900",
