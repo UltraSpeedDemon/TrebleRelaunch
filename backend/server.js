@@ -8718,6 +8718,275 @@ app.post("/users/share/reset-seen", async (req, res) => {
   }
 });
 
+
+// ============================================================================
+// ACHIEVEMENTS
+// ============================================================================
+
+const ACHIEVEMENT_EVENTS_COLLECTION =
+  "achievementEvents";
+
+function buildAchievementEventId(
+  userId,
+  eventType,
+  itemId
+) {
+  return crypto
+    .createHash("sha256")
+    .update(
+      [
+        String(userId || ""),
+        String(eventType || ""),
+        String(itemId || ""),
+      ].join("|")
+    )
+    .digest("hex");
+}
+
+/*
+ * Record unique activity that cannot be derived from an existing collection.
+ *
+ * Currently used for unique song listens. Replaying the same song updates the
+ * existing event instead of creating a second achievement count.
+ */
+app.post(
+  "/users/achievements/event",
+  async (req, res) => {
+    try {
+      const userId = String(
+        req.body?.user_id || ""
+      ).trim();
+
+      const eventType = String(
+        req.body?.event_type || ""
+      )
+        .trim()
+        .toLowerCase();
+
+      const itemId = String(
+        req.body?.item_id || ""
+      ).trim();
+
+      const metadata =
+        req.body?.metadata &&
+        typeof req.body.metadata ===
+          "object"
+          ? req.body.metadata
+          : {};
+
+      if (!userId || !eventType) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "user_id and event_type are required.",
+        });
+      }
+
+      if (
+        eventType ===
+          "song_listened" &&
+        !itemId
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "item_id is required for song_listened.",
+        });
+      }
+
+      const eventId =
+        buildAchievementEventId(
+          userId,
+          eventType,
+          itemId || "single"
+        );
+
+      const eventRef = db
+        .collection(
+          ACHIEVEMENT_EVENTS_COLLECTION
+        )
+        .doc(eventId);
+
+      const existing =
+        await eventRef.get();
+
+      await eventRef.set(
+        {
+          id: eventId,
+          userId,
+          eventType,
+          itemId: itemId || null,
+          metadata,
+          firstRecordedAt:
+            existing.exists
+              ? existing.data()
+                  ?.firstRecordedAt ||
+                FieldValue.serverTimestamp()
+              : FieldValue.serverTimestamp(),
+          lastRecordedAt:
+            FieldValue.serverTimestamp(),
+        },
+        {
+          merge: true,
+        }
+      );
+
+      return res.status(
+        existing.exists ? 200 : 201
+      ).json({
+        ok: true,
+        recorded: !existing.exists,
+        duplicate: existing.exists,
+        eventId,
+      });
+    } catch (error) {
+      console.error(
+        "POST /users/achievements/event error:",
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        error:
+          error.message ||
+          "Unable to record achievement activity.",
+      });
+    }
+  }
+);
+
+/*
+ * Return live achievement totals.
+ *
+ * Existing collections are the source of truth:
+ * - likes
+ * - reviews
+ * - reviewReplies
+ * - follows (mutual friends)
+ * - musicShares
+ *
+ * Song listens come from achievementEvents because playback previously had
+ * no permanent server-side activity record.
+ */
+app.get(
+  "/users/:uid/achievements",
+  async (req, res) => {
+    try {
+      const userId = String(
+        req.params?.uid || ""
+      ).trim();
+
+      if (!userId) {
+        return res.status(400).json({
+          ok: false,
+          error: "User ID is required.",
+        });
+      }
+
+      const [
+        likesSnapshot,
+        reviewsSnapshot,
+        repliesSnapshot,
+        sharesSnapshot,
+        listensSnapshot,
+        friendIds,
+      ] = await Promise.all([
+        db
+          .collection("likes")
+          .where(
+            "userId",
+            "==",
+            userId
+          )
+          .get(),
+
+        db
+          .collection("reviews")
+          .where(
+            "userId",
+            "==",
+            userId
+          )
+          .get(),
+
+        db
+          .collection("reviewReplies")
+          .where(
+            "userId",
+            "==",
+            userId
+          )
+          .get(),
+
+        db
+          .collection(
+            MUSIC_SHARES_COLLECTION
+          )
+          .where(
+            "fromUserId",
+            "==",
+            userId
+          )
+          .get(),
+
+        db
+          .collection(
+            ACHIEVEMENT_EVENTS_COLLECTION
+          )
+          .where(
+            "userId",
+            "==",
+            userId
+          )
+          .where(
+            "eventType",
+            "==",
+            "song_listened"
+          )
+          .get(),
+
+        getMutualFriendIds(userId),
+      ]);
+
+      const stats = {
+        songsListened:
+          listensSnapshot.size,
+        reviewsPosted:
+          reviewsSnapshot.size,
+        repliesPosted:
+          repliesSnapshot.size,
+        songsLiked:
+          likesSnapshot.size,
+        friendsConnected:
+          friendIds.length,
+        songsShared:
+          sharesSnapshot.size,
+      };
+
+      return res.json({
+        ok: true,
+        userId,
+        stats,
+        updatedAt:
+          new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error(
+        "GET /users/:uid/achievements error:",
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        error:
+          error.message ||
+          "Unable to load achievements.",
+      });
+    }
+  }
+);
+
+
 app.listen(port, "0.0.0.0", () => {
   console.log(`Treble backend running at http://localhost:${port}`);
 });

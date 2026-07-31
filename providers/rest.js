@@ -614,6 +614,96 @@ export async function getArtistAlbums(
   );
 }
 
+
+// =====================================================
+// Achievement endpoints
+// =====================================================
+
+export async function getAchievements(userId) {
+  if (!userId) {
+    throw new Error(
+      "getAchievements requires a user ID."
+    );
+  }
+
+  return await serverGet(
+    `users/${encodeURIComponent(
+      userId
+    )}/achievements`
+  );
+}
+
+/*
+ * Record an achievement event.
+ *
+ * Call this when a song actually begins playing.
+ * A song ID is stored only once per user, so restarting
+ * the same song does not falsely increase progress.
+ */
+export async function trackAchievementEvent(
+  userId,
+  eventType,
+  itemId,
+  metadata = {}
+) {
+  if (!userId || !eventType) {
+    throw new Error(
+      "trackAchievementEvent requires a user ID and event type."
+    );
+  }
+
+  return await serverPost(
+    "users/achievements/event",
+    {
+      user_id: String(userId),
+      event_type: String(eventType),
+      item_id:
+        itemId !== undefined &&
+        itemId !== null
+          ? String(itemId)
+          : "",
+      metadata:
+        metadata &&
+        typeof metadata === "object"
+          ? metadata
+          : {},
+    }
+  );
+}
+
+export async function trackSongListened(
+  userId,
+  song
+) {
+  const songId =
+    song?.id ||
+    song?.listenableId ||
+    song?.listenable_id;
+
+  if (!songId) {
+    throw new Error(
+      "trackSongListened requires a song ID."
+    );
+  }
+
+  return await trackAchievementEvent(
+    userId,
+    "song_listened",
+    songId,
+    {
+      title:
+        song?.title ||
+        song?.name ||
+        "",
+      artistName:
+        song?.artist?.name ||
+        song?.artistName ||
+        "",
+    }
+  );
+}
+
+
 export function getServerEndpointBase() {
   const productionUrl =
     process.env.EXPO_PUBLIC_API_URL;
