@@ -896,27 +896,44 @@ export default function AlbumPage({ route, navigation }) {
     // -------------------------------------------------------------------------
     //  handleShareComment
     // -------------------------------------------------------------------------
-    const handleShareComment = () => {
+    const handleShareComment = async () => {
       if (!selectedUser) {
-        Alert.alert("Error", "Please select a friend to share with");
+        Alert.alert("Select a friend", "Please select a friend to share with");
         return;
       }
+
+      if (!currentShareItem?.id) {
+        Alert.alert("Unable to share", "This music item does not have a valid ID.");
+        return;
+      }
+
       try {
-        share(
+        const response = await share(
           selectedUser.userId,
-          currentShareItem.record_id,
+          currentShareItem.record_id || null,
           currentShareItem.id,
           comment,
-          currentShareItem.type
+          currentShareItem.type || "album",
+          currentShareItem
         );
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result?.error || "The music could not be shared.");
+        }
+
         Toast.show({
-          type: 'success',
-          text1: 'Sent'
+          type: "success",
+          text1: "Shared",
+          text2: `Sent to ${selectedUser.username}`,
         });
+
+        closeModal();
       } catch (error) {
-        console.error("[ERROR] handleShareComment ->", error);
+        console.error("[AlbumPage] Share error:", error);
+        Alert.alert("Unable to share", error.message || "Please try again.");
       }
-      closeModal();
     };
   
     // -------------------------------------------------------------------------

@@ -1096,14 +1096,15 @@ export default function Feed({ navigation }) {
         getRecordId(currentShareItem),
         getItemId(currentShareItem),
         comment.trim(),
-        getItemType(currentShareItem)
+        getItemType(currentShareItem),
+        getItemInfo(currentShareItem)
       );
 
-      if (
-        response &&
-        response.ok === false
-      ) {
+      const result = await response.json();
+
+      if (!response.ok) {
         throw new Error(
+          result?.error ||
           `Share failed with status ${response.status}`
         );
       }
@@ -1131,6 +1132,7 @@ export default function Feed({ navigation }) {
     comment,
     currentShareItem,
     getItemId,
+    getItemInfo,
     getItemType,
     getRecordId,
     selectedUser,

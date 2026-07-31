@@ -731,6 +731,281 @@ async function createFeedItem(
   };
 }
 
+
+/* =========================================================
+   TREBLE MUSIC SHARING
+   ========================================================= */
+
+const MUSIC_SHARES_COLLECTION = "musicShares";
+
+function shareTimestampToIso(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") {
+    return value.toDate().toISOString();
+  }
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function normalizeSharedItem(rawItem, itemId, type) {
+  const raw = rawItem?.item_info || rawItem || {};
+  const normalizedType = String(type || raw.type || "track").toLowerCase();
+  const id = String(itemId || raw.id || raw.listenableId || raw.listenable_id || "");
+
+  const artistName =
+    typeof raw.artist === "string"
+      ? raw.artist
+      : raw.artist?.name || raw.artistName || "";
+
+  const title = raw.title || raw.name ||
+    (normalizedType === "artist" ? artistName : "Shared music");
+
+  const image =
+    raw.image || raw.coverArt || raw.picture_xl || raw.picture_big ||
+    raw.picture || raw.cover_xl || raw.cover_big || raw.cover ||
+    raw.album?.cover_xl || raw.album?.cover_big || raw.album?.cover_medium || "";
+
+  return {
+    ...raw,
+    id,
+    listenableId: id,
+    listenable_id: id,
+    type: normalizedType,
+    title,
+    name: raw.name || title,
+    artist: raw.artist || (artistName ? { name: artistName } : null),
+    artistName,
+    image,
+    coverArt: raw.coverArt || image,
+    preview: raw.preview || raw.previewUrl || raw.playbackUrl || "",
+    previewUrl: raw.previewUrl || raw.preview || raw.playbackUrl || "",
+    playbackUrl: raw.playbackUrl || raw.preview || raw.previewUrl || "",
+  };
+}
+
+async function hydrateSharedItem(itemData, itemId, type) {
+  const normalizedType = String(type || "track").toLowerCase();
+
+  if (itemData && typeof itemData === "object") {
+    const normalized = normalizeSharedItem(itemData, itemId, normalizedType);
+    if (normalized.id) return normalized;
+  }
+
+  if (normalizedType === "track") {
+    const deezerTrack = await fetchDeezer(
+      `/track/${encodeURIComponent(itemId)}`
+    );
+    return normalizeDeezerTrack(deezerTrack);
+  }
+
+  return normalizeSharedItem({}, itemId, normalizedType);
+}
+
+app.post("/users/share", async (req, res) => {
+  try {
+    const toUserId = String(req.body?.user_id || "").trim();
+    const fromUserId = String(req.body?.share_by || "").trim();
+    const itemId = String(req.body?.item_id || "").trim();
+    const itemRid = req.body?.item_rid ? String(req.body.item_rid) : null;
+    const type = String(req.body?.type || "track").trim().toLowerCase();
+    const comment = String(req.body?.comment || "").trim().slice(0, 500);
+
+    if (!toUserId || !fromUserId || !itemId) {
+      return res.status(400).json({
+        ok: false,
+        error: "user_id, share_by, and item_id are required.",
+      });
+    }
+
+    if (toUserId === fromUserId) {
+      return res.status(400).json({
+        ok: false,
+        error: "You cannot share music with yourself.",
+      });
+    }
+
+    const [senderSnapshot, receiverSnapshot] = await Promise.all([
+      db.collection("users").doc(fromUserId).get(),
+      db.collection("users").doc(toUserId).get(),
+    ]);
+
+    if (!senderSnapshot.exists || !receiverSnapshot.exists) {
+      return res.status(404).json({
+        ok: false,
+        error: "The sender or receiving friend could not be found.",
+      });
+    }
+
+    const item = await hydrateSharedItem(
+      req.body?.item_data,
+      itemId,
+      type
+    );
+
+    const senderData = senderSnapshot.data() || {};
+    const shareRef = db.collection(MUSIC_SHARES_COLLECTION).doc();
+
+    const sender = {
+      userId: fromUserId,
+      uid: fromUserId,
+      username:
+        senderData.username || senderData.displayName ||
+        senderData.email?.split("@")[0] || "Treble User",
+      displayName: senderData.displayName || senderData.username || "",
+      avatar:
+        senderData.avatar || senderData.avatarLong ||
+        senderData.profilePicture || senderData.photoURL || "None",
+    };
+
+    await shareRef.set({
+      id: shareRef.id,
+      shareId: shareRef.id,
+      fromUserId,
+      toUserId,
+      itemId,
+      itemRid,
+      type,
+      comment,
+      item,
+      sender,
+      read: false,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    await createNotification({
+      type: "music_share",
+      fromUserId,
+      toUserId,
+      targetId: shareRef.id,
+      songTitle: item.title || item.name || "music",
+    });
+
+    console.log(
+      `[SHARE] ${fromUserId} shared ${type} ${itemId} with ${toUserId}`
+    );
+
+    return res.status(201).json({
+      ok: true,
+      shared: true,
+      shareId: shareRef.id,
+      item,
+    });
+  } catch (error) {
+    console.error("POST /users/share error:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Unable to share this music.",
+    });
+  }
+});
+
+async function getSharedFeedItems(userId, { limit = 20, offset = 0 } = {}) {
+  if (!userId) return [];
+
+  const snapshot = await db
+    .collection(MUSIC_SHARES_COLLECTION)
+    .where("toUserId", "==", String(userId))
+    .get();
+
+  const shares = snapshot.docs
+    .map((document) => {
+      const data = document.data() || {};
+      return {
+        document,
+        data,
+        time: data.createdAt?.toMillis?.() || 0,
+      };
+    })
+    .sort((a, b) => b.time - a.time)
+    .slice(offset, offset + limit);
+
+  const items = await Promise.all(
+    shares.map(async ({ document, data }) => {
+      let item = data.item || null;
+
+      if (!item && data.itemId) {
+        try {
+          item = await hydrateSharedItem(
+            null,
+            data.itemId,
+            data.type || "track"
+          );
+        } catch (error) {
+          console.warn(`[SHARE] Unable to hydrate ${data.itemId}:`, error.message);
+          return null;
+        }
+      }
+
+      if (!item?.id) return null;
+
+      const normalized = normalizeSharedItem(
+        item,
+        data.itemId,
+        data.type || item.type
+      );
+
+      let liked = false;
+      if (normalized.type === "track") {
+        const likeDoc = await db
+          .collection("likes")
+          .doc(`${userId}_track_${normalized.id}`)
+          .get();
+        liked = likeDoc.exists;
+      }
+
+      return {
+        class: "share",
+        source: "share",
+        shareId: document.id,
+        record_id: data.itemRid || `shared-${document.id}`,
+        id: normalized.id,
+        listenable_id: normalized.id,
+        type: normalized.type,
+        liked,
+        item_info: {
+          ...normalized,
+          liked,
+        },
+        title: normalized.title,
+        name: normalized.name,
+        artist: normalized.artist,
+        album: normalized.album || null,
+        image: normalized.image,
+        coverArt: normalized.coverArt,
+        preview: normalized.preview,
+        comment: data.comment || "",
+        createdAt: shareTimestampToIso(data.createdAt),
+        shared_by: data.sender || {
+          userId: data.fromUserId,
+          uid: data.fromUserId,
+          username: "A friend",
+          avatar: "None",
+        },
+      };
+    })
+  );
+
+  return items.filter(Boolean);
+}
+
+app.get("/users/share", async (req, res) => {
+  try {
+    const userId = String(req.query.user_id || "").trim();
+    if (!userId) {
+      return res.status(400).json({ ok: false, sharedItems: [], error: "user_id is required." });
+    }
+
+    const { limit, offset } = getPagination(req);
+    const sharedItems = await getSharedFeedItems(userId, { limit, offset });
+    return res.json({ ok: true, sharedItems });
+  } catch (error) {
+    console.error("GET /users/share error:", error);
+    return res.status(500).json({ ok: false, sharedItems: [], error: error.message });
+  }
+});
+
 function getPagination(req, defaultLimit = 20) {
   const parsedLimit = Number.parseInt(req.query.limit, 10);
   const parsedOffset = Number.parseInt(req.query.offset, 10);
@@ -1400,6 +1675,10 @@ app.get("/users/timeline", async (req, res) => {
     const refresh =
       String(req.query.refresh || "false") === "true";
 
+    const sharedTimelineItems = userId
+      ? await getSharedFeedItems(userId, { limit, offset })
+      : [];
+
     const [
       likedTrackIdList,
       recentlyServedTrackIds,
@@ -1527,7 +1806,7 @@ app.get("/users/timeline", async (req, res) => {
       );
     }
 
-    const timeline = await Promise.all(
+    const generatedTimeline = await Promise.all(
       selectedTracks.map((track) =>
         createFeedItem(
           track,
@@ -1544,12 +1823,17 @@ app.get("/users/timeline", async (req, res) => {
 
     await markFeedItemsServed(
       userId,
-      timeline,
+      generatedTimeline,
       "timeline"
     );
 
+    const timeline = [
+      ...sharedTimelineItems,
+      ...generatedTimeline,
+    ].slice(0, limit);
+
     console.log(
-      `[Timeline] Returning ${timeline.length} items`
+      `[Timeline] Returning ${timeline.length} items (${sharedTimelineItems.length} shared)`
     );
 
     return res.status(200).json({

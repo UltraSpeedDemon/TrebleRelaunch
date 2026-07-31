@@ -242,14 +242,32 @@ export async function getUserActivity(userId) {
 
 
 
-export async function share(userId, item_rid, item_id, comment, type) {
-  return await serverPost("users/share", { 
-    user_id: userId, 
-    item_id: item_id,
-    item_rid: item_rid, 
-    comment: comment || '', 
-    share_by: auth.currentUser.uid,
-    type: type
+export async function share(
+  userId,
+  item_rid,
+  item_id,
+  comment = "",
+  type = "track",
+  itemData = null
+) {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser?.uid) {
+    throw new Error("You must be signed in to share music.");
+  }
+
+  if (!userId || !item_id) {
+    throw new Error("A friend and music item are required.");
+  }
+
+  return await serverPost("users/share", {
+    user_id: String(userId),
+    item_id: String(item_id),
+    item_rid: item_rid ? String(item_rid) : null,
+    comment: String(comment || "").trim(),
+    share_by: currentUser.uid,
+    type: String(type || "track").toLowerCase(),
+    item_data: itemData || null,
   });
 }
 
