@@ -1514,23 +1514,35 @@ const handlePlayPreview = async () => {
                 ]}
               >
                 {/* CARD HEADER */}
-                <View style={styles.cardInformation}>
+                <View
+                  style={[
+                    styles.detailHeaderRow,
+                    isCompact &&
+                      styles.detailHeaderRowCompact,
+                  ]}
+                >
                   <View style={styles.titleContainer}>
                     <Text style={styles.boldTitle}>
                       Song
                     </Text>
                   </View>
 
-                  <View style={styles.actionButtons}>
+                  <View
+                    style={[
+                      styles.detailActionGroup,
+                      isCompact &&
+                        styles.detailActionGroupCompact,
+                    ]}
+                  >
                     <TouchableOpacity
                       onPress={(event) => {
                         event?.stopPropagation?.();
                         handleLikeSong();
                       }}
                       style={[
-                        styles.actionButton,
+                        styles.detailActionButton,
                         isCompact &&
-                          styles.actionButtonCompact,
+                          styles.detailActionButtonCompact,
                       ]}
                     >
                       <Image
@@ -1539,10 +1551,10 @@ const handlePlayPreview = async () => {
                             ? require("../images/whiteFullHeart.png")
                             : require("../images/whiteOpenHeart.png")
                         }
-                        style={styles.actionIcon}
+                        style={styles.detailActionIcon}
                       />
 
-                      <Text style={styles.actionText}>
+                      <Text style={styles.detailActionText}>
                         {liked ? "Liked" : "Like"}
                       </Text>
                     </TouchableOpacity>
@@ -1553,17 +1565,17 @@ const handlePlayPreview = async () => {
                         handleModal(track);
                       }}
                       style={[
-                        styles.actionButton,
+                        styles.detailActionButton,
                         isCompact &&
-                          styles.actionButtonCompact,
+                          styles.detailActionButtonCompact,
                       ]}
                     >
                       <Image
                         source={require("../images/shareIcon.png")}
-                        style={styles.actionIcon}
+                        style={styles.detailActionIcon}
                       />
 
-                      <Text style={styles.actionText}>
+                      <Text style={styles.detailActionText}>
                         Share
                       </Text>
                     </TouchableOpacity>
@@ -1571,12 +1583,13 @@ const handlePlayPreview = async () => {
                 </View>
 
                 {/* SONG IMAGE */}
-                <View style={styles.imageContainer}>
+                <View style={styles.songArtworkFrame}>
                   <Image
                     source={trackImage}
                     style={[
-                      styles.image,
-                      isCompact && styles.compactImage,
+                      styles.songArtworkImage,
+                      isCompact &&
+                        styles.songArtworkImageCompact,
                     ]}
                   />
 
@@ -1586,17 +1599,22 @@ const handlePlayPreview = async () => {
                       handlePlayPreview();
                     }}
                     style={[
-                      styles.playButton,
-                      isCompact &&
-                        styles.compactPlayButton,
+                      styles.songPreviewOverlay,
                       playLoading &&
-                        styles.playButtonLoading,
+                        styles.songPreviewOverlayLoading,
                     ]}
                     disabled={playLoading}
                     activeOpacity={0.86}
                   >
+                    <View
+                      style={[
+                        styles.songPreviewCircle,
+                        isCompact &&
+                          styles.songPreviewCircleCompact,
+                      ]}
+                    >
                     <AnimatedCircularProgress
-                      size={isCompact ? 72 : 84}
+                      size={isCompact ? 72 : 88}
                       width={5}
                       fill={progress}
                       tintColor={colours.lightblue}
@@ -1626,6 +1644,7 @@ const handlePlayPreview = async () => {
                         )
                       }
                     </AnimatedCircularProgress>
+                    </View>
                   </TouchableOpacity>
                 </View>
 
@@ -1666,16 +1685,16 @@ const handlePlayPreview = async () => {
                 {/* REVIEW OPTIONS */}
                 <View
                     style={[
-                      styles.reviewControls,
+                      styles.detailReviewToolbar,
                       isCompact &&
-                        styles.reviewControlsCompact,
+                        styles.detailReviewToolbarCompact,
                     ]}
                   >
                   <View
                       style={[
-                        styles.favouriteContainer,
+                        styles.detailFavouriteZone,
                         isCompact &&
-                          styles.favouriteContainerCompact,
+                          styles.detailFavouriteZoneCompact,
                       ]}
                     >
                     <TouchableOpacity
@@ -1690,20 +1709,20 @@ const handlePlayPreview = async () => {
                             ? require("../images/whiteFullHeart.png")
                             : require("../images/whiteOpenHeart.png")
                         }
-                        style={styles.smallFavIcon}
+                        style={styles.detailFavouriteIcon}
                       />
                     </TouchableOpacity>
 
-                    <Text style={styles.favLabel}>
+                    <Text style={styles.detailFavouriteLabel}>
                       Favourite
                     </Text>
                   </View>
 
                   <View
                       style={[
-                        styles.starRatingContainer,
+                        styles.detailStarsZone,
                         isCompact &&
-                          styles.starRatingContainerCompact,
+                          styles.detailStarsZoneCompact,
                       ]}
                     >
                     {[0, 1, 2, 3, 4].map((index) => (
@@ -1720,7 +1739,11 @@ const handlePlayPreview = async () => {
                               ? require("../images/starFullIcon.png")
                               : require("../images/starEmptyIcon.png")
                           }
-                          style={styles.starIcon}
+                          style={[
+                              styles.detailStarIcon,
+                              isCompact &&
+                                styles.detailStarIconCompact,
+                            ]}
                         />
                       </TouchableOpacity>
                     ))}
@@ -1728,9 +1751,9 @@ const handlePlayPreview = async () => {
 
                   <TouchableOpacity
                     style={[
-                        styles.selectEmojiTab,
+                        styles.detailReactionZone,
                         isCompact &&
-                          styles.selectEmojiTabCompact,
+                          styles.detailReactionZoneCompact,
                       ]}
                     onPress={(event) => {
                       event?.stopPropagation?.();
@@ -1739,7 +1762,11 @@ const handlePlayPreview = async () => {
                       );
                     }}
                   >
-                    <View style={styles.emojiIconCircle}>
+                    <View style={[
+                        styles.detailReactionButton,
+                        showEmojiDropdown &&
+                          styles.detailReactionButtonActive,
+                      ]}>
                       <Icon
                         name={
                           showEmojiDropdown
@@ -3350,5 +3377,348 @@ artist: {
         },
       }
     : {}),
+
+
+  /* =========================================================
+     FINAL DETAIL PAGE CONTROLS
+     Unique names prevent legacy duplicate styles from overriding them.
+  ========================================================= */
+
+  detailHeaderRow: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+
+    gap: 18,
+
+    marginBottom: 22,
+    paddingBottom: 18,
+
+    borderBottomWidth: 1,
+    borderBottomColor:
+      "rgba(255,255,255,0.09)",
+  },
+
+  detailHeaderRowCompact: {
+    flexDirection: "column",
+    alignItems: "stretch",
+
+    gap: 14,
+  },
+
+  detailActionGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+
+    gap: 12,
+  },
+
+  detailActionGroupCompact: {
+    width: "100%",
+  },
+
+  detailActionButton: {
+    minWidth: 142,
+    minHeight: 58,
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+
+    gap: 10,
+
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+
+    borderRadius: 17,
+
+    backgroundColor:
+      "rgba(53,175,229,0.14)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.48)",
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.24,
+    shadowRadius: 9,
+
+    elevation: 6,
+
+    ...(
+      Platform.OS === "web"
+        ? {
+            cursor: "pointer",
+          }
+        : {}
+    ),
+  },
+
+  detailActionButtonCompact: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 52,
+
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+
+    borderRadius: 15,
+  },
+
+  detailActionIcon: {
+    width: 31,
+    height: 31,
+
+    resizeMode: "contain",
+  },
+
+  detailActionText: {
+    color: "#ffffff",
+
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: "900",
+  },
+
+  detailReviewToolbar: {
+    width: "100%",
+    minHeight: 82,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+
+    borderRadius: 18,
+
+    backgroundColor:
+      "rgba(255,255,255,0.055)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.10)",
+  },
+
+  detailReviewToolbarCompact: {
+    minHeight: 72,
+
+    paddingHorizontal: 9,
+    paddingVertical: 10,
+
+    borderRadius: 15,
+  },
+
+  detailFavouriteZone: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+
+    gap: 9,
+  },
+
+  detailFavouriteZoneCompact: {
+    flex: 1,
+    flexBasis: 0,
+
+    gap: 5,
+  },
+
+  detailFavouriteIcon: {
+    width: 34,
+    height: 34,
+
+    resizeMode: "contain",
+  },
+
+  detailFavouriteLabel: {
+    color: "#ffffff",
+
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "900",
+  },
+
+  detailStarsZone: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+
+    flexWrap: "nowrap",
+  },
+
+  detailStarsZoneCompact: {
+    flex: 1.35,
+    flexBasis: 0,
+  },
+
+  detailStarIcon: {
+    width: 34,
+    height: 34,
+
+    marginHorizontal: 2,
+
+    resizeMode: "contain",
+  },
+
+  detailStarIconCompact: {
+    width: 24,
+    height: 24,
+
+    marginHorizontal: 0,
+  },
+
+  detailReactionZone: {
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
+
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+
+  detailReactionZoneCompact: {
+    flex: 0.65,
+    flexBasis: 0,
+  },
+
+  detailReactionButton: {
+    width: 52,
+    height: 52,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 16,
+
+    backgroundColor:
+      "rgba(53,175,229,0.14)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.48)",
+  },
+
+  detailReactionButtonActive: {
+    backgroundColor:
+      colours.lightblue,
+
+    borderColor:
+      colours.lightblue,
+  },
+
+
+  /* =========================================================
+     CENTERED SONG PREVIEW
+  ========================================================= */
+
+  songArtworkFrame: {
+    position: "relative",
+
+    width: "100%",
+    maxWidth: 470,
+    aspectRatio: 1,
+
+    alignSelf: "center",
+
+    overflow: "hidden",
+
+    borderRadius: 24,
+
+    backgroundColor:
+      "rgba(255,255,255,0.05)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.32)",
+
+    marginBottom: 26,
+  },
+
+  songArtworkImage: {
+    width: "100%",
+    height: "100%",
+
+    resizeMode: "cover",
+  },
+
+  songArtworkImageCompact: {
+    borderRadius: 20,
+  },
+
+  songPreviewOverlay: {
+    position: "absolute",
+
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    zIndex: 10,
+
+    ...(
+      Platform.OS === "web"
+        ? {
+            cursor: "pointer",
+          }
+        : {}
+    ),
+  },
+
+  songPreviewOverlayLoading: {
+    opacity: 0.9,
+  },
+
+  songPreviewCircle: {
+    width: 98,
+    height: 98,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 49,
+
+    backgroundColor:
+      "rgba(5,10,18,0.82)",
+
+    borderWidth: 2,
+    borderColor:
+      "rgba(255,255,255,0.38)",
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.65,
+    shadowRadius: 14,
+
+    elevation: 13,
+  },
+
+  songPreviewCircleCompact: {
+    width: 82,
+    height: 82,
+
+    borderRadius: 41,
+  },
 
 });

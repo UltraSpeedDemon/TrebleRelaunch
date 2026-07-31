@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  AppState,
   Image,
   PanResponder,
   Platform,
@@ -43,6 +44,16 @@ import colours from "../styles/colours";
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const MOBILE_SIDEBAR_MAX_WIDTH = 300;
 const MOBILE_BREAKPOINT = 768;
+
+/*
+ * Notification badge optimization.
+ *
+ * Sidebar is mounted on many screens, so a module-level cache prevents
+ * each page transition from immediately repeating the same two requests.
+ */
+const NOTIFICATION_REFRESH_MS = 60000;
+const notificationCountCache = new Map();
+const notificationRequestCache = new Map();
 
 export default function Sidebar({
   menuOpen = false,
@@ -202,97 +213,261 @@ export default function Sidebar({
     [isDesktop, navigation, setMenuOpen]
   );
 
-  const loadNotificationsCount = useCallback(async () => {
-    const currentUser = auth.currentUser;
+  /*
+   * Load the Sidebar notification badge efficiently.
+   *
+   * The old version performed two requests every 15 seconds on every
+   * mounted Sidebar. This version:
+   * - caches counts for 60 seconds,
+   * - reuses an in-progress request,
+   * - pauses while the app/browser tab is inactive,
+   * - keeps the previous valid count if a temporary request fails.
+   */
+  const loadNotificationsCount =
+    useCallback(async ({
+      force = false,
+    } = {}) => {
+      const currentUser =
+        auth.currentUser;
 
-    if (!currentUser?.uid) {
-      setNotificationsCount(0);
-      return;
-    }
-
-    try {
-      const [notificationsResponse, requestsResponse] =
-        await Promise.all([
-          getNotifications(currentUser.uid),
-          getFollowRequests(currentUser.uid),
-        ]);
-
-      let notificationsData = {};
-      let requestsData = {};
-
-      if (notificationsResponse?.ok) {
-        notificationsData = await notificationsResponse.json();
+      if (!currentUser?.uid) {
+        setNotificationsCount(0);
+        return;
       }
 
-      if (requestsResponse?.ok) {
-        requestsData = await requestsResponse.json();
+      const userId =
+        String(currentUser.uid);
+
+      const cached =
+        notificationCountCache.get(
+          userId
+        );
+
+      const cacheIsFresh =
+        cached &&
+        Date.now() -
+          cached.updatedAt <
+          NOTIFICATION_REFRESH_MS;
+
+      if (!force && cacheIsFresh) {
+        setNotificationsCount(
+          cached.count
+        );
+
+        return;
       }
 
-      const notifications = Array.isArray(notificationsData)
-        ? notificationsData
-        : Array.isArray(notificationsData?.notifications)
-          ? notificationsData.notifications
-          : [];
+      /*
+       * If another Sidebar instance already started this request,
+       * await that same Promise rather than issuing duplicate reads.
+       */
+      const existingRequest =
+        notificationRequestCache.get(
+          userId
+        );
 
-      const requests = Array.isArray(requestsData)
-        ? requestsData
-        : Array.isArray(requestsData?.requests)
-          ? requestsData.requests
-          : Array.isArray(requestsData?.followRequests)
-            ? requestsData.followRequests
-            : [];
+      if (existingRequest) {
+        try {
+          const count =
+            await existingRequest;
 
-      const unreadNormalCount = notifications.filter(
-        (notification) => {
-          const type = String(
-            notification?.type ||
-              notification?.notificationType ||
-              notification?.notification_type ||
-              ""
-          )
-            .trim()
-            .toLowerCase()
-            .replaceAll("-", "_")
-            .replaceAll(" ", "_");
-
-          const isRead =
-            notification?.read === true ||
-            notification?.read === "true" ||
-            notification?.read === 1 ||
-            notification?.isRead === true ||
-            notification?.is_read === true;
-
-          return !isRead && type !== "follow_request";
+          setNotificationsCount(count);
+        } catch {
+          /*
+           * The original request handles logging.
+           * Preserve the current badge count here.
+           */
         }
-      ).length;
 
-      setNotificationsCount(
-        unreadNormalCount + requests.length
-      );
-    } catch (error) {
-      console.error(
-        "[Sidebar] Notification count error:",
-        error
+        return;
+      }
+
+      const requestPromise =
+        (async () => {
+          const [
+            notificationsResponse,
+            requestsResponse,
+          ] = await Promise.all([
+            getNotifications(userId),
+            getFollowRequests(userId),
+          ]);
+
+          let notificationsData = {};
+          let requestsData = {};
+
+          if (
+            notificationsResponse?.ok
+          ) {
+            notificationsData =
+              await notificationsResponse.json();
+          }
+
+          if (requestsResponse?.ok) {
+            requestsData =
+              await requestsResponse.json();
+          }
+
+          const notifications =
+            Array.isArray(
+              notificationsData
+            )
+              ? notificationsData
+              : Array.isArray(
+                    notificationsData
+                      ?.notifications
+                )
+                ? notificationsData
+                    .notifications
+                : [];
+
+          const requests =
+            Array.isArray(requestsData)
+              ? requestsData
+              : Array.isArray(
+                    requestsData?.requests
+                )
+                ? requestsData.requests
+                : Array.isArray(
+                      requestsData
+                        ?.followRequests
+                  )
+                  ? requestsData
+                      .followRequests
+                  : [];
+
+          const unreadNormalCount =
+            notifications.filter(
+              (notification) => {
+                const type = String(
+                  notification?.type ||
+                    notification
+                      ?.notificationType ||
+                    notification
+                      ?.notification_type ||
+                    ""
+                )
+                  .trim()
+                  .toLowerCase()
+                  .replaceAll("-", "_")
+                  .replaceAll(" ", "_");
+
+                const isRead =
+                  notification?.read ===
+                    true ||
+                  notification?.read ===
+                    "true" ||
+                  notification?.read ===
+                    1 ||
+                  notification?.isRead ===
+                    true ||
+                  notification?.is_read ===
+                    true;
+
+                return (
+                  !isRead &&
+                  type !==
+                    "follow_request"
+                );
+              }
+            ).length;
+
+          const totalCount =
+            unreadNormalCount +
+            requests.length;
+
+          notificationCountCache.set(
+            userId,
+            {
+              count: totalCount,
+              updatedAt: Date.now(),
+            }
+          );
+
+          return totalCount;
+        })();
+
+      notificationRequestCache.set(
+        userId,
+        requestPromise
       );
 
-      setNotificationsCount(0);
-    }
-  }, []);
+      try {
+        const totalCount =
+          await requestPromise;
+
+        setNotificationsCount(
+          totalCount
+        );
+      } catch (error) {
+        console.error(
+          "[Sidebar] Notification count error:",
+          error
+        );
+
+        /*
+         * Do not reset the badge to zero because of a temporary
+         * network/backend error. Reuse the most recent valid count.
+         */
+        const fallback =
+          notificationCountCache.get(
+            userId
+          );
+
+        if (fallback) {
+          setNotificationsCount(
+            fallback.count
+          );
+        }
+      } finally {
+        notificationRequestCache.delete(
+          userId
+        );
+      }
+    }, []);
 
   useFocusEffect(
     useCallback(() => {
+      /*
+       * Display cached data immediately. A real request only runs
+       * when the cache is older than 60 seconds.
+       */
       loadNotificationsCount();
 
       const intervalId = setInterval(
-        loadNotificationsCount,
-        15000
+        () => {
+          const nativeAppIsInactive =
+            Platform.OS !== "web" &&
+            AppState.currentState &&
+            AppState.currentState !==
+              "active";
+
+          const browserTabIsHidden =
+            Platform.OS === "web" &&
+            typeof document !==
+              "undefined" &&
+            document.visibilityState ===
+              "hidden";
+
+          if (
+            nativeAppIsInactive ||
+            browserTabIsHidden
+          ) {
+            return;
+          }
+
+          loadNotificationsCount();
+        },
+        NOTIFICATION_REFRESH_MS
       );
 
       return () => {
         clearInterval(intervalId);
       };
-    }, [loadNotificationsCount])
+    }, [
+      loadNotificationsCount,
+    ])
   );
+
 
   const panResponder = useRef(
     PanResponder.create({
