@@ -12,6 +12,7 @@ import {
   Image,
   PanResponder,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -33,11 +34,11 @@ import {
 } from "../providers/rest";
 
 import { signOut } from "firebase/auth";
+import Icon from "react-native-vector-icons/MaterialIcons";
 
 import { auth } from "../utils/firebase";
 import { deleteSession } from "../utils/session";
 import colours from "../styles/colours";
-import Icon from "react-native-vector-icons/MaterialIcons";
 
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const MOBILE_SIDEBAR_MAX_WIDTH = 300;
@@ -51,10 +52,6 @@ export default function Sidebar({
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
 
-  /*
-   * Feed.js passes isDesktop.
-   * The fallback also allows Sidebar.js to work on other screens.
-   */
   const isDesktop =
     typeof suppliedIsDesktop === "boolean"
       ? suppliedIsDesktop
@@ -72,17 +69,11 @@ export default function Sidebar({
   const [avatar, setAvatar] = useState(null);
   const [username, setUsername] = useState("User");
   const [email, setEmail] = useState("");
-  const [notificationsCount, setNotificationsCount] =
-    useState(0);
-  const [loadingProfile, setLoadingProfile] =
-    useState(true);
+  const [notificationsCount, setNotificationsCount] = useState(0);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   const noAvatar = require("../images/avatarIcon.png");
 
-  /*
-   * Desktop is always positioned at zero.
-   * Mobile starts completely outside the left edge.
-   */
   const translateX = useRef(
     new Animated.Value(
       isDesktop || menuOpen ? 0 : -sidebarWidth
@@ -102,208 +93,117 @@ export default function Sidebar({
         useNativeDriver: true,
       }).start();
     },
-    [
-      isDesktop,
-      sidebarWidth,
-      translateX,
-    ]
+    [isDesktop, sidebarWidth, translateX]
   );
 
+  useEffect(() => {
+    animateMenu(isDesktop ? true : menuOpen);
+  }, [animateMenu, isDesktop, menuOpen]);
 
-  /*
- * Keep the animated sidebar synchronized
- * with the menuOpen state.
- *
- * Without this effect, the overlay appears,
- * but the sidebar stays translated off-screen.
- */
-useEffect(() => {
-  animateMenu(
-    isDesktop ? true : menuOpen
-  );
-}, [
-  animateMenu,
-  isDesktop,
-  menuOpen,
-]);
+  const loadProfile = useCallback(async () => {
+    const currentUser = auth.currentUser;
 
-const loadProfile = useCallback(async () => {
-  const currentUser = auth.currentUser;
-
-  if (!currentUser?.uid) {
-    setAvatar(null);
-    setUsername("User");
-    setEmail("");
-    setLoadingProfile(false);
-    return;
-  }
-
-  try {
-    setLoadingProfile(true);
-
-    /*
-     * Reload the Firebase user so the latest
-     * displayName and photoURL are available.
-     */
-    await currentUser.reload();
-
-    const refreshedUser =
-      auth.currentUser || currentUser;
-
-    const response = await getUser(
-      refreshedUser.uid
-    );
-
-    if (!response?.ok) {
-      throw new Error(
-        `User request failed with status ${response?.status}`
-      );
-    }
-
-    const userData =
-      await response.json();
-
-    /*
-     * Keep the username exactly as saved,
-     * including all capitalization.
-     */
-    const finalUsername =
-      typeof userData?.username === "string" &&
-      userData.username.trim()
-        ? userData.username.trim()
-        : refreshedUser.displayName ||
-          "User";
-
-    const finalEmail =
-      typeof userData?.email === "string" &&
-      userData.email.trim()
-        ? userData.email.trim()
-        : refreshedUser.email || "";
-
-    /*
-     * Prefer the avatar stored by the Treble backend.
-     * Fall back to Firebase Authentication photoURL.
-     */
-    const backendAvatar =
-      typeof userData?.avatar === "string" &&
-      userData.avatar.trim() &&
-      userData.avatar !== "None"
-        ? userData.avatar.trim()
-        : "";
-
-    const firebaseAvatar =
-      typeof refreshedUser.photoURL === "string"
-        ? refreshedUser.photoURL.trim()
-        : "";
-
-    setUsername(finalUsername);
-    setEmail(finalEmail);
-
-    setAvatar(
-      backendAvatar ||
-      firebaseAvatar ||
-      null
-    );
-  } catch (error) {
-    console.error(
-      "[Sidebar] User-data error:",
-      error
-    );
-
-    const fallbackUser =
-      auth.currentUser;
-
-    setUsername(
-      fallbackUser?.displayName ||
-      "User"
-    );
-
-    setEmail(
-      fallbackUser?.email || ""
-    );
-
-    setAvatar(
-      fallbackUser?.photoURL ||
-      null
-    );
-  } finally {
-    setLoadingProfile(false);
-  }
-}, []);
-
-/*
- * Reload the Sidebar profile every time the
- * current screen becomes active again.
- *
- * This makes changes from Edit Profile appear
- * when returning to Feed, Profile, or Settings.
- */
-useFocusEffect(
-  useCallback(() => {
-    loadProfile();
-  }, [loadProfile])
-);
-  const openMenu = useCallback(() => {
-    if (isDesktop) {
+    if (!currentUser?.uid) {
+      setAvatar(null);
+      setUsername("User");
+      setEmail("");
+      setLoadingProfile(false);
       return;
     }
 
-    setMenuOpen(true);
+    try {
+      setLoadingProfile(true);
+
+      await currentUser.reload();
+
+      const refreshedUser = auth.currentUser || currentUser;
+      const response = await getUser(refreshedUser.uid);
+
+      if (!response?.ok) {
+        throw new Error(
+          `User request failed with status ${response?.status}`
+        );
+      }
+
+      const userData = await response.json();
+
+      const finalUsername =
+        typeof userData?.username === "string" &&
+        userData.username.trim()
+          ? userData.username.trim()
+          : refreshedUser.displayName || "User";
+
+      const finalEmail =
+        typeof userData?.email === "string" &&
+        userData.email.trim()
+          ? userData.email.trim()
+          : refreshedUser.email || "";
+
+      const backendAvatar =
+        typeof userData?.avatar === "string" &&
+        userData.avatar.trim() &&
+        userData.avatar !== "None"
+          ? userData.avatar.trim()
+          : "";
+
+      const firebaseAvatar =
+        typeof refreshedUser.photoURL === "string"
+          ? refreshedUser.photoURL.trim()
+          : "";
+
+      setUsername(finalUsername);
+      setEmail(finalEmail);
+      setAvatar(backendAvatar || firebaseAvatar || null);
+    } catch (error) {
+      console.error("[Sidebar] User-data error:", error);
+
+      const fallbackUser = auth.currentUser;
+
+      setUsername(fallbackUser?.displayName || "User");
+      setEmail(fallbackUser?.email || "");
+      setAvatar(fallbackUser?.photoURL || null);
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [loadProfile])
+  );
+
+  const openMenu = useCallback(() => {
+    if (!isDesktop) {
+      setMenuOpen(true);
+    }
   }, [isDesktop, setMenuOpen]);
 
   const closeMenu = useCallback(() => {
-    if (isDesktop) {
-      return;
+    if (!isDesktop) {
+      setMenuOpen(false);
     }
-
-    setMenuOpen(false);
   }, [isDesktop, setMenuOpen]);
 
   const toggleMenu = useCallback(() => {
-    if (isDesktop) {
-      return;
+    if (!isDesktop) {
+      setMenuOpen(!menuOpen);
     }
+  }, [isDesktop, menuOpen, setMenuOpen]);
 
-    setMenuOpen(!menuOpen);
-  }, [
-    isDesktop,
-    menuOpen,
-    setMenuOpen,
-  ]);
-
-  /*
-   * Close the mobile sidebar after navigating.
-   * Desktop sidebar remains open.
-   */
   const navigateTo = useCallback(
     (screenName, parameters) => {
-      navigation.navigate(
-        screenName,
-        parameters
-      );
+      navigation.navigate(screenName, parameters);
 
       if (!isDesktop) {
         setMenuOpen(false);
       }
     },
-    [
-      isDesktop,
-      navigation,
-      setMenuOpen,
-    ]
+    [isDesktop, navigation, setMenuOpen]
   );
 
- /*
- * Load the notification badge.
- *
- * Normal notifications count while unread.
- * Pending follow requests remain counted until
- * they are accepted or denied.
- */
-const loadNotificationsCount =
-  useCallback(async () => {
-    const currentUser =
-      auth.currentUser;
+  const loadNotificationsCount = useCallback(async () => {
+    const currentUser = auth.currentUser;
 
     if (!currentUser?.uid) {
       setNotificationsCount(0);
@@ -311,139 +211,63 @@ const loadNotificationsCount =
     }
 
     try {
-      const [
-        notificationsResponse,
-        requestsResponse,
-      ] = await Promise.all([
-        getNotifications(
-          currentUser.uid
-        ),
-
-        getFollowRequests(
-          currentUser.uid
-        ),
-      ]);
+      const [notificationsResponse, requestsResponse] =
+        await Promise.all([
+          getNotifications(currentUser.uid),
+          getFollowRequests(currentUser.uid),
+        ]);
 
       let notificationsData = {};
       let requestsData = {};
 
-      if (
-        notificationsResponse?.ok
-      ) {
-        notificationsData =
-          await notificationsResponse.json();
+      if (notificationsResponse?.ok) {
+        notificationsData = await notificationsResponse.json();
       }
 
       if (requestsResponse?.ok) {
-        requestsData =
-          await requestsResponse.json();
+        requestsData = await requestsResponse.json();
       }
 
-      /*
-       * Support either a direct array or:
-       *
-       * {
-       *   notifications: [...]
-       * }
-       */
-      const notifications =
-        Array.isArray(
-          notificationsData
-        )
-          ? notificationsData
-          : Array.isArray(
-                notificationsData
-                  ?.notifications
-            )
-            ? notificationsData
-                .notifications
+      const notifications = Array.isArray(notificationsData)
+        ? notificationsData
+        : Array.isArray(notificationsData?.notifications)
+          ? notificationsData.notifications
+          : [];
+
+      const requests = Array.isArray(requestsData)
+        ? requestsData
+        : Array.isArray(requestsData?.requests)
+          ? requestsData.requests
+          : Array.isArray(requestsData?.followRequests)
+            ? requestsData.followRequests
             : [];
 
-      /*
-       * Support either a direct array or:
-       *
-       * {
-       *   requests: [...]
-       * }
-       *
-       * or:
-       *
-       * {
-       *   followRequests: [...]
-       * }
-       */
-      const requests =
-        Array.isArray(
-          requestsData
-        )
-          ? requestsData
-          : Array.isArray(
-                requestsData?.requests
-            )
-            ? requestsData.requests
-            : Array.isArray(
-                  requestsData
-                    ?.followRequests
-              )
-              ? requestsData
-                  .followRequests
-              : [];
-
-      /*
-       * Follow requests exist in both:
-       *
-       * notifications
-       * followRequests
-       *
-       * Exclude follow_request notifications here
-       * so they are not counted twice.
-       */
-      const unreadNormalCount =
-        notifications.filter(
-          (notification) => {
-            const type = String(
-              notification?.type ||
-              notification
-                ?.notificationType ||
-              notification
-                ?.notification_type ||
+      const unreadNormalCount = notifications.filter(
+        (notification) => {
+          const type = String(
+            notification?.type ||
+              notification?.notificationType ||
+              notification?.notification_type ||
               ""
-            )
-              .trim()
-              .toLowerCase()
-              .replaceAll("-", "_")
-              .replaceAll(" ", "_");
+          )
+            .trim()
+            .toLowerCase()
+            .replaceAll("-", "_")
+            .replaceAll(" ", "_");
 
-            const isRead =
-              notification?.read ===
-                true ||
-              notification?.read ===
-                "true" ||
-              notification?.read ===
-                1 ||
-              notification?.isRead ===
-                true ||
-              notification?.is_read ===
-                true;
+          const isRead =
+            notification?.read === true ||
+            notification?.read === "true" ||
+            notification?.read === 1 ||
+            notification?.isRead === true ||
+            notification?.is_read === true;
 
-            return (
-              !isRead &&
-              type !==
-                "follow_request"
-            );
-          }
-        ).length;
-
-      /*
-       * Pending private follow requests remain
-       * in the badge until accepted or denied.
-       */
-      const totalCount =
-        unreadNormalCount +
-        requests.length;
+          return !isRead && type !== "follow_request";
+        }
+      ).length;
 
       setNotificationsCount(
-        totalCount
+        unreadNormalCount + requests.length
       );
     } catch (error) {
       console.error(
@@ -455,49 +279,36 @@ const loadNotificationsCount =
     }
   }, []);
 
-/*
- * Reload whenever the current page gets focus.
- *
- * Also check every 15 seconds so new notifications
- * can appear without refreshing the whole app.
- */
-useFocusEffect(
-  useCallback(() => {
-    loadNotificationsCount();
+  useFocusEffect(
+    useCallback(() => {
+      loadNotificationsCount();
 
-    const intervalId =
-      setInterval(
+      const intervalId = setInterval(
         loadNotificationsCount,
         15000
       );
 
-    return () => {
-      clearInterval(
-        intervalId
-      );
-    };
-  }, [
-    loadNotificationsCount,
-  ])
-);
+      return () => {
+        clearInterval(intervalId);
+      };
+    }, [loadNotificationsCount])
+  );
 
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (
-        _event,
-        gesture
-      ) => {
+      onMoveShouldSetPanResponder: (_event, gesture) => {
+        const horizontalSwipe =
+          Math.abs(gesture.dx) > Math.abs(gesture.dy);
+
         return (
           !isDesktop &&
           menuOpen &&
-          Math.abs(gesture.dx) > 8
+          gesture.dx < -8 &&
+          horizontalSwipe
         );
       },
 
-      onPanResponderMove: (
-        _event,
-        gesture
-      ) => {
+      onPanResponderMove: (_event, gesture) => {
         if (
           isDesktop ||
           !menuOpen ||
@@ -506,10 +317,6 @@ useFocusEffect(
           return;
         }
 
-        /*
-         * Only permit movement from zero toward
-         * the closed position on the left.
-         */
         const nextPosition = Math.max(
           -sidebarWidth,
           gesture.dx
@@ -518,10 +325,7 @@ useFocusEffect(
         translateX.setValue(nextPosition);
       },
 
-      onPanResponderRelease: (
-        _event,
-        gesture
-      ) => {
+      onPanResponderRelease: (_event, gesture) => {
         if (isDesktop) {
           translateX.setValue(0);
           return;
@@ -546,28 +350,17 @@ useFocusEffect(
   ).current;
 
   const performLogout = useCallback(async () => {
-  try {
-    console.log("[Sidebar] Logging out...");
+    try {
+      console.log("[Sidebar] Logging out...");
 
-    /*
-     * Sign out of Firebase.
-     */
-    await signOut(auth);
+      await signOut(auth);
+      await deleteSession("userUid");
 
-    /*
-     * Remove the custom saved UID session.
-     */
-    await deleteSession("userUid");
+      if (!isDesktop) {
+        setMenuOpen(false);
+      }
 
-    if (!isDesktop) {
-      setMenuOpen(false);
-    }
-
-    /*
-     * Reset navigation so Feed cannot be reached
-     * by pressing the browser Back button.
-     */
-    navigation.reset({
+      navigation.reset({
         index: 0,
         routes: [
           {
@@ -576,64 +369,52 @@ useFocusEffect(
         ],
       });
 
-    console.log("[Sidebar] Logout complete.");
-  } catch (error) {
-    console.error(
-      "[Sidebar] Logout error:",
-      error
-    );
+      console.log("[Sidebar] Logout complete.");
+    } catch (error) {
+      console.error("[Sidebar] Logout error:", error);
 
-    if (Platform.OS === "web") {
-      window.alert(
-        "Unable to log out. Please try again."
-      );
-    } else {
-      Alert.alert(
-        "Unable to log out",
-        "Please try again."
-      );
+      if (Platform.OS === "web") {
+        window.alert(
+          "Unable to log out. Please try again."
+        );
+      } else {
+        Alert.alert(
+          "Unable to log out",
+          "Please try again."
+        );
+      }
     }
-  }
-}, [
-  isDesktop,
-  navigation,
-  setMenuOpen,
-]);
+  }, [isDesktop, navigation, setMenuOpen]);
 
-const handleLogout = useCallback(() => {
-  /*
-   * React Native Alert confirmation buttons
-   * are not dependable on React Native Web.
-   */
-  if (Platform.OS === "web") {
-    const confirmed =
-      window.confirm(
+  const handleLogout = useCallback(() => {
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
         "Are you sure you want to log out?"
       );
 
-    if (confirmed) {
-      performLogout();
+      if (confirmed) {
+        performLogout();
+      }
+
+      return;
     }
 
-    return;
-  }
-
-  Alert.alert(
-    "Log out",
-    "Are you sure you want to log out?",
-    [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Log Out",
-        style: "destructive",
-        onPress: performLogout,
-      },
-    ]
-  );
-}, [performLogout]);
+    Alert.alert(
+      "Log out",
+      "Are you sure you want to log out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: performLogout,
+        },
+      ]
+    );
+  }, [performLogout]);
 
   return (
     <View
@@ -645,7 +426,6 @@ const handleLogout = useCallback(() => {
       ]}
       pointerEvents="box-none"
     >
-      {/* MOBILE HAMBURGER ONLY */}
       {!isDesktop && !menuOpen ? (
         <TouchableOpacity
           onPress={openMenu}
@@ -660,22 +440,14 @@ const handleLogout = useCallback(() => {
         </TouchableOpacity>
       ) : null}
 
-      {/* MOBILE DARK OVERLAY */}
       {!isDesktop && menuOpen ? (
-        <TouchableWithoutFeedback
-          onPress={closeMenu}
-        >
+        <TouchableWithoutFeedback onPress={closeMenu}>
           <View style={styles.overlay} />
         </TouchableWithoutFeedback>
       ) : null}
 
-      {/* SIDEBAR PANEL */}
       <Animated.View
-        {...(
-          isDesktop
-            ? {}
-            : panResponder.panHandlers
-        )}
+        {...(isDesktop ? {} : panResponder.panHandlers)}
         style={[
           styles.sideMenu,
           isDesktop
@@ -693,75 +465,68 @@ const handleLogout = useCallback(() => {
           },
         ]}
       >
-        {/* MOBILE CLOSE BUTTON */}
         {!isDesktop ? (
           <TouchableOpacity
             onPress={toggleMenu}
             style={styles.closeButton}
+            activeOpacity={0.8}
           >
-            <Text style={styles.closeButtonText}>
-              ×
-            </Text>
+            <Text style={styles.closeButtonText}>×</Text>
           </TouchableOpacity>
         ) : null}
 
         <ScrollView
           style={styles.sidebarScroll}
-          contentContainerStyle={
-            styles.sidebarScrollContent
-          }
-          showsVerticalScrollIndicator={
-            false
-          }
+          contentContainerStyle={[
+            styles.sidebarScrollContent,
+            !isDesktop && styles.mobileScrollContent,
+          ]}
+          showsVerticalScrollIndicator={false}
           bounces={false}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
         >
-          {/* PROFILE */}
           <View style={styles.profileSection}>
             <TouchableOpacity
-              onPress={() =>
-                navigateTo("Profile")
-              }
+              onPress={() => navigateTo("Profile")}
               activeOpacity={0.8}
             >
-              {loadingProfile &&
-                !avatar ? (
-                  <View
-                    style={[
-                      styles.avatar,
-                      styles.avatarLoading,
-                    ]}
-                  >
-                    <ActivityIndicator
-                      size="small"
-                      color={
-                        colours.lightblue
-                      }
-                    />
-                  </View>
-                ) : (
-                  <Image
-                    key={
-                      avatar ||
-                      "sidebar-default-avatar"
-                    }
-                    source={
-                      avatar
-                        ? {
-                            uri: avatar,
-                          }
-                        : noAvatar
-                    }
-                    style={styles.avatar}
-                    onError={(event) => {
-                      console.error(
-                        "[Sidebar] Avatar display error:",
-                        event?.nativeEvent?.error
-                      );
-
-                      setAvatar(null);
-                    }}
+              {loadingProfile && !avatar ? (
+                <View
+                  style={[
+                    styles.avatar,
+                    styles.avatarLoading,
+                  ]}
+                >
+                  <ActivityIndicator
+                    size="small"
+                    color={colours.lightblue}
                   />
-                )}
+                </View>
+              ) : (
+                <Image
+                  key={
+                    avatar ||
+                    "sidebar-default-avatar"
+                  }
+                  source={
+                    avatar
+                      ? {
+                          uri: avatar,
+                        }
+                      : noAvatar
+                  }
+                  style={styles.avatar}
+                  onError={(event) => {
+                    console.error(
+                      "[Sidebar] Avatar display error:",
+                      event?.nativeEvent?.error
+                    );
+
+                    setAvatar(null);
+                  }}
+                />
+              )}
             </TouchableOpacity>
 
             <Text
@@ -779,108 +544,149 @@ const handleLogout = useCallback(() => {
             </Text>
 
             <TouchableOpacity
-              onPress={() =>
-                navigateTo("EditProfile")
-              }
-              style={
-                styles.editAccountButton
-              }
+              onPress={() => navigateTo("EditProfile")}
+              style={styles.editAccountButton}
+              activeOpacity={0.8}
             >
-              <Text
-                style={styles.editAccount}
-              >
+              <Text style={styles.editAccount}>
                 Edit Account
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* MAIN MENU */}
           <View style={styles.menuSection}>
-            <Text style={styles.sectionLabel}>LIBRARY</Text>
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionLabel}>
+                LIBRARY
+              </Text>
 
-            <MenuItem
-              iconName="history"
-              label="Recently Viewed"
-              onPress={() => navigateTo("RecentlyViewed")}
-            />
+              <View style={styles.menuGroupCard}>
+                <MenuItem
+                  iconName="history"
+                  label="Recently Viewed"
+                  onPress={() =>
+                    navigateTo("RecentlyViewed")
+                  }
+                />
 
-            <MenuItem
-              iconName="favorite-border"
-              label="Liked"
-              onPress={() => navigateTo("Favourites")}
-            />
+                <MenuItem
+                  iconName="favorite-border"
+                  label="Liked"
+                  onPress={() =>
+                    navigateTo("Favourites")
+                  }
+                />
 
-            <MenuItem
-              iconName="auto-awesome"
-              label="Swipe to Discover"
-              onPress={() => navigateTo("MusicSwiperTest")}
-              dividerAfter
-            />
+                <MenuItem
+                  iconName="auto-awesome"
+                  label="Swipe to Discover"
+                  onPress={() =>
+                    navigateTo("MusicSwiperTest")
+                  }
+                />
+              </View>
+            </View>
 
-            <Text style={styles.sectionLabel}>SOCIAL</Text>
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionLabel}>
+                SOCIAL
+              </Text>
 
-            <MenuItem
-              iconName="people-outline"
-              label="Friends List"
-              onPress={() => navigateTo("FriendsList")}
-            />
+              <View style={styles.menuGroupCard}>
+                <MenuItem
+                  iconName="people-outline"
+                  label="Friends List"
+                  onPress={() =>
+                    navigateTo("FriendsList")
+                  }
+                />
 
-            <MenuItem
-              iconName="groups"
-              label="Community"
-              onPress={() => navigateTo("Groups")}
-            />
+                <MenuItem
+                  iconName="groups"
+                  label="Community"
+                  onPress={() =>
+                    navigateTo("Groups")
+                  }
+                />
 
-            <MenuItem
-              iconName="chat-bubble-outline"
-              label="Messages"
-              onPress={() => navigateTo("Messages")}
-            />
+                <MenuItem
+                  iconName="chat-bubble-outline"
+                  label="Messages"
+                  onPress={() =>
+                    navigateTo("Messages")
+                  }
+                />
 
-            <MenuItem
-              iconName="notifications-none"
-              label="Notifications"
-              onPress={() => navigateTo("Notifications")}
-              badgeCount={notificationsCount}
-              dividerAfter
-            />
+                <MenuItem
+                  iconName="notifications-none"
+                  label="Notifications"
+                  onPress={() =>
+                    navigateTo("Notifications")
+                  }
+                  badgeCount={notificationsCount}
+                />
+              </View>
+            </View>
 
-            <Text style={styles.sectionLabel}>YOUR TREBLE</Text>
+            <View style={styles.sectionBlock}>
+              <Text style={styles.sectionLabel}>
+                YOUR TREBLE
+              </Text>
 
-            <MenuItem
-              iconName="hub"
-              label="Connections"
-              onPress={() => navigateTo("Connections")}
-            />
+              <View style={styles.menuGroupCard}>
+                <MenuItem
+                  iconName="hub"
+                  label="Connections"
+                  onPress={() =>
+                    navigateTo("Connections")
+                  }
+                />
 
-            <MenuItem
-              iconName="emoji-events"
-              label="Achievements"
-              onPress={() => navigateTo("Achievements")}
-              badgeText="NEW"
-            />
+                <MenuItem
+                  iconName="emoji-events"
+                  label="Achievements"
+                  onPress={() =>
+                    navigateTo("Achievements")
+                  }
+                  badgeText="NEW"
+                />
 
-            <MenuItem
-              iconName="settings"
-              label="Settings"
-              onPress={() => navigateTo("Settings")}
-            />
+                <MenuItem
+                  iconName="settings"
+                  label="Settings"
+                  onPress={() =>
+                    navigateTo("Settings")
+                  }
+                />
 
-            <MenuItem
-              iconName="logout"
-              label="Logout"
-              onPress={handleLogout}
-            />
-          </View>
+                <MenuItem
+                  iconName="logout"
+                  label="Logout"
+                  onPress={handleLogout}
+                  destructive
+                />
+              </View>
+            </View>
 
-          <View style={styles.sidebarFooter}>
-            <MenuItem
-              iconName="movie-filter"
-              label="Credits"
-              onPress={() => navigateTo("Credits")}
-              compact
-            />
-            <Text style={styles.footerBrand}>TREBLE</Text>
+            <View style={styles.sidebarFooter}>
+              <Text style={styles.sectionLabel}>
+                ABOUT
+              </Text>
+
+              <View style={styles.menuGroupCard}>
+                <MenuItem
+                  iconName="movie-filter"
+                  label="Credits"
+                  onPress={() =>
+                    navigateTo("Credits")
+                  }
+                />
+              </View>
+
+              <Text style={styles.footerBrand}>
+                TREBLE
+              </Text>
+            </View>
           </View>
         </ScrollView>
       </Animated.View>
@@ -894,53 +700,95 @@ function MenuItem({
   onPress,
   badgeCount = 0,
   badgeText = "",
-  dividerAfter = false,
-  compact = false,
+  destructive = false,
 }) {
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      activeOpacity={0.72}
-      style={[
+      style={({ hovered, pressed }) => [
         styles.menuItem,
-        compact && styles.compactMenuItem,
-        dividerAfter && styles.menuItemDivider,
+        Platform.OS === "web" &&
+          hovered &&
+          styles.menuItemHovered,
+        pressed && styles.menuItemPressed,
       ]}
     >
-      <View style={styles.menuIconContainer}>
-        <Icon
-          name={iconName}
-          size={21}
-          color={colours.lightblue}
-        />
-      </View>
+      {({ hovered, pressed }) => {
+        const isActive = Boolean(hovered || pressed);
 
-      <Text style={styles.menuText} numberOfLines={1}>
-        {label}
-      </Text>
+        const itemColor = destructive
+          ? isActive
+            ? "#ff8494"
+            : "#ff5a70"
+          : isActive
+            ? "#ffffff"
+            : colours.lightblue;
 
-      {badgeText ? (
-        <View style={styles.newBadge}>
-          <Text style={styles.newBadgeText}>{badgeText}</Text>
-        </View>
-      ) : null}
+        return (
+          <>
+            <View
+              style={[
+                styles.menuIconContainer,
+                isActive &&
+                  styles.menuIconContainerActive,
+                destructive &&
+                  styles.destructiveIconContainer,
+              ]}
+            >
+              <Icon
+                name={iconName}
+                size={21}
+                color={itemColor}
+              />
+            </View>
 
-      {badgeCount > 0 ? (
-        <View style={styles.notificationBadge}>
-          <Text style={styles.notificationBadgeText}>
-            {badgeCount > 99 ? "99+" : badgeCount}
-          </Text>
-        </View>
-      ) : null}
+            <Text
+              style={[
+                styles.menuText,
+                isActive && styles.menuTextActive,
+                destructive &&
+                  styles.destructiveMenuText,
+              ]}
+              numberOfLines={1}
+            >
+              {label}
+            </Text>
 
-      {!badgeText && badgeCount <= 0 ? (
-        <Icon
-          name="chevron-right"
-          size={19}
-          color="rgba(255,255,255,0.32)"
-        />
-      ) : null}
-    </TouchableOpacity>
+            {badgeText ? (
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>
+                  {badgeText}
+                </Text>
+              </View>
+            ) : null}
+
+            {badgeCount > 0 ? (
+              <View style={styles.notificationBadge}>
+                <Text
+                  style={styles.notificationBadgeText}
+                >
+                  {badgeCount > 99
+                    ? "99+"
+                    : badgeCount}
+                </Text>
+              </View>
+            ) : null}
+
+            {!badgeText && badgeCount <= 0 ? (
+              <Icon
+                name="chevron-right"
+                size={20}
+                color={
+                  isActive
+                    ? "rgba(255,255,255,0.85)"
+                    : "rgba(255,255,255,0.30)"
+                }
+              />
+            ) : null}
+          </>
+        );
+      }}
+    </Pressable>
   );
 }
 
@@ -961,52 +809,33 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
 
-  /* =========================================================
-     MOBILE CONTROLS
-  ========================================================= */
-
   hamburgerButton: {
-    position: "fixed",
+    position:
+      Platform.OS === "web"
+        ? "fixed"
+        : "absolute",
     top: 18,
     left: 16,
-
     width: 46,
     height: 46,
-
     alignItems: "center",
     justifyContent: "center",
-
     borderRadius: 23,
-
-    backgroundColor:
-      "rgba(255,255,255,0.07)",
-
+    backgroundColor: "rgba(255,255,255,0.07)",
     zIndex: 130,
     elevation: 25,
-  },
-
-  hamburgerIcon: {
-    width: 30,
-    height: 30,
-    resizeMode: "contain",
   },
 
   closeButton: {
     position: "absolute",
     top: 10,
     right: 12,
-
     width: 38,
     height: 38,
-
     alignItems: "center",
     justifyContent: "center",
-
     borderRadius: 19,
-
-    backgroundColor:
-      "rgba(255,255,255,0.08)",
-
+    backgroundColor: "rgba(255,255,255,0.08)",
     zIndex: 5,
   },
 
@@ -1018,32 +847,25 @@ const styles = StyleSheet.create({
   },
 
   overlay: {
-    position: "fixed",
+    position:
+      Platform.OS === "web"
+        ? "fixed"
+        : "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-
-    width: "100vw",
-    height: "100vh",
-
-    backgroundColor:
-      "rgba(0,0,0,0.62)",
-
+    width: Platform.OS === "web" ? "100vw" : "100%",
+    height: Platform.OS === "web" ? "100dvh" : "100%",
+    backgroundColor: "rgba(0,0,0,0.62)",
     zIndex: 110,
   },
-
-  /* =========================================================
-     SIDEBAR PANEL
-  ========================================================= */
 
   sideMenu: {
     top: 0,
     left: 0,
     bottom: 0,
-
     backgroundColor: colours.darkblue,
-
     shadowColor: "#000000",
     shadowOffset: {
       width: 3,
@@ -1051,10 +873,8 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-
     elevation: 20,
     zIndex: 120,
-
     overflow: "hidden",
   },
 
@@ -1068,52 +888,44 @@ const styles = StyleSheet.create({
       Platform.OS === "web"
         ? "fixed"
         : "absolute",
-
+    top: 0,
+    bottom: 0,
     height:
       Platform.OS === "web"
-        ? "100vh"
+        ? "100dvh"
         : "100%",
-
     maxWidth: "90vw",
   },
 
   sidebarScroll: {
     flex: 1,
+    width: "100%",
   },
 
   sidebarScrollContent: {
-    flexGrow: 1,
-    paddingBottom: 14,
+    paddingBottom: 34,
   },
 
-  /* =========================================================
-     PROFILE
-  ========================================================= */
+  mobileScrollContent: {
+    paddingBottom: 80,
+  },
 
   profileSection: {
     minHeight: 205,
-
     alignItems: "center",
-
     paddingTop: 26,
     paddingHorizontal: 20,
     paddingBottom: 18,
-
-    borderBottomWidth: 2,
-    borderBottomColor:
-      colours.secondaryblue,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.10)",
   },
 
   avatar: {
     width: 80,
     height: 80,
-
     borderRadius: 40,
-
     marginBottom: 9,
-
-    backgroundColor:
-      "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
 
   avatarLoading: {
@@ -1123,105 +935,128 @@ const styles = StyleSheet.create({
 
   profileName: {
     maxWidth: "100%",
-
     color: colours.lightblue,
-
     fontSize: 18,
     lineHeight: 24,
     fontWeight: "800",
-
     textAlign: "center",
   },
 
   profileEmail: {
     maxWidth: "100%",
-
     color: colours.lightblue,
-
     fontSize: 11,
     lineHeight: 17,
-
     textAlign: "center",
-
     marginTop: 1,
-
     opacity: 0.9,
   },
 
   editAccountButton: {
     alignSelf: "stretch",
     alignItems: "flex-end",
-
     marginTop: 4,
   },
 
   editAccount: {
     color: colours.lightblue,
-
     fontSize: 10,
     lineHeight: 15,
-
     textDecorationLine: "underline",
   },
 
-  /* =========================================================
-     MENU ITEMS
-  ========================================================= */
-
   menuSection: {
-    flex: 1,
-    paddingTop: 10,
+    paddingTop: 12,
+    paddingHorizontal: 10,
+    paddingBottom: 30,
+  },
+
+  sectionBlock: {
+    marginBottom: 17,
   },
 
   sectionLabel: {
-    color: "rgba(255,255,255,0.38)",
+    color: "rgba(255,255,255,0.40)",
     fontSize: 10,
-    fontWeight: "800",
+    lineHeight: 14,
+    fontWeight: "900",
     letterSpacing: 1.5,
-    marginTop: 10,
-    marginBottom: 5,
-    paddingHorizontal: 22,
+    marginBottom: 7,
+    paddingHorizontal: 10,
+  },
+
+  menuGroupCard: {
+    paddingVertical: 5,
+    paddingHorizontal: 5,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.035)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.055)",
   },
 
   menuItem: {
-    minHeight: 49,
+    minHeight: 51,
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 10,
     marginVertical: 2,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 13,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    cursor:
+      Platform.OS === "web"
+        ? "pointer"
+        : undefined,
   },
 
-  compactMenuItem: {
-    minHeight: 45,
-    backgroundColor: "rgba(255,255,255,0.055)",
+  menuItemHovered: {
+    backgroundColor: "rgba(0,190,255,0.13)",
+    transform: [
+      {
+        translateX: 2,
+      },
+    ],
   },
 
-  menuItemDivider: {
-    borderBottomWidth: 2,
-    borderBottomColor:
-      colours.secondaryblue,
+  menuItemPressed: {
+    backgroundColor: "rgba(0,190,255,0.20)",
+    opacity: 0.92,
   },
 
   menuIconContainer: {
-    width: 34,
-    height: 34,
-    marginRight: 10,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    marginRight: 11,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.065)",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.035)",
+  },
+
+  menuIconContainerActive: {
+    backgroundColor: "rgba(0,190,255,0.20)",
+    borderColor: "rgba(0,190,255,0.25)",
+  },
+
+  destructiveIconContainer: {
+    backgroundColor: "rgba(255,80,104,0.08)",
   },
 
   menuText: {
     flex: 1,
-
     color: colours.lightblue,
-
     fontSize: 15,
     lineHeight: 21,
+    fontWeight: "500",
+  },
+
+  menuTextActive: {
+    color: "#ffffff",
+  },
+
+  destructiveMenuText: {
+    color: "#ff5a70",
   },
 
   newBadge: {
@@ -1239,40 +1074,35 @@ const styles = StyleSheet.create({
   },
 
   sidebarFooter: {
-    marginTop: "auto",
-    paddingTop: 10,
-    paddingBottom: 2,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.10)",
+    marginTop: 0,
+    paddingTop: 2,
+    paddingBottom: 12,
   },
 
   footerBrand: {
     color: "rgba(255,255,255,0.18)",
     fontSize: 9,
+    lineHeight: 13,
     fontWeight: "900",
     letterSpacing: 3,
     textAlign: "center",
-    marginTop: 7,
+    marginTop: 14,
+    marginBottom: 10,
   },
 
   notificationBadge: {
     minWidth: 21,
     height: 21,
-
     alignItems: "center",
     justifyContent: "center",
-
     marginLeft: 8,
     paddingHorizontal: 5,
-
     borderRadius: 11,
-
     backgroundColor: "#ff334f",
   },
 
   notificationBadgeText: {
     color: "#ffffff",
-
     fontSize: 10,
     fontWeight: "800",
   },
