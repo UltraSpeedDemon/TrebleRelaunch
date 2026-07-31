@@ -11,7 +11,12 @@ import {
   Platform,
 } from "react-native";
 import colours from "../styles/colours";
-import { getComments, addComment, deleteComment } from "../providers/rest"; // Import the API function
+import {
+  getComments,
+  addComment,
+  deleteComment,
+  getSongFromDeezer,
+} from "../providers/rest";
 import { auth } from '../utils/firebase';
 import { useRoute } from "@react-navigation/native";
 
@@ -287,7 +292,7 @@ const ReviewCard = ({
   };
 
   // Open the song, album, or artist attached to a profile review.
-  const handleContentPress = () => {
+  const handleContentPress = async () => {
     const rawMusic =
       item?.song ||
       item?.listenable ||
@@ -382,14 +387,119 @@ const ReviewCard = ({
 
       case "song":
       case "track":
-      default:
+      default: {
+        if (!musicId) {
+          Alert.alert(
+            "Song unavailable",
+            "This review does not contain a valid song ID."
+          );
+          return;
+        }
+
+        let fullTrack = {
+          ...normalizedMusic,
+          id: String(musicId),
+          listenableId: String(musicId),
+          listenable_id: String(musicId),
+          type: "track",
+          preview:
+            normalizedMusic?.preview ||
+            normalizedMusic?.previewUrl ||
+            normalizedMusic?.playbackUrl ||
+            "",
+          previewUrl:
+            normalizedMusic?.previewUrl ||
+            normalizedMusic?.preview ||
+            normalizedMusic?.playbackUrl ||
+            "",
+          playbackUrl:
+            normalizedMusic?.playbackUrl ||
+            normalizedMusic?.preview ||
+            normalizedMusic?.previewUrl ||
+            "",
+        };
+
+        try {
+          const response = await getSongFromDeezer(
+            String(musicId)
+          );
+
+          if (response?.ok) {
+            const deezerTrack = await response.json();
+
+            fullTrack = {
+              ...normalizedMusic,
+              ...deezerTrack,
+              id: String(
+                deezerTrack?.id ||
+                musicId
+              ),
+              listenableId: String(
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                musicId
+              ),
+              listenable_id: String(
+                deezerTrack?.listenable_id ||
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                musicId
+              ),
+              type: "track",
+              artist:
+                deezerTrack?.artist ||
+                normalizedMusic?.artist ||
+                null,
+              album:
+                deezerTrack?.album ||
+                normalizedMusic?.album ||
+                null,
+              image:
+                deezerTrack?.image ||
+                deezerTrack?.coverArt ||
+                deezerTrack?.album?.cover_xl ||
+                deezerTrack?.album?.cover_big ||
+                normalizedMusic?.image ||
+                normalizedMusic?.coverArt ||
+                "",
+              coverArt:
+                deezerTrack?.coverArt ||
+                deezerTrack?.image ||
+                deezerTrack?.album?.cover_xl ||
+                deezerTrack?.album?.cover_big ||
+                normalizedMusic?.coverArt ||
+                normalizedMusic?.image ||
+                "",
+              preview:
+                deezerTrack?.preview ||
+                deezerTrack?.previewUrl ||
+                deezerTrack?.playbackUrl ||
+                "",
+              previewUrl:
+                deezerTrack?.previewUrl ||
+                deezerTrack?.preview ||
+                deezerTrack?.playbackUrl ||
+                "",
+              playbackUrl:
+                deezerTrack?.playbackUrl ||
+                deezerTrack?.preview ||
+                deezerTrack?.previewUrl ||
+                "",
+            };
+          }
+        } catch (error) {
+          console.warn(
+            "[Review] Could not load complete track:",
+            error
+          );
+        }
+
         navigation.navigate("SongPage", {
-          track: {
-            ...normalizedMusic,
-            type: "track",
-          },
+          track: fullTrack,
         });
+
         break;
+      }
     }
   };
 

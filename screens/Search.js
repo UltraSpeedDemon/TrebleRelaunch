@@ -100,6 +100,24 @@ function filterReducer(state, action) {
   }
 }
 
+
+const cleanArtistName = (value) => {
+  const name =
+    typeof value === "string"
+      ? value.trim()
+      : "";
+
+  if (
+    !name ||
+    name.toLowerCase() === "unknown artist" ||
+    name.toLowerCase() === "unknown"
+  ) {
+    return "";
+  }
+
+  return name;
+};
+
 export default function Search({
   navigation,
   route,
@@ -361,9 +379,10 @@ const getRelationshipUserId =
           "",
 
         artist:
-  artistName,
+          artistName || "",
 
-        artistName,
+        artistName:
+          artistName || "",
 
         album,
 
@@ -1596,9 +1615,11 @@ const getRelationshipUserId =
                                     item.title
                                   }
                                   artist={
-                                    item.artistName ||
-                                    item.artist?.name ||
-                                    ""
+                                    cleanArtistName(
+                                      item.artistName ||
+                                      item.artist?.name ||
+                                      ""
+                                    ) || undefined
                                   }
                                   album={
                                     item.albumName ||
@@ -1658,9 +1679,11 @@ const getRelationshipUserId =
                                     item.title
                                   }
                                   artist={
-                                    item.artistName ||
-                                    item.artist?.name ||
-                                    ""
+                                    cleanArtistName(
+                                      item.artistName ||
+                                      item.artist?.name ||
+                                      ""
+                                    ) || undefined
                                   }
                                   onPressCard={() =>
                                     navigation.navigate(

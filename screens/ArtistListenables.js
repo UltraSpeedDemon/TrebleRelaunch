@@ -36,6 +36,24 @@ const MAX_CONTENT_WIDTH = 980;
 const BACK_ICON =
   require("../images/arrowLeftIconWhite.png");
 
+
+const cleanArtistName = (value) => {
+  const name =
+    typeof value === "string"
+      ? value.trim()
+      : "";
+
+  if (
+    !name ||
+    name.toLowerCase() === "unknown artist" ||
+    name.toLowerCase() === "unknown"
+  ) {
+    return "";
+  }
+
+  return name;
+};
+
 export default function ArtistListenables({
   navigation,
   route,
@@ -95,23 +113,28 @@ export default function ArtistListenables({
       ""
     );
 
-  const artistName =
-    String(
-      artist?.name ||
-      artist?.title ||
-      artist?.artistName ||
-      "Unknown Artist"
-    ).trim();
+  const artistName = cleanArtistName(
+    artist?.name ||
+    artist?.title ||
+    artist?.artistName ||
+    ""
+  );
 
   const pageTitle =
     type === "track"
-      ? `Songs by ${artistName}`
-      : `Albums by ${artistName}`;
+      ? artistName
+        ? `Songs by ${artistName}`
+        : "Songs"
+      : artistName
+        ? `Albums by ${artistName}`
+        : "Albums";
 
   const pageDescription =
-    type === "track"
-      ? `Browse songs featuring ${artistName}.`
-      : `Browse albums by ${artistName}.`;
+    artistName
+      ? type === "track"
+        ? `Browse songs featuring ${artistName}.`
+        : `Browse albums by ${artistName}.`
+      : "";
 
   useEffect(() => {
     if (isDesktopWeb) {
@@ -165,12 +188,13 @@ export default function ArtistListenables({
   const normalizeTrack =
     useCallback(
       (item) => {
-        const itemArtistName =
+        const itemArtistName = cleanArtistName(
           typeof item?.artist === "string"
             ? item.artist
             : item?.artist?.name ||
               item?.artistName ||
-              artistName;
+              artistName
+        );
 
         const albumTitle =
           typeof item?.album === "string"
@@ -267,12 +291,13 @@ export default function ArtistListenables({
   const normalizeAlbum =
     useCallback(
       (item) => {
-        const itemArtistName =
+        const itemArtistName = cleanArtistName(
           typeof item?.artist === "string"
             ? item.artist
             : item?.artist?.name ||
               item?.artistName ||
-              artistName;
+              artistName
+        );
 
         const image =
           item?.image ||
@@ -520,7 +545,9 @@ export default function ArtistListenables({
                   item.title
                 }
                 artist={
-                  trackArtistName
+                  cleanArtistName(
+                    trackArtistName
+                  ) || undefined
                 }
                 album={
                   albumTitle
@@ -561,7 +588,9 @@ export default function ArtistListenables({
                 item.title
               }
               artist={
-                albumArtistName
+                cleanArtistName(
+                  albumArtistName
+                ) || undefined
               }
               onPressCard={() =>
                 navigation.navigate(
@@ -641,13 +670,15 @@ export default function ArtistListenables({
                 {pageTitle}
               </Text>
 
-              <Text
-                style={
-                  styles.pageDescription
-                }
-              >
-                {pageDescription}
-              </Text>
+              {pageDescription ? (
+                <Text
+                  style={
+                    styles.pageDescription
+                  }
+                >
+                  {pageDescription}
+                </Text>
+              ) : null}
 
               {!loading &&
               !errorMessage ? (

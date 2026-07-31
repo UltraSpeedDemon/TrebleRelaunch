@@ -56,6 +56,24 @@ import MaterialIcons from "react-native-vector-icons/MaterialIcons";
   const DESKTOP_SIDEBAR_WIDTH = 280;
   const BOTTOM_NAV_HEIGHT = 72;
 
+
+const cleanArtistName = (value) => {
+  const name =
+    typeof value === "string"
+      ? value.trim()
+      : "";
+
+  if (
+    !name ||
+    name.toLowerCase() === "unknown artist" ||
+    name.toLowerCase() === "unknown"
+  ) {
+    return "";
+  }
+
+  return name;
+};
+
 export default function AlbumPage({ route, navigation }) {
     const { width } = useWindowDimensions();
 
@@ -1264,12 +1282,19 @@ export default function AlbumPage({ route, navigation }) {
           song.title ||
           "Unknown Track",
 
-        artist: {
-          name:
-            song.artist?.name ||
-            song.artist ||
-            artistName,
-        },
+        artist: cleanArtistName(
+          song.artist?.name ||
+          song.artist ||
+          artistName
+        )
+          ? {
+              name: cleanArtistName(
+                song.artist?.name ||
+                song.artist ||
+                artistName
+              ),
+            }
+          : null,
 
         album: {
           id: String(album.id),
@@ -1660,15 +1685,22 @@ export default function AlbumPage({ route, navigation }) {
                       "Unknown Album"}
                   </Text>
 
-                  <Text
-                    style={styles.artist}
-                    numberOfLines={1}
-                  >
-                    {typeof album.artist === "string"
+                  {cleanArtistName(
+                    typeof album.artist === "string"
                       ? album.artist
-                      : album.artist?.name ||
-                        "Unknown Artist"}
-                  </Text>
+                      : album.artist?.name
+                  ) ? (
+                    <Text
+                      style={styles.artist}
+                      numberOfLines={1}
+                    >
+                      {cleanArtistName(
+                        typeof album.artist === "string"
+                          ? album.artist
+                          : album.artist?.name
+                      )}
+                    </Text>
+                  ) : null}
 
                   {summary ? (
                     <Text style={styles.summaryText}>
