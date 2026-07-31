@@ -1247,7 +1247,11 @@ export default function ArtistPage({ route, navigation }) {
 
                   <View style={styles.actionButtons}>
                     <TouchableOpacity
-                      style={styles.actionButton}
+                      style={[
+                        styles.actionButton,
+                        isCompact &&
+                          styles.actionButtonCompact,
+                      ]}
                       onPress={(event) => {
                         event?.stopPropagation?.();
                         handleLikeArtist();
@@ -1268,7 +1272,11 @@ export default function ArtistPage({ route, navigation }) {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.actionButton}
+                      style={[
+                        styles.actionButton,
+                        isCompact &&
+                          styles.actionButtonCompact,
+                      ]}
                       onPress={(event) => {
                         event?.stopPropagation?.();
                         handleModal(artist);
@@ -1899,10 +1907,12 @@ desktopBottomNavBar: {
     width: "100%",
 
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
 
-    marginBottom: 20,
+    gap: 16,
+
+    marginBottom: 22,
   },
 
   titleContainer: {
@@ -1922,32 +1932,43 @@ desktopBottomNavBar: {
 
   actionButtons: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    justifyContent: "flex-end",
 
-    gap: 20,
+    gap: 12,
   },
 
   actionButton: {
-    minWidth: 104,
-    minHeight: 46,
+    minWidth: 132,
+    minHeight: 54,
 
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
 
-    gap: 8,
+    gap: 10,
 
-    paddingHorizontal: 15,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
 
-    borderRadius: 14,
+    borderRadius: 16,
 
     backgroundColor:
-      "rgba(255,255,255,0.065)",
+      "rgba(53,175,229,0.13)",
 
     borderWidth: 1,
     borderColor:
-      "rgba(255,255,255,0.11)",
+      "rgba(53,175,229,0.42)",
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+
+    elevation: 5,
 
     ...(
       Platform.OS === "web"
@@ -1958,9 +1979,21 @@ desktopBottomNavBar: {
     ),
   },
 
+  actionButtonCompact: {
+    minWidth: 104,
+    minHeight: 48,
+
+    gap: 8,
+
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+
+    borderRadius: 14,
+  },
+
   actionIcon: {
-    width: 28,
-    height: 28,
+    width: 29,
+    height: 29,
 
     resizeMode: "contain",
   },
@@ -1968,15 +2001,10 @@ desktopBottomNavBar: {
   actionText: {
     color: "#ffffff",
 
-    fontSize: 12,
-    lineHeight: 16,
-
-    marginTop: 4,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "900",
   },
-
-  /* =====================================================
-     ARTIST IMAGE AND DETAILS
-  ===================================================== */
 
   artistImageContainer: {
     width: "100%",
@@ -2108,54 +2136,54 @@ desktopBottomNavBar: {
 
   reviewControls: {
     width: "100%",
-    minHeight: 70,
+    minHeight: 78,
 
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
 
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
 
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-
-    borderRadius: 16,
+    borderRadius: 18,
 
     backgroundColor:
       "rgba(255,255,255,0.045)",
 
     borderWidth: 1,
     borderColor:
-      "rgba(255,255,255,0.075)",
+      "rgba(255,255,255,0.085)",
   },
 
   reviewControlsCompact: {
-    minHeight: 64,
-
-    gap: 5,
+    minHeight: 70,
 
     paddingHorizontal: 8,
-    paddingVertical: 9,
+    paddingVertical: 10,
+
+    borderRadius: 15,
   },
 
   favouriteContainer: {
-    width: 112,
-    flexShrink: 0,
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
 
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
 
-    gap: 8,
+    gap: 9,
   },
 
   favouriteContainerCompact: {
-    width: 88,
+    flex: 1,
+    flexBasis: 0,
   },
 
   smallFavIcon: {
-    width: 29,
-    height: 29,
+    width: 31,
+    height: 31,
 
     resizeMode: "contain",
   },
@@ -2163,13 +2191,15 @@ desktopBottomNavBar: {
   favLabel: {
     color: "#ffffff",
 
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "800",
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "900",
   },
 
   starRatingContainer: {
     flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
 
     flexDirection: "row",
     alignItems: "center",
@@ -2179,49 +2209,54 @@ desktopBottomNavBar: {
   },
 
   starRatingContainerCompact: {
+    flex: 1,
+    flexBasis: 0,
+
     transform: [
       {
-        scale: 0.88,
+        scale: 0.78,
       },
     ],
   },
 
   starIcon: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
 
-    marginHorizontal: 3,
+    marginHorizontal: 2,
 
     resizeMode: "contain",
   },
 
   selectEmojiTab: {
-    width: 112,
-    flexShrink: 0,
+    flex: 1,
+    flexBasis: 0,
+    minWidth: 0,
 
     alignItems: "flex-end",
     justifyContent: "center",
   },
 
   selectEmojiTabCompact: {
-    width: 56,
+    flex: 1,
+    flexBasis: 0,
   },
 
   emojiIconCircle: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
 
     alignItems: "center",
     justifyContent: "center",
 
-    borderRadius: 14,
+    borderRadius: 15,
 
     backgroundColor:
-      "rgba(53,175,229,0.12)",
+      "rgba(53,175,229,0.14)",
 
     borderWidth: 1,
     borderColor:
-      "rgba(53,175,229,0.38)",
+      "rgba(53,175,229,0.46)",
   },
 
   selectEmojiIcon: {
