@@ -32,6 +32,7 @@ import {
   getFollowers,
   getFollowRequests,
   getReviewSong,
+  getSongFromDeezer,
   getUser,
   getUserActivity,
   getUserFavorites,
@@ -1510,21 +1511,82 @@ const finalButtonLabel =
 
   const openLikedSong =
     useCallback(
-      (song) => {
-        if (!song?.id) {
+      async (song) => {
+        const trackId = String(
+          song?.id ||
+          song?.listenableId ||
+          song?.listenable_id ||
+          ""
+        );
+
+        if (!trackId) {
+          Alert.alert(
+            "Unable to open song",
+            "This song does not have a valid track ID."
+          );
           return;
+        }
+
+        let fullTrack = {
+          ...song,
+          id: trackId,
+          listenableId: trackId,
+          listenable_id: trackId,
+          type: "track",
+        };
+
+        try {
+          const response =
+            await getSongFromDeezer(trackId);
+
+          if (response?.ok) {
+            const deezerTrack =
+              await response.json();
+
+            fullTrack = {
+              ...song,
+              ...deezerTrack,
+              id: String(
+                deezerTrack?.id ||
+                trackId
+              ),
+              listenableId: String(
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                trackId
+              ),
+              listenable_id: String(
+                deezerTrack?.listenable_id ||
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                trackId
+              ),
+              type: "track",
+              preview:
+                deezerTrack?.preview ||
+                deezerTrack?.previewUrl ||
+                song?.preview ||
+                song?.previewUrl ||
+                "",
+              previewUrl:
+                deezerTrack?.previewUrl ||
+                deezerTrack?.preview ||
+                song?.previewUrl ||
+                song?.preview ||
+                "",
+            };
+          }
+        } catch (error) {
+          console.warn(
+            "[UserProfiles] Unable to hydrate song before opening:",
+            error
+          );
         }
 
         navigation.navigate(
           "SongPage",
           {
-            track: {
-              ...song,
-              id: String(song.id),
-              listenableId:
-                String(song.id),
-              type: "track",
-            },
+            track: fullTrack,
           }
         );
       },

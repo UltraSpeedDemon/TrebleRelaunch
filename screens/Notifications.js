@@ -29,6 +29,7 @@ import {
   getFollowRequests,
   getNotifications,
   getSharedItems,
+  getSongFromDeezer,
   getUser,
   markNotificationsRead,
   respondFollowRequest,
@@ -1228,7 +1229,7 @@ export default function Notifications({
    */
   const handleNotificationPress =
   useCallback(
-    (item) => {
+    async (item) => {
       if (
         item.type ===
         NOTIFICATION_TYPES.MUSIC_SHARED
@@ -1262,11 +1263,9 @@ export default function Notifications({
           navigation.navigate(
             "ArtistPage",
             {
-              artist:
-                musicItem,
+              artist: musicItem,
             }
           );
-
           return;
         }
 
@@ -1274,29 +1273,90 @@ export default function Notifications({
           navigation.navigate(
             "AlbumPage",
             {
-              album:
-                musicItem,
+              album: musicItem,
             }
           );
-
           return;
+        }
+
+        const trackId = String(
+          musicItem?.id ||
+          musicItem?.listenableId ||
+          musicItem?.listenable_id ||
+          item?.targetId ||
+          ""
+        );
+
+        if (!trackId) {
+          Alert.alert(
+            "Unable to open song",
+            "This shared song does not have a valid track ID."
+          );
+          return;
+        }
+
+        let fullTrack = {
+          ...musicItem,
+          id: trackId,
+          listenableId: trackId,
+          listenable_id: trackId,
+          type: "track",
+        };
+
+        try {
+          const response =
+            await getSongFromDeezer(trackId);
+
+          if (response?.ok) {
+            const deezerTrack =
+              await response.json();
+
+            fullTrack = {
+              ...musicItem,
+              ...deezerTrack,
+              id: String(
+                deezerTrack?.id ||
+                trackId
+              ),
+              listenableId: String(
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                trackId
+              ),
+              listenable_id: String(
+                deezerTrack?.listenable_id ||
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                trackId
+              ),
+              type: "track",
+              preview:
+                deezerTrack?.preview ||
+                deezerTrack?.previewUrl ||
+                musicItem?.preview ||
+                musicItem?.previewUrl ||
+                "",
+              previewUrl:
+                deezerTrack?.previewUrl ||
+                deezerTrack?.preview ||
+                musicItem?.previewUrl ||
+                musicItem?.preview ||
+                "",
+            };
+          }
+        } catch (error) {
+          console.warn(
+            "[Notifications] Unable to hydrate shared song before opening:",
+            error
+          );
         }
 
         navigation.navigate(
           "SongPage",
           {
-            track: {
-              ...musicItem,
-
-              id:
-                musicItem.id ||
-                item.targetId,
-
-              type: "track",
-            },
+            track: fullTrack,
           }
         );
-
         return;
       }
 
