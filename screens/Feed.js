@@ -2972,7 +2972,11 @@ export default function Feed({ navigation }) {
       >
         <Icon
           name="add"
-          size={32}
+          size={
+            isDesktopWeb
+              ? 40
+              : 34
+          }
           color="#ffffff"
         />
       </TouchableOpacity>
@@ -4114,53 +4118,51 @@ desktopBottomNavBar: {
     position: "absolute",
 
     right: 18,
-    bottom: 88,
+    bottom: 104,
 
     zIndex: 160,
     elevation: 16,
 
-    width: 58,
-    height: 58,
+    width: 62,
+    height: 62,
 
     alignItems: "center",
     justifyContent: "center",
 
     borderWidth: 1,
     borderColor:
-      "rgba(255,255,255,0.22)",
+      "rgba(53,175,229,0.78)",
 
-    borderRadius: 29,
+    borderRadius: 31,
 
-    backgroundColor:
-      colours.lightblue ||
-      "#35afe5",
+    backgroundColor: "#149fd3",
 
     shadowColor: "#000000",
     shadowOffset: {
       width: 0,
-      height: 7,
+      height: 8,
     },
-    shadowOpacity: 0.32,
-    shadowRadius: 12,
+    shadowOpacity: 0.38,
+    shadowRadius: 14,
   },
 
   desktopCreatePostButton: {
     position: "fixed",
 
-    right: 32,
-    bottom: 32,
+    right: 38,
+    bottom: 38,
 
-    width: 62,
-    height: 62,
+    width: 78,
+    height: 78,
 
-    borderRadius: 31,
+    borderRadius: 39,
   },
 
   mobileWebCreatePostButton: {
     position: "fixed",
 
     right: 18,
-    bottom: 88,
+    bottom: 108,
   },
 
 /* =========================================================

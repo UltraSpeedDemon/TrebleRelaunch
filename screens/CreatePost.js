@@ -6,6 +6,7 @@ import React, {
 } from "react";
 
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -27,7 +28,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
-import { getUser } from "../providers/rest";
+import {
+  getUser,
+  postSearchResults,
+} from "../providers/rest";
 import colours from "../styles/colours";
 
 const DESKTOP_BREAKPOINT = 768;
@@ -97,7 +101,17 @@ export default function CreatePost({
     useState("");
 
   const [songs, setSongs] =
-    useState(MOCK_SONGS);
+    useState([]);
+
+  const [
+    searchLoading,
+    setSearchLoading,
+  ] = useState(false);
+
+  const [
+    searchError,
+    setSearchError,
+  ] = useState("");
 
   const [
     selectedSong,
@@ -199,6 +213,201 @@ export default function CreatePost({
       hideListener.remove();
     };
   }, []);
+
+  const normalizeSearchTrack =
+    useCallback((item) => {
+      const source =
+        item?.item_info ||
+        item?.track ||
+        item ||
+        {};
+
+      const id =
+        source?.id ||
+        source?.listenableId ||
+        source?.listenable_id ||
+        item?.id;
+
+      if (!id) {
+        return null;
+      }
+
+      const rawArtist =
+        source?.artist ||
+        item?.artist ||
+        null;
+
+      const artistName =
+        typeof rawArtist === "string"
+          ? rawArtist
+          : rawArtist?.name ||
+            source?.artistName ||
+            item?.artistName ||
+            "Unknown Artist";
+
+      const album =
+        source?.album ||
+        item?.album ||
+        null;
+
+      const imageUrl =
+        source?.image ||
+        source?.coverArt ||
+        album?.cover_medium ||
+        album?.cover_big ||
+        album?.cover_xl ||
+        "";
+
+      return {
+        ...item,
+        ...source,
+
+        id: String(id),
+        listenableId: String(id),
+        listenable_id: String(id),
+        type: "track",
+
+        name:
+          source?.title ||
+          source?.name ||
+          "Unknown Track",
+
+        title:
+          source?.title ||
+          source?.name ||
+          "Unknown Track",
+
+        artist:
+          artistName,
+
+        artistName,
+
+        albumCover:
+          imageUrl
+            ? {
+                uri: imageUrl,
+              }
+            : require("../images/albumImage.jpg"),
+
+        image: imageUrl,
+        coverArt: imageUrl,
+      };
+    }, []);
+
+  useEffect(() => {
+    const cleanSearch =
+      searchTerm.trim();
+
+    if (cleanSearch.length < 2) {
+      setSongs([]);
+      setSearchError("");
+      setSearchLoading(false);
+
+      return;
+    }
+
+    let cancelled = false;
+
+    const timer = setTimeout(
+      async () => {
+        setSearchLoading(true);
+        setSearchError("");
+
+        try {
+          const currentUser =
+            auth.currentUser;
+
+          const response =
+            await postSearchResults(
+              cleanSearch,
+              currentUser?.uid || "",
+              "track",
+              "20",
+              "off",
+              "RANKING"
+            );
+
+          if (!response?.ok) {
+            throw new Error(
+              `Search failed with HTTP ${response?.status || "unknown"}`
+            );
+          }
+
+          const data =
+            await response.json();
+
+          const rawResults =
+            Array.isArray(data)
+              ? data
+              : Array.isArray(data?.results)
+                ? data.results
+                : Array.isArray(data?.data)
+                  ? data.data
+                  : Array.isArray(data?.tracks)
+                    ? data.tracks
+                    : [];
+
+          const normalized =
+            rawResults
+              .map(
+                normalizeSearchTrack
+              )
+              .filter(Boolean);
+
+          const unique = [];
+          const usedIds = new Set();
+
+          normalized.forEach(
+            (song) => {
+              if (
+                usedIds.has(song.id)
+              ) {
+                return;
+              }
+
+              usedIds.add(song.id);
+              unique.push(song);
+            }
+          );
+
+          if (!cancelled) {
+            setSongs(unique);
+
+            if (unique.length === 0) {
+              setSearchError(
+                "No songs found. Try another song or artist."
+              );
+            }
+          }
+        } catch (error) {
+          console.error(
+            "[CreatePost] Song search error:",
+            error
+          );
+
+          if (!cancelled) {
+            setSongs([]);
+            setSearchError(
+              "Treble could not search for songs right now."
+            );
+          }
+        } finally {
+          if (!cancelled) {
+            setSearchLoading(false);
+          }
+        }
+      },
+      350
+    );
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    normalizeSearchTrack,
+    searchTerm,
+  ]);
 
   const filteredSongs =
     useMemo(() => {
@@ -462,9 +671,9 @@ export default function CreatePost({
         >
           <LinearGradient
             colors={[
-              "rgba(53,175,229,0.26)",
-              "rgba(35,74,132,0.18)",
-              "rgba(255,255,255,0.04)",
+              "rgba(53,175,229,0.18)",
+              "rgba(18,18,20,0.96)",
+              "rgba(8,8,9,0.98)",
             ]}
             start={{
               x: 0,
@@ -493,11 +702,13 @@ export default function CreatePost({
                 styles.heroIcon
               }
             >
-              <Icon
-                name="add-comment"
-                size={28}
-                color="#ffffff"
-              />
+              <Text
+                style={
+                  styles.heroIconText
+                }
+              >
+                ＋
+              </Text>
             </View>
 
             <View
@@ -615,6 +826,58 @@ export default function CreatePost({
               ) : null}
             </View>
 
+            {searchLoading ? (
+              <View
+                style={
+                  styles.searchStatusRow
+                }
+              >
+                <ActivityIndicator
+                  size="small"
+                  color={
+                    colours.lightblue ||
+                    "#35afe5"
+                  }
+                />
+
+                <Text
+                  style={
+                    styles.searchStatusText
+                  }
+                >
+                  Searching Treble music...
+                </Text>
+              </View>
+            ) : searchError ? (
+              <View
+                style={
+                  styles.searchStatusRow
+                }
+              >
+                <Icon
+                  name="info-outline"
+                  size={18}
+                  color="rgba(255,255,255,0.48)"
+                />
+
+                <Text
+                  style={
+                    styles.searchStatusText
+                  }
+                >
+                  {searchError}
+                </Text>
+              </View>
+            ) : searchTerm.trim().length < 2 ? (
+              <Text
+                style={
+                  styles.searchHint
+                }
+              >
+                Type at least two characters to search the full music catalogue.
+              </Text>
+            ) : null}
+
             <FlatList
               data={filteredSongs}
               renderItem={
@@ -633,6 +896,32 @@ export default function CreatePost({
               initialNumToRender={4}
               maxToRenderPerBatch={4}
               windowSize={3}
+              ListEmptyComponent={
+                !searchLoading &&
+                searchTerm.trim().length >= 2
+                  ? (
+                      <View
+                        style={
+                          styles.emptySongsBox
+                        }
+                      >
+                        <Icon
+                          name="music-off"
+                          size={26}
+                          color="rgba(255,255,255,0.30)"
+                        />
+
+                        <Text
+                          style={
+                            styles.emptySongsText
+                          }
+                        >
+                          No matching songs to display.
+                        </Text>
+                      </View>
+                    )
+                  : null
+              }
             />
 
             {selectedSong ? (
@@ -1017,6 +1306,16 @@ const styles =
         "#2878c7",
     },
 
+    heroIconText: {
+      color: "#ffffff",
+
+      fontSize: 36,
+      lineHeight: 40,
+      fontWeight: "500",
+
+      textAlign: "center",
+    },
+
     heroTextWrap: {
       flex: 1,
       minWidth: 0,
@@ -1067,7 +1366,7 @@ const styles =
       borderRadius: 20,
 
       backgroundColor:
-        "rgba(17,27,40,0.94)",
+        "rgba(8,8,9,0.97)",
     },
 
     sectionHeader: {
@@ -1171,6 +1470,36 @@ const styles =
         "rgba(255,255,255,0.05)",
     },
 
+    searchStatusRow: {
+      minHeight: 42,
+
+      flexDirection: "row",
+      alignItems: "center",
+
+      paddingHorizontal: 4,
+      paddingBottom: 12,
+    },
+
+    searchStatusText: {
+      color:
+        "rgba(255,255,255,0.52)",
+
+      fontSize: 12,
+
+      marginLeft: 9,
+    },
+
+    searchHint: {
+      color:
+        "rgba(255,255,255,0.46)",
+
+      fontSize: 12,
+      lineHeight: 18,
+
+      paddingHorizontal: 4,
+      paddingBottom: 14,
+    },
+
     songList: {
       paddingRight: 4,
     },
@@ -1193,7 +1522,7 @@ const styles =
       borderRadius: 16,
 
       backgroundColor:
-        "rgba(10,21,35,0.95)",
+        "rgba(6,6,7,0.99)",
     },
 
     compactSongCard: {
@@ -1262,6 +1591,34 @@ const styles =
 
       paddingHorizontal: 12,
       paddingBottom: 13,
+    },
+
+    emptySongsBox: {
+      minWidth: 260,
+      minHeight: 130,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      padding: 18,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.07)",
+
+      borderRadius: 15,
+
+      backgroundColor:
+        "rgba(255,255,255,0.025)",
+    },
+
+    emptySongsText: {
+      color:
+        "rgba(255,255,255,0.46)",
+
+      fontSize: 12,
+
+      marginTop: 8,
     },
 
     selectedSongPanel: {

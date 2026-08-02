@@ -3458,12 +3458,12 @@ const styles =
 
       borderWidth: 1,
       borderColor:
-        "rgba(53,175,229,0.18)",
+        "rgba(53,175,229,0.22)",
 
       borderRadius: 18,
 
       backgroundColor:
-        "rgba(17,27,40,0.92)",
+        "rgba(8,8,9,0.96)",
     },
 
     sectionHeader: {
@@ -3556,7 +3556,7 @@ const styles =
       borderRadius: 14,
 
       backgroundColor:
-        "rgba(12,24,40,0.96)",
+        "rgba(7,7,8,0.98)",
 
       shadowColor:
         colours.lightblue ||
@@ -3668,7 +3668,7 @@ const styles =
       borderRadius: 16,
 
       backgroundColor:
-        "rgba(10,21,35,0.94)",
+        "rgba(7,7,8,0.98)",
     },
 
     sectionEmptyBox: {
