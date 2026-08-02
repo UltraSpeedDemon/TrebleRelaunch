@@ -2580,26 +2580,7 @@ const finalButtonLabel =
                 </Text>
               ) : null}
               </View>
-            ) : (
-              <TouchableOpacity
-                style={
-                  styles.editProfileButton
-                }
-                onPress={() =>
-                  navigation.navigate(
-                    "EditProfile"
-                  )
-                }
-              >
-                <Text
-                  style={
-                    styles.editProfileButtonText
-                  }
-                >
-                  Edit Profile
-                </Text>
-              </TouchableOpacity>
-            )}
+            ) : null}
           </LinearGradient>
 
           {!canViewFullContent ? (

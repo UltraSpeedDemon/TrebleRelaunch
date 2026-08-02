@@ -2392,8 +2392,8 @@ desktopBottomNavBar: {
     alignItems: "center",
     justifyContent: "center",
 
-    marginTop: -20,
-    marginBottom: -12,
+    marginTop: -32,
+    marginBottom: 0,
   },
 
   avatar: {
@@ -2502,9 +2502,9 @@ desktopBottomNavBar: {
     position: "relative",
 
     width: "100%",
-    height: 38,
+    height: 43,
 
-    marginTop: 6,
+    marginTop: 12,
   },
 
   mobileBadgeDividerLine: {
@@ -2512,7 +2512,7 @@ desktopBottomNavBar: {
 
     left: 0,
     right: 0,
-    top: 35,
+    top: 42,
 
     height: 1,
 
@@ -2525,7 +2525,7 @@ desktopBottomNavBar: {
 
     left: 0,
     right: 0,
-    bottom: 6,
+    top: 9,
 
     flexDirection: "row",
     alignItems: "center",
