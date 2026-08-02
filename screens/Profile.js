@@ -2310,7 +2310,7 @@ desktopBottomNavBar: {
 
   compactProfileHeader: {
     paddingHorizontal: 16,
-    paddingTop: 18,
+    paddingTop: 6,
     paddingBottom: 16,
 
     borderRadius: 18,
@@ -2350,7 +2350,8 @@ desktopBottomNavBar: {
     height: 88,
 
     marginRight: 0,
-    marginBottom: 10,
+    marginTop: 0,
+    marginBottom: 8,
 
     borderRadius: 44,
   },
@@ -2430,7 +2431,7 @@ desktopBottomNavBar: {
 
     justifyContent: "center",
 
-    marginTop: 7,
+    marginTop: 5,
     marginBottom: 0,
   },
 
@@ -2496,8 +2497,8 @@ desktopBottomNavBar: {
     alignItems: "center",
     justifyContent: "center",
 
-    marginTop: 13,
-    paddingTop: 15,
+    marginTop: 10,
+    paddingTop: 13,
 
     borderTopWidth: 1,
     borderTopColor:

@@ -218,6 +218,24 @@ export default function Search({
   const isCompact =
     width < 600;
 
+  const userGridColumns =
+    width >= 1180
+      ? 4
+      : width >= 820
+        ? 3
+        : 2;
+
+  const userTileWidth =
+    Platform.OS === "web"
+      ? `calc((100% - ${
+          (userGridColumns - 1) * 14
+        }px) / ${userGridColumns})`
+      : userGridColumns === 2
+        ? "48%"
+        : userGridColumns === 3
+          ? "31.5%"
+          : "23.5%";
+
   const searchQuery =
     route?.params?.searchQuery?.trim() ||
     "";
@@ -1729,8 +1747,13 @@ const getRelationshipUserId =
                       </View>
 
                       {users.length >
-                      0
-                        ? users.map(
+                      0 ? (
+                        <View
+                          style={
+                            styles.userResultsGrid
+                          }
+                        >
+                          {users.map(
                             (item) => {
                               const currentUserId =
                                 String(
@@ -1835,9 +1858,15 @@ const getRelationshipUserId =
                               return (
                                 <View
                                     key={`user-${userId}`}
-                                    style={
-                                      styles.userCardWrapper
-                                    }
+                                    style={[
+                                      styles.userCardWrapper,
+                                      {
+                                        width:
+                                          userTileWidth,
+                                        maxWidth:
+                                          userTileWidth,
+                                      },
+                                    ]}
                                   >
                                     <TouchableOpacity
                                       style={
@@ -1853,22 +1882,44 @@ const getRelationshipUserId =
                                         )
                                       }
                                     >
-                                      <Image
-                                        source={
-                                          getAvatarSource(
-                                            avatar
-                                          )
-                                        }
+                                      <View
                                         style={
-                                          styles.userResultAvatar
+                                          styles.userResultAvatarWrap
                                         }
-                                        onError={(event) => {
-                                          console.warn(
-                                            "[Search] User avatar failed:",
-                                            event?.nativeEvent?.error
-                                          );
-                                        }}
-                                      />
+                                      >
+                                        <Image
+                                          source={
+                                            getAvatarSource(
+                                              avatar
+                                            )
+                                          }
+                                          style={
+                                            styles.userResultAvatar
+                                          }
+                                          onError={(event) => {
+                                            console.warn(
+                                              "[Search] User avatar failed:",
+                                              event?.nativeEvent?.error
+                                            );
+                                          }}
+                                        />
+
+                                        {isFriend ? (
+                                          <View
+                                            style={
+                                              styles.userRelationshipBadge
+                                            }
+                                          >
+                                            <Text
+                                              style={
+                                                styles.userRelationshipBadgeText
+                                              }
+                                            >
+                                              FRIEND
+                                            </Text>
+                                          </View>
+                                        ) : null}
+                                      </View>
 
                                       <View
                                         style={
@@ -1994,10 +2045,13 @@ const getRelationshipUserId =
                                   </View>
                               );
                             }
-                          )
-                        : renderEmptySection(
-                            "Users"
                           )}
+                        </View>
+                      ) : (
+                        renderEmptySection(
+                          "Users"
+                        )
+                      )}
                     </View>
                   ) : null}
                 </>
@@ -2446,57 +2500,108 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  userCardWrapper: {
+  userResultsGrid: {
   width: "100%",
-  maxWidth: 860,
 
-  alignSelf: "center",
+  flexDirection: "row",
+  flexWrap: "wrap",
 
-  marginBottom: 12,
+  alignItems: "stretch",
+  justifyContent: "flex-start",
+
+  gap: 14,
+},
+
+userCardWrapper: {
+  flexGrow: 0,
+  flexShrink: 0,
+
+  minWidth: 0,
+
+  marginBottom: 0,
 },
 
 userResultCard: {
   width: "100%",
-  minHeight: 76,
+  minHeight: 238,
 
-  flexDirection: "row",
   alignItems: "center",
 
-  paddingVertical: 10,
-  paddingHorizontal: 12,
+  paddingHorizontal: 15,
+  paddingTop: 18,
+  paddingBottom: 16,
+
+  overflow: "hidden",
 
   borderWidth: 1,
   borderColor:
-    "rgba(255,255,255,0.12)",
+    "rgba(255,255,255,0.075)",
 
-  borderRadius: 14,
+  borderRadius: 18,
 
   backgroundColor:
     "rgba(255,255,255,0.045)",
 },
 
+userResultAvatarWrap: {
+  position: "relative",
+
+  alignItems: "center",
+  justifyContent: "center",
+
+  marginBottom: 13,
+},
+
 userResultAvatar: {
-  width: 54,
-  height: 54,
+  width: 88,
+  height: 88,
 
-  flexShrink: 0,
-
-  borderRadius: 10,
+  borderRadius: 44,
 
   resizeMode: "cover",
 
   backgroundColor:
-    "rgba(0,0,0,0.16)",
+    "rgba(255,255,255,0.06)",
+
+  borderWidth: 2,
+  borderColor:
+    "rgba(53,175,229,0.25)",
+},
+
+userRelationshipBadge: {
+  position: "absolute",
+
+  right: -7,
+  bottom: 0,
+
+  paddingHorizontal: 7,
+  paddingVertical: 4,
+
+  borderRadius: 8,
+
+  backgroundColor:
+    colours.lightblue ||
+    "#35afe5",
+},
+
+userRelationshipBadgeText: {
+  color: "#ffffff",
+
+  fontSize: 7,
+  fontWeight: "900",
+  letterSpacing: 0.6,
 },
 
 userResultInformation: {
-  flex: 1,
-  minWidth: 0,
+  width: "100%",
+  minHeight: 50,
 
-  justifyContent: "center",
+  flexGrow: 1,
 
-  marginLeft: 14,
-  marginRight: 14,
+  alignItems: "center",
+  justifyContent: "flex-start",
+
+  marginBottom: 14,
 },
 
 userResultUsername: {
@@ -2505,32 +2610,38 @@ userResultUsername: {
   color: "#ffffff",
 
   fontSize: 16,
-  lineHeight: 21,
-  fontWeight: "800",
+  lineHeight: 22,
+  fontWeight: "900",
+
+  textAlign: "center",
 },
 
 userResultPrivacy: {
+  width: "100%",
+
   color:
-    "rgba(255,255,255,0.52)",
+    "rgba(255,255,255,0.50)",
 
-  fontSize: 12,
-  lineHeight: 17,
+  fontSize: 11,
+  lineHeight: 16,
 
-  marginTop: 3,
+  textAlign: "center",
+
+  marginTop: 4,
 },
 
 userFollowButton: {
-  minWidth: 108,
-  height: 40,
+  width: "100%",
+  minHeight: 39,
 
-  flexShrink: 0,
+  marginTop: "auto",
 
   alignItems: "center",
   justifyContent: "center",
 
-  paddingHorizontal: 18,
+  paddingHorizontal: 13,
 
-  borderRadius: 20,
+  borderRadius: 12,
 
   backgroundColor:
     colours.lightblue ||
@@ -2539,12 +2650,20 @@ userFollowButton: {
 
 userFollowingButton: {
   backgroundColor:
-    "#258bb9",
+    "rgba(53,175,229,0.16)",
+
+  borderWidth: 1,
+  borderColor:
+    "rgba(53,175,229,0.44)",
 },
 
 userRequestedButton: {
   backgroundColor:
-    "#777777",
+    "rgba(255,255,255,0.10)",
+
+  borderWidth: 1,
+  borderColor:
+    "rgba(255,255,255,0.14)",
 },
 
 userFollowButtonDisabled: {
@@ -2554,27 +2673,26 @@ userFollowButtonDisabled: {
 userFollowButtonText: {
   color: "#ffffff",
 
-  fontSize: 14,
-  fontWeight: "800",
+  fontSize: 12,
+  fontWeight: "900",
 },
 
 currentUserBadge: {
-  minWidth: 58,
-  height: 34,
+  width: "100%",
+  minHeight: 39,
 
-  flexShrink: 0,
+  marginTop: "auto",
 
   alignItems: "center",
   justifyContent: "center",
 
-  paddingHorizontal: 14,
+  paddingHorizontal: 13,
 
   borderWidth: 1,
   borderColor:
-    colours.lightblue ||
-    "#35afe5",
+    "rgba(53,175,229,0.44)",
 
-  borderRadius: 17,
+  borderRadius: 12,
 
   backgroundColor:
     "rgba(53,175,229,0.12)",
@@ -2585,8 +2703,8 @@ currentUserBadgeText: {
     colours.lightblue ||
     "#35afe5",
 
-  fontSize: 13,
-  fontWeight: "800",
+  fontSize: 12,
+  fontWeight: "900",
 },
 
   emptySectionText: {

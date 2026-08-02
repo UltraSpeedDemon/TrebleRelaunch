@@ -1517,34 +1517,24 @@ const finalButtonLabel =
 
   const handleSpotifyBadgePress =
     useCallback(() => {
-      if (
-        Platform.OS === "web"
-      ) {
-        window.alert(
-          "This user has linked their Spotify account."
-        );
-      } else {
-        Alert.alert(
-          "Spotify linked",
-          "This user has linked their Spotify account."
-        );
-      }
+      setBadgePopup({
+        visible: true,
+        title: "Spotify Connected",
+        description:
+          "This Treble profile is connected to Spotify.",
+        image: SPOTIFY_LOGO,
+      });
     }, []);
 
   const handleAdminBadgePress =
     useCallback(() => {
-      if (
-        Platform.OS === "web"
-      ) {
-        window.alert(
-          "This user is a Treble administrator or developer."
-        );
-      } else {
-        Alert.alert(
-          "Treble administrator",
-          "This user is a Treble administrator or developer."
-        );
-      }
+      setBadgePopup({
+        visible: true,
+        title: "Treble Admin",
+        description:
+          "Official Treble administrator and developer badge.",
+        image: ADMIN_BADGE,
+      });
     }, []);
 
   const avatarSource =
@@ -3225,7 +3215,7 @@ const styles =
       alignItems: "center",
 
       marginLeft: 0,
-      marginTop: 14,
+      marginTop: 10,
     },
 
     usernameRow: {
@@ -3290,30 +3280,23 @@ const styles =
       alignSelf: "center",
       justifyContent: "center",
 
-      marginTop: 7,
+      marginTop: 5,
       marginBottom: 0,
     },
 
     badgeButton: {
-      width: 36,
-      height: 36,
-
       alignItems: "center",
       justifyContent: "center",
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(53,175,229,0.30)",
-
-      borderRadius: 18,
+      padding: 2,
 
       backgroundColor:
-        "rgba(255,255,255,0.07)",
+        "transparent",
     },
 
     badgeIcon: {
-      width: 25,
-      height: 25,
+      width: 29,
+      height: 29,
 
       resizeMode: "contain",
     },
