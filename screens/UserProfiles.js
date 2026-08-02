@@ -2373,6 +2373,17 @@ const finalButtonLabel =
 
               </View>
 
+              <Text
+                style={
+                  styles.profileLabel
+                }
+              >
+                Treble profile
+              </Text>
+
+              {(isSpotifyLinked || isAdmin) ? (
+
+
               <View
                 style={[
                   styles.badgeContainer,
@@ -2410,14 +2421,7 @@ const finalButtonLabel =
                   </TouchableOpacity>
                 ) : null}
               </View>
-
-              <Text
-                style={
-                  styles.profileLabel
-                }
-              >
-                Treble profile
-              </Text>
+              ) : null}
 
               <View
                 style={
@@ -3268,7 +3272,7 @@ const styles =
 
       alignSelf: "flex-start",
 
-      marginTop: 10,
+      marginTop: 6,
 
       gap: 8,
     },

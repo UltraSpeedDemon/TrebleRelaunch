@@ -1666,42 +1666,16 @@ export default function Profile({
                   >
                     {email}
                   </Text>
-                ) : null}
-              </View>
+                ) : null}                {!isCompact ? (
 
-              {!isCompact ? (
-                <TouchableOpacity
-                  style={
-                    styles.editButton
-                  }
-                  onPress={() =>
-                    navigation.navigate(
-                      "EditProfile"
-                    )
-                  }
+
+                <View
+                  style={[
+                    styles.badgeContainer,
+                    isCompact &&
+                      styles.compactBadgeContainer,
+                  ]}
                 >
-                  <Text
-                    style={
-                      styles.editButtonText
-                    }
-                  >
-                    Edit Profile
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-
-            {/* BADGES CENTERED ON THE DIVIDER LINE */}
-            <View style={styles.profileBadgeDividerWrap}>
-              <View style={styles.profileBadgeDividerLine} />
-
-              <View
-                style={[
-                  styles.badgeContainer,
-                  isCompact &&
-                    styles.compactBadgeContainer,
-                ]}
-              >
                   {isSpotifyLinked ? (
                     <TouchableOpacity
                       onPress={
@@ -1739,14 +1713,99 @@ export default function Profile({
                       />
                     </TouchableOpacity>
                   ) : null}
+                </View>
+                ) : null}
               </View>
+
+              {!isCompact ? (
+                <TouchableOpacity
+                  style={
+                    styles.editButton
+                  }
+                  onPress={() =>
+                    navigation.navigate(
+                      "EditProfile"
+                    )
+                  }
+                >
+                  <Text
+                    style={
+                      styles.editButtonText
+                    }
+                  >
+                    Edit Profile
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
+
+            {/* MOBILE BADGES: 3PX ABOVE THE DIVIDER */}
+            {isCompact &&
+            (isSpotifyLinked || isAdmin) ? (
+              <View
+                style={
+                  styles.mobileBadgeDividerWrap
+                }
+              >
+                <View
+                  style={
+                    styles.mobileBadgeDividerLine
+                  }
+                />
+
+                <View
+                  style={
+                    styles.mobileBadgeContainer
+                  }
+                >
+                  {isSpotifyLinked ? (
+                    <TouchableOpacity
+                      onPress={
+                        handleSpotifyBadgePress
+                      }
+                      style={
+                        styles.badgeButton
+                      }
+                    >
+                      <Image
+                        source={require("../images/spotifyLogo.png")}
+                        style={
+                          styles.badgeIcon
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {isAdmin ? (
+                    <TouchableOpacity
+                      onPress={
+                        handleAdminBadgePress
+                      }
+                      style={
+                        styles.badgeButton
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="Treble Admin badge"
+                    >
+                      <Image
+                        source={require("../images/adminBadge.png")}
+                        style={
+                          styles.badgeIcon
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
 
             {/* SOCIAL STATS */}
             <View
-              style={
-                styles.socialStatsRow
-              }
+              style={[
+                styles.socialStatsRow,
+                isCompact &&
+                  styles.compactSocialStatsRow,
+              ]}
             >
               <TouchableOpacity
                 style={
@@ -2424,21 +2483,36 @@ desktopBottomNavBar: {
     textAlign: "center",
   },
 
-  profileBadgeDividerWrap: {
+  badgeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+
+    marginTop: 9,
+
+    gap: 8,
+  },
+
+  compactBadgeContainer: {
+    width: "100%",
+    justifyContent: "center",
+  },
+
+  mobileBadgeDividerWrap: {
     position: "relative",
 
     width: "100%",
-    height: 30,
+    height: 38,
 
-    marginTop: 10,
+    marginTop: 6,
   },
 
-  profileBadgeDividerLine: {
+  mobileBadgeDividerLine: {
     position: "absolute",
 
     left: 0,
     right: 0,
-    top: 14,
+    top: 35,
 
     height: 1,
 
@@ -2446,12 +2520,12 @@ desktopBottomNavBar: {
       "rgba(255,255,255,0.1)",
   },
 
-  badgeContainer: {
+  mobileBadgeContainer: {
     position: "absolute",
 
-    top: 0,
     left: 0,
     right: 0,
+    bottom: 6,
 
     flexDirection: "row",
     alignItems: "center",
@@ -2463,20 +2537,14 @@ desktopBottomNavBar: {
     elevation: 5,
   },
 
-  compactBadgeContainer: {
-    width: "100%",
-  },
-
   badgeButton: {
     alignItems: "center",
     justifyContent: "center",
 
-    padding: 3,
-
-    borderRadius: 18,
+    padding: 2,
 
     backgroundColor:
-      "rgba(24,31,40,0.98)",
+      "transparent",
   },
 
   badgeIcon: {
@@ -2528,8 +2596,19 @@ desktopBottomNavBar: {
     alignItems: "center",
     justifyContent: "center",
 
+    marginTop: 8,
+    paddingTop: 13,
+
+    borderTopWidth: 1,
+    borderTopColor:
+      "rgba(255,255,255,0.1)",
+  },
+
+  compactSocialStatsRow: {
     marginTop: 0,
     paddingTop: 8,
+
+    borderTopWidth: 0,
   },
 
   statButton: {
