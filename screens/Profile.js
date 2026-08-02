@@ -2310,7 +2310,7 @@ desktopBottomNavBar: {
 
   compactProfileHeader: {
     paddingHorizontal: 16,
-    paddingTop: 6,
+    paddingTop: 0,
     paddingBottom: 16,
 
     borderRadius: 18,
@@ -2327,6 +2327,9 @@ desktopBottomNavBar: {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
+
+    marginTop: -20,
+    marginBottom: -12,
   },
 
   avatar: {
@@ -2351,7 +2354,7 @@ desktopBottomNavBar: {
 
     marginRight: 0,
     marginTop: 0,
-    marginBottom: 8,
+    marginBottom: 7,
 
     borderRadius: 44,
   },
@@ -2431,26 +2434,23 @@ desktopBottomNavBar: {
 
     justifyContent: "center",
 
-    marginTop: 5,
-    marginBottom: 0,
+    marginTop: 4,
+    marginBottom: 7,
   },
 
   badgeButton: {
-    width: 33,
-    height: 33,
-
     alignItems: "center",
     justifyContent: "center",
 
-    borderRadius: 17,
+    padding: 2,
 
     backgroundColor:
-      "rgba(255,255,255,0.07)",
+      "transparent",
   },
 
   badgeIcon: {
-    width: 23,
-    height: 23,
+    width: 29,
+    height: 29,
 
     resizeMode: "contain",
   },
@@ -2497,7 +2497,7 @@ desktopBottomNavBar: {
     alignItems: "center",
     justifyContent: "center",
 
-    marginTop: 10,
+    marginTop: 8,
     paddingTop: 13,
 
     borderTopWidth: 1,
@@ -2660,16 +2660,12 @@ desktopBottomNavBar: {
 
     marginRight: 14,
 
-    overflow: "hidden",
+    overflow: "visible",
 
-    borderWidth: 1,
-    borderColor:
-      "rgba(53,175,229,0.24)",
-
-    borderRadius: 16,
+    borderWidth: 0,
 
     backgroundColor:
-      "rgba(16,22,30,0.98)",
+      "transparent",
   },
 
   compactReviewSnippetCard: {
