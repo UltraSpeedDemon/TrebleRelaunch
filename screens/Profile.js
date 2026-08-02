@@ -1667,14 +1667,41 @@ export default function Profile({
                     {email}
                   </Text>
                 ) : null}
+              </View>
 
-                <View
-                  style={[
-                    styles.badgeContainer,
-                    isCompact &&
-                      styles.compactBadgeContainer,
-                  ]}
+              {!isCompact ? (
+                <TouchableOpacity
+                  style={
+                    styles.editButton
+                  }
+                  onPress={() =>
+                    navigation.navigate(
+                      "EditProfile"
+                    )
+                  }
                 >
+                  <Text
+                    style={
+                      styles.editButtonText
+                    }
+                  >
+                    Edit Profile
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* BADGES CENTERED ON THE DIVIDER LINE */}
+            <View style={styles.profileBadgeDividerWrap}>
+              <View style={styles.profileBadgeDividerLine} />
+
+              <View
+                style={[
+                  styles.badgeContainer,
+                  isCompact &&
+                    styles.compactBadgeContainer,
+                ]}
+              >
                   {isSpotifyLinked ? (
                     <TouchableOpacity
                       onPress={
@@ -1712,29 +1739,7 @@ export default function Profile({
                       />
                     </TouchableOpacity>
                   ) : null}
-                </View>
               </View>
-
-              {!isCompact ? (
-                <TouchableOpacity
-                  style={
-                    styles.editButton
-                  }
-                  onPress={() =>
-                    navigation.navigate(
-                      "EditProfile"
-                    )
-                  }
-                >
-                  <Text
-                    style={
-                      styles.editButtonText
-                    }
-                  >
-                    Edit Profile
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
             </View>
 
             {/* SOCIAL STATS */}
@@ -2419,33 +2424,59 @@ desktopBottomNavBar: {
     textAlign: "center",
   },
 
+  profileBadgeDividerWrap: {
+    position: "relative",
+
+    width: "100%",
+    height: 30,
+
+    marginTop: 10,
+  },
+
+  profileBadgeDividerLine: {
+    position: "absolute",
+
+    left: 0,
+    right: 0,
+    top: 14,
+
+    height: 1,
+
+    backgroundColor:
+      "rgba(255,255,255,0.1)",
+  },
+
   badgeContainer: {
+    position: "absolute",
+
+    top: 0,
+    left: 0,
+    right: 0,
+
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
-
-    marginTop: 9,
+    justifyContent: "center",
 
     gap: 8,
+
+    zIndex: 5,
+    elevation: 5,
   },
 
   compactBadgeContainer: {
     width: "100%",
-
-    justifyContent: "center",
-
-    marginTop: 4,
-    marginBottom: 7,
   },
 
   badgeButton: {
     alignItems: "center",
     justifyContent: "center",
 
-    padding: 2,
+    padding: 3,
+
+    borderRadius: 18,
 
     backgroundColor:
-      "transparent",
+      "rgba(24,31,40,0.98)",
   },
 
   badgeIcon: {
@@ -2497,12 +2528,8 @@ desktopBottomNavBar: {
     alignItems: "center",
     justifyContent: "center",
 
-    marginTop: 8,
-    paddingTop: 13,
-
-    borderTopWidth: 1,
-    borderTopColor:
-      "rgba(255,255,255,0.1)",
+    marginTop: 0,
+    paddingTop: 8,
   },
 
   statButton: {

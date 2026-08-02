@@ -3138,7 +3138,10 @@ const styles =
     avatarContainer: {
       position: "relative",
 
+      width: 118,
+
       flexShrink: 0,
+      alignItems: "center",
     },
 
     avatar: {
@@ -3160,8 +3163,8 @@ const styles =
     privacyBadge: {
       position: "absolute",
 
-      left: "50%",
       bottom: -9,
+      alignSelf: "center",
 
       minWidth: 58,
       height: 24,
@@ -3176,12 +3179,6 @@ const styles =
         "rgba(10,16,24,0.95)",
 
       borderRadius: 13,
-
-      transform: [
-        {
-          translateX: -34,
-        },
-      ],
 
       backgroundColor: "#149fd3",
     },
@@ -3644,16 +3641,13 @@ const styles =
 
       marginRight: 14,
 
-      overflow: "hidden",
+      overflow: "visible",
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(53,175,229,0.24)",
-
-      borderRadius: 16,
+      borderWidth: 0,
+      borderRadius: 0,
 
       backgroundColor:
-        "rgba(16,22,30,0.98)",
+        "transparent",
     },
 
     sectionEmptyBox: {
