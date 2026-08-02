@@ -1,5 +1,10 @@
-import React, { useEffect } from "react";
-import { Platform } from "react-native";
+import React, {
+  useEffect,
+} from "react";
+
+import {
+  Platform,
+} from "react-native";
 
 import {
   NavigationContainer,
@@ -8,6 +13,10 @@ import {
 import {
   createStackNavigator,
 } from "@react-navigation/stack";
+
+import {
+  enableScreens,
+} from "react-native-screens";
 
 import * as SplashScreen from "expo-splash-screen";
 import { useFonts } from "expo-font";
@@ -42,10 +51,6 @@ import ArtistPage from "./screens/ArtistPage";
 import MusicSwiperTest from "./screens/MusicSwiperTest";
 import UpdateReviewPage from "./screens/UpdateReview";
 import ArtistListenables from "./screens/ArtistListenables";
-
-/*
- * New sidebar pages.
- */
 import Achievements from "./screens/Achievements";
 import Credits from "./screens/Credits";
 
@@ -57,14 +62,48 @@ import {
   SongCardSwipe,
 } from "./screens/SongCardSwipe";
 
+/*
+ * react-native-screens@4.16.0 is already installed in this project.
+ * Enable it once here so inactive native screens can be detached.
+ */
+enableScreens(true);
+
 SplashScreen.preventAutoHideAsync().catch(() => {
   /*
-   * The splash screen may already be prevented
-   * from auto-hiding.
+   * The splash screen may already be prevented from auto-hiding.
    */
 });
 
 const Stack = createStackNavigator();
+
+const screenOptions = {
+  headerShown: false,
+
+  /*
+   * Removing stack animations reduces extra work and memory pressure
+   * when rapidly switching pages on lower-powered mobile devices.
+   */
+  animationEnabled: false,
+  gestureEnabled: false,
+  cardShadowEnabled: false,
+  cardOverlayEnabled: false,
+
+  cardStyle: {
+    flex: 1,
+    backgroundColor: "#101010",
+  },
+
+  /*
+   * Web does not need native-style transition interpolation.
+   */
+  ...(Platform.OS === "web"
+    ? {
+        cardStyleInterpolator: () => ({
+          cardStyle: {},
+        }),
+      }
+    : {}),
+};
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -106,22 +145,16 @@ export default function App() {
     <NavigationContainer>
       <Stack.Navigator
         initialRouteName="Home"
-        screenOptions={{
-          headerShown: false,
-          animation: "none",
 
-          /*
-           * Disable browser-style page transition
-           * animations on React Native Web.
-           */
-          ...(Platform.OS === "web"
-            ? {
-                cardStyleInterpolator: () => ({
-                  cardStyle: {},
-                }),
-              }
-            : {}),
-        }}
+        /*
+         * This belongs only in App.js.
+         *
+         * Inactive routes keep their React state, but their native
+         * views are detached to reduce mobile memory and rendering.
+         */
+        detachInactiveScreens={true}
+
+        screenOptions={screenOptions}
       >
         <Stack.Screen
           name="Home"
@@ -278,13 +311,11 @@ export default function App() {
           component={ArtistListenables}
         />
 
-        {/* NEW ACHIEVEMENTS PAGE */}
         <Stack.Screen
           name="Achievements"
           component={Achievements}
         />
 
-        {/* NEW CREDITS PAGE */}
         <Stack.Screen
           name="Credits"
           component={Credits}

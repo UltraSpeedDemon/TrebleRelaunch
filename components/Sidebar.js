@@ -823,7 +823,6 @@ export default function Sidebar({
                   onPress={() =>
                     navigateTo("Achievements")
                   }
-                  badgeText="NEW"
                 />
 
                 <MenuItem
@@ -1238,7 +1237,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 8,
-    backgroundColor: colours.secondaryblue,
+    backgroundColor: colours.lightblue || "#35afe5",
   },
 
   newBadgeText: {

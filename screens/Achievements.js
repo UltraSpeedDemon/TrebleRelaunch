@@ -21,6 +21,7 @@ import {
 } from "@react-navigation/native";
 
 import Icon from "react-native-vector-icons/MaterialIcons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import {
   getAchievements,
@@ -192,6 +193,15 @@ export default function Achievements({
       [achievements]
     );
 
+  const overallProgress =
+    achievements.length > 0
+      ? Math.round(
+          (unlockedCount /
+            achievements.length) *
+            100
+        )
+      : 0;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
@@ -247,63 +257,126 @@ export default function Achievements({
             </View>
           </View>
 
-          <View style={styles.summaryCard}>
-            <View
-              style={styles.summaryIcon}
-            >
-              <Icon
-                name="emoji-events"
-                size={31}
-                color="#ffffff"
+          <LinearGradient
+            colors={[
+              "rgba(53,175,229,0.24)",
+              "rgba(44,88,160,0.18)",
+              "rgba(255,255,255,0.045)",
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.summaryCard}
+          >
+            <View style={styles.summaryGlowOne} />
+            <View style={styles.summaryGlowTwo} />
+
+            <View style={styles.summaryMainRow}>
+              <View
+                style={styles.summaryIcon}
+              >
+                <Icon
+                  name="emoji-events"
+                  size={32}
+                  color="#ffffff"
+                />
+              </View>
+
+              <View
+                style={styles.summaryTextWrap}
+              >
+                <Text style={styles.summaryEyebrow}>
+                  BADGE COLLECTION
+                </Text>
+
+                <Text
+                  style={styles.summaryValue}
+                >
+                  {unlockedCount} of{" "}
+                  {achievements.length}
+                </Text>
+
+                <Text
+                  style={styles.summaryLabel}
+                >
+                  achievements unlocked
+                </Text>
+              </View>
+
+              <View style={styles.completionBubble}>
+                <Text style={styles.completionValue}>
+                  {overallProgress}%
+                </Text>
+
+                <Text style={styles.completionLabel}>
+                  COMPLETE
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.overallTrack}>
+              <View
+                style={[
+                  styles.overallFill,
+                  {
+                    width: `${overallProgress}%`,
+                  },
+                ]}
               />
             </View>
 
-            <View
-              style={styles.summaryTextWrap}
-            >
-              <Text
-                style={styles.summaryValue}
-              >
-                {unlockedCount}/
-                {achievements.length}
+            <View style={styles.summaryFooter}>
+              <Text style={styles.summaryHint}>
+                Keep listening, reviewing and connecting to unlock more.
               </Text>
 
-              <Text
-                style={styles.summaryLabel}
+              <TouchableOpacity
+                onPress={loadAchievements}
+                activeOpacity={0.75}
+                style={styles.refreshButton}
+                disabled={loading}
               >
-                Badges unlocked
+                {loading ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <>
+                    <Icon
+                      name="refresh"
+                      size={17}
+                      color="#ffffff"
+                    />
+
+                    <Text
+                      style={
+                        styles.refreshButtonText
+                      }
+                    >
+                      REFRESH
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </LinearGradient>
+
+          <View style={styles.collectionHeader}>
+            <View>
+              <Text style={styles.collectionEyebrow}>
+                YOUR PROGRESS
+              </Text>
+
+              <Text style={styles.collectionTitle}>
+                Badge Collection
               </Text>
             </View>
 
-            <TouchableOpacity
-              onPress={loadAchievements}
-              activeOpacity={0.75}
-              style={styles.refreshButton}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator
-                  size="small"
-                  color={colours.lightblue}
-                />
-              ) : (
-                <>
-                  <Icon
-                    name="refresh"
-                    size={17}
-                    color={colours.lightblue}
-                  />
-
-                  <Text
-                    style={
-                      styles.refreshButtonText
-                    }
-                  >
-                    REFRESH
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <View style={styles.collectionCount}>
+              <Text style={styles.collectionCountText}>
+                {achievements.length}
+              </Text>
+            </View>
           </View>
 
           {errorMessage ? (
@@ -635,29 +708,58 @@ const styles = StyleSheet.create({
   },
 
   summaryCard: {
-    flexDirection: "row",
-    alignItems: "center",
+    position: "relative",
+    overflow: "hidden",
 
-    padding: 20,
+    padding: 22,
 
-    borderRadius: 22,
-
-    backgroundColor:
-      "rgba(255,255,255,0.06)",
+    borderRadius: 25,
 
     borderWidth: 1,
-
     borderColor:
-      "rgba(255,255,255,0.10)",
+      "rgba(53,175,229,0.32)",
 
-    marginBottom: 24,
+    marginBottom: 28,
+  },
+
+  summaryGlowOne: {
+    position: "absolute",
+    top: -70,
+    right: -35,
+
+    width: 180,
+    height: 180,
+
+    borderRadius: 90,
+
+    backgroundColor:
+      "rgba(53,175,229,0.13)",
+  },
+
+  summaryGlowTwo: {
+    position: "absolute",
+    bottom: -90,
+    left: 80,
+
+    width: 170,
+    height: 170,
+
+    borderRadius: 85,
+
+    backgroundColor:
+      "rgba(98,82,255,0.09)",
+  },
+
+  summaryMainRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   summaryIcon: {
-    width: 58,
-    height: 58,
+    width: 62,
+    height: 62,
 
-    borderRadius: 18,
+    borderRadius: 20,
 
     alignItems: "center",
     justifyContent: "center",
@@ -665,27 +767,174 @@ const styles = StyleSheet.create({
     backgroundColor:
       colours.secondaryblue,
 
-    marginRight: 15,
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.22)",
+
+    marginRight: 16,
   },
 
   summaryTextWrap: {
     flex: 1,
+    minWidth: 0,
+  },
+
+  summaryEyebrow: {
+    color: colours.lightblue,
+
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+
+    marginBottom: 4,
   },
 
   summaryValue: {
+    color: "#ffffff",
+
+    fontSize: 25,
+    lineHeight: 31,
+    fontWeight: "900",
+  },
+
+  summaryLabel: {
+    color:
+      "rgba(255,255,255,0.64)",
+
+    fontSize: 12,
+
+    marginTop: 1,
+  },
+
+  completionBubble: {
+    width: 68,
+    height: 68,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    marginLeft: 12,
+
+    borderRadius: 34,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.16)",
+
+    backgroundColor:
+      "rgba(5,13,25,0.36)",
+  },
+
+  completionValue: {
+    color: "#ffffff",
+
+    fontSize: 17,
+    fontWeight: "900",
+  },
+
+  completionLabel: {
+    color:
+      "rgba(255,255,255,0.48)",
+
+    fontSize: 7,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+
+    marginTop: 1,
+  },
+
+  overallTrack: {
+    width: "100%",
+    height: 8,
+
+    overflow: "hidden",
+
+    marginTop: 20,
+
+    borderRadius: 5,
+
+    backgroundColor:
+      "rgba(255,255,255,0.10)",
+  },
+
+  overallFill: {
+    height: "100%",
+
+    borderRadius: 5,
+
+    backgroundColor:
+      colours.lightblue,
+  },
+
+  summaryFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+
+    marginTop: 14,
+  },
+
+  summaryHint: {
+    flex: 1,
+
+    color:
+      "rgba(255,255,255,0.54)",
+
+    fontSize: 11,
+    lineHeight: 17,
+
+    marginRight: 14,
+  },
+
+  collectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+
+    marginBottom: 12,
+  },
+
+  collectionEyebrow: {
+    color: colours.lightblue,
+
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+
+    marginBottom: 3,
+  },
+
+  collectionTitle: {
     color: "#ffffff",
 
     fontSize: 23,
     fontWeight: "900",
   },
 
-  summaryLabel: {
-    color:
-      "rgba(255,255,255,0.58)",
+  collectionCount: {
+    minWidth: 36,
+    height: 36,
 
-    fontSize: 12,
+    alignItems: "center",
+    justifyContent: "center",
 
-    marginTop: 2,
+    paddingHorizontal: 9,
+
+    borderRadius: 18,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.32)",
+
+    backgroundColor:
+      "rgba(53,175,229,0.11)",
+  },
+
+  collectionCountText: {
+    color: "#ffffff",
+
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   refreshButton: {
@@ -704,11 +953,15 @@ const styles = StyleSheet.create({
     borderRadius: 11,
 
     backgroundColor:
-      "rgba(90,156,255,0.15)",
+      "rgba(255,255,255,0.10)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.12)",
   },
 
   refreshButtonText: {
-    color: colours.lightblue,
+    color: "#ffffff",
 
     fontSize: 9,
     fontWeight: "900",
@@ -767,7 +1020,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
 
     backgroundColor:
-      "rgba(255,255,255,0.05)",
+      "rgba(255,255,255,0.045)",
 
     borderWidth: 1,
 
