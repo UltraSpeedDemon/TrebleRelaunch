@@ -6,6 +6,7 @@ import React, {
 
 import {
   ActivityIndicator,
+  Image,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -30,65 +31,15 @@ import {
 import { auth } from "../utils/firebase";
 import colours from "../styles/colours";
 
-const ACHIEVEMENT_DEFINITIONS = [
-  {
-    id: "listen-100",
-    statKey: "songsListened",
-    title: "Century Listener",
-    description: "Listen to 100 different songs.",
-    icon: "headphones",
-    goal: 100,
-  },
-  {
-    id: "review-100",
-    statKey: "reviewsPosted",
-    title: "Music Critic",
-    description: "Post 100 song reviews.",
-    icon: "rate-review",
-    goal: 100,
-  },
-  {
-    id: "reply-100",
-    statKey: "repliesPosted",
-    title: "Conversation Starter",
-    description: "Reply to 100 reviews.",
-    icon: "forum",
-    goal: 100,
-  },
-  {
-    id: "like-100",
-    statKey: "songsLiked",
-    title: "Big Fan",
-    description: "Like 100 songs.",
-    icon: "favorite",
-    goal: 100,
-  },
-  {
-    id: "friend-25",
-    statKey: "friendsConnected",
-    title: "Connected",
-    description: "Connect with 25 mutual friends.",
-    icon: "people",
-    goal: 25,
-  },
-  {
-    id: "share-50",
-    statKey: "songsShared",
-    title: "Taste Maker",
-    description: "Share 50 songs with friends.",
-    icon: "share",
-    goal: 50,
-  },
-];
+const ACHIEVEMENT_BADGE =
+  require("../images/achievementBadge.png");
 
-const EMPTY_STATS = {
-  songsListened: 0,
-  reviewsPosted: 0,
-  repliesPosted: 0,
-  songsLiked: 0,
-  friendsConnected: 0,
-  songsShared: 0,
-};
+import {
+  ACHIEVEMENT_DEFINITIONS,
+  EMPTY_ACHIEVEMENT_STATS,
+  getLocalAchievementStats,
+  mergeAchievementStats,
+} from "../utils/achievementTracker";
 
 export default function Achievements({
   navigation,
@@ -99,7 +50,7 @@ export default function Achievements({
   const isCompact = width < 720;
 
   const [stats, setStats] =
-    useState(EMPTY_STATS);
+    useState(EMPTY_ACHIEVEMENT_STATS);
 
   const [loading, setLoading] =
     useState(true);
@@ -113,7 +64,7 @@ export default function Achievements({
         auth.currentUser;
 
       if (!currentUser?.uid) {
-        setStats(EMPTY_STATS);
+        setStats(EMPTY_ACHIEVEMENT_STATS);
         setErrorMessage(
           "Sign in to view your achievements."
         );
@@ -139,10 +90,17 @@ export default function Achievements({
         const data =
           await response.json();
 
-        setStats({
-          ...EMPTY_STATS,
-          ...(data?.stats || {}),
-        });
+        const localStats =
+          await getLocalAchievementStats(
+            currentUser.uid
+          );
+
+        setStats(
+          mergeAchievementStats(
+            data?.stats,
+            localStats
+          )
+        );
       } catch (error) {
         console.error(
           "[Achievements] Load error:",
@@ -274,10 +232,9 @@ export default function Achievements({
               <View
                 style={styles.summaryIcon}
               >
-                <Icon
-                  name="emoji-events"
-                  size={32}
-                  color="#ffffff"
+                <Image
+                  source={ACHIEVEMENT_BADGE}
+                  style={styles.summaryBadgeImage}
                 />
               </View>
 
@@ -443,17 +400,20 @@ export default function Achievements({
                               .badgeIconUnlocked,
                         ]}
                       >
-                        <Icon
-                          name={
-                            achievement.icon
-                          }
-                          size={29}
-                          color={
-                            unlocked
-                              ? "#ffffff"
-                              : colours.lightblue
-                          }
-                        />
+                        {unlocked ? (
+                          <Image
+                            source={ACHIEVEMENT_BADGE}
+                            style={
+                              styles.earnedBadgeImage
+                            }
+                          />
+                        ) : (
+                          <Icon
+                            name="emoji-events"
+                            size={29}
+                            color={colours.lightblue}
+                          />
+                        )}
                       </View>
 
                       <View
@@ -774,6 +734,12 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
 
+  summaryBadgeImage: {
+    width: 54,
+    height: 54,
+    resizeMode: "contain",
+  },
+
   summaryTextWrap: {
     flex: 1,
     minWidth: 0,
@@ -1068,6 +1034,12 @@ const styles = StyleSheet.create({
 
     borderColor:
       "rgba(255,255,255,0.08)",
+  },
+
+  earnedBadgeImage: {
+    width: 62,
+    height: 62,
+    resizeMode: "contain",
   },
 
   badgeIconUnlocked: {

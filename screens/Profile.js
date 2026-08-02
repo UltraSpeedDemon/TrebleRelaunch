@@ -34,6 +34,13 @@ import colours from "../styles/colours";
 import { LinearGradient } from "expo-linear-gradient";
 
 import {
+  getLocalAchievementStats,
+  hasEarnedAchievement,
+  mergeAchievementStats,
+  recordUniqueSongListen,
+} from "../utils/achievementTracker";
+
+import {
   deleteReview,
   getFollowers,
   getFollowing,
@@ -251,6 +258,11 @@ export default function Profile({
 
   const [isAdmin, setIsAdmin] =
     useState(false);
+
+  const [
+    hasAchievementBadge,
+    setHasAchievementBadge,
+  ] = useState(false);
 
   const [
     badgePopup,
@@ -789,6 +801,40 @@ export default function Profile({
           })
         );
 
+        try {
+          const achievementResponse =
+            await getAchievements(
+              currentUser.uid
+            );
+
+          const achievementData =
+            achievementResponse?.ok
+              ? await achievementResponse.json()
+              : {};
+
+          const localAchievementStats =
+            await getLocalAchievementStats(
+              currentUser.uid
+            );
+
+          const mergedAchievementStats =
+            mergeAchievementStats(
+              achievementData?.stats,
+              localAchievementStats
+            );
+
+          setHasAchievementBadge(
+            hasEarnedAchievement(
+              mergedAchievementStats
+            )
+          );
+        } catch (achievementError) {
+          console.warn(
+            "[Profile] Achievement badge could not load:",
+            achievementError
+          );
+        }
+
         if (
           userData?.avatar &&
           userData.avatar !== "None" &&
@@ -1134,6 +1180,17 @@ export default function Profile({
       });
     }, []);
 
+  const handleAchievementBadgePress =
+    useCallback(() => {
+      setBadgePopup({
+        visible: true,
+        title: "Treble Achiever",
+        description:
+          "This user has completed at least one difficult Treble achievement.",
+        image: require("../images/achievementBadge.png"),
+      });
+    }, []);
+
   const renderHorizontalReview =
     useCallback(
       ({ item }) => (
@@ -1245,6 +1302,11 @@ export default function Profile({
             error
           );
         }
+
+        await recordUniqueSongListen(
+          auth.currentUser?.uid,
+          fullTrack
+        );
 
         navigation.navigate(
           "SongPage",
@@ -1713,6 +1775,26 @@ export default function Profile({
                       />
                     </TouchableOpacity>
                   ) : null}
+
+                  {hasAchievementBadge ? (
+                    <TouchableOpacity
+                      onPress={
+                        handleAchievementBadgePress
+                      }
+                      style={
+                        styles.badgeButton
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="Treble achievement badge"
+                    >
+                      <Image
+                        source={require("../images/achievementBadge.png")}
+                        style={
+                          styles.achievementBadgeIcon
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
                 ) : null}
               </View>
@@ -1741,7 +1823,7 @@ export default function Profile({
 
             {/* MOBILE BADGES: 3PX ABOVE THE DIVIDER */}
             {isCompact &&
-            (isSpotifyLinked || isAdmin) ? (
+            (isSpotifyLinked || isAdmin || hasAchievementBadge) ? (
               <View
                 style={
                   styles.mobileBadgeDividerWrap
@@ -1791,6 +1873,26 @@ export default function Profile({
                         source={require("../images/adminBadge.png")}
                         style={
                           styles.badgeIcon
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {hasAchievementBadge ? (
+                    <TouchableOpacity
+                      onPress={
+                        handleAchievementBadgePress
+                      }
+                      style={
+                        styles.badgeButton
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="Treble achievement badge"
+                    >
+                      <Image
+                        source={require("../images/achievementBadge.png")}
+                        style={
+                          styles.achievementBadgeIcon
                         }
                       />
                     </TouchableOpacity>
@@ -2525,7 +2627,7 @@ desktopBottomNavBar: {
 
     left: 0,
     right: 0,
-    top: 7,
+    top: 4,
 
     flexDirection: "row",
     alignItems: "center",
@@ -2550,6 +2652,13 @@ desktopBottomNavBar: {
   badgeIcon: {
     width: 29,
     height: 29,
+
+    resizeMode: "contain",
+  },
+
+  achievementBadgeIcon: {
+    width: 34,
+    height: 34,
 
     resizeMode: "contain",
   },

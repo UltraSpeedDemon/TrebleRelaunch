@@ -49,6 +49,11 @@ import {
 import colours from "../styles/colours";
 import { LinearGradient } from "expo-linear-gradient";
 
+import {
+  hasEarnedAchievement,
+  recordUniqueSongListen,
+} from "../utils/achievementTracker";
+
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import ReviewCard from "../components/Review";
@@ -87,6 +92,9 @@ const SPOTIFY_LOGO =
 
 const ADMIN_BADGE =
   require("../images/adminBadge.png");
+
+const ACHIEVEMENT_BADGE =
+  require("../images/achievementBadge.png");
 
 function DraggableProfileRow({
   children,
@@ -299,6 +307,11 @@ export default function UserProfiles({
   const [
     isAdmin,
     setIsAdmin,
+  ] = useState(false);
+
+  const [
+    hasAchievementBadge,
+    setHasAchievementBadge,
   ] = useState(false);
 
   const [
@@ -1063,6 +1076,29 @@ console.log(
             })
           );
 
+          try {
+            const achievementResponse =
+              await getAchievements(
+                userId
+              );
+
+            const achievementData =
+              achievementResponse?.ok
+                ? await achievementResponse.json()
+                : {};
+
+            setHasAchievementBadge(
+              hasEarnedAchievement(
+                achievementData?.stats
+              )
+            );
+          } catch (achievementError) {
+            console.warn(
+              "[UserProfiles] Achievement badge could not load:",
+              achievementError
+            );
+          }
+
           const [
             following,
           ] = await Promise.all([
@@ -1537,6 +1573,17 @@ const finalButtonLabel =
       });
     }, []);
 
+  const handleAchievementBadgePress =
+    useCallback(() => {
+      setBadgePopup({
+        visible: true,
+        title: "Treble Achiever",
+        description:
+          "This user has completed at least one difficult Treble achievement.",
+        image: ACHIEVEMENT_BADGE,
+      });
+    }, []);
+
   const avatarSource =
     avatar
       ? {
@@ -1818,6 +1865,11 @@ const finalButtonLabel =
         /*
          * Navigate immediately. Never make the user wait for Deezer.
          */
+        recordUniqueSongListen(
+          auth.currentUser?.uid,
+          track
+        );
+
         navigateToSongPage(track);
 
         hydrateTrackInBackground(
@@ -1845,6 +1897,11 @@ const finalButtonLabel =
 
           return;
         }
+
+        recordUniqueSongListen(
+          auth.currentUser?.uid,
+          track
+        );
 
         navigateToSongPage(track);
 
@@ -2381,7 +2438,7 @@ const finalButtonLabel =
                 Treble profile
               </Text>
 
-              {(isSpotifyLinked || isAdmin) ? (
+              {(isSpotifyLinked || isAdmin || hasAchievementBadge) ? (
 
 
               <View
@@ -2417,6 +2474,24 @@ const finalButtonLabel =
                     <Image
                       source={ADMIN_BADGE}
                       style={styles.badgeIcon}
+                    />
+                  </TouchableOpacity>
+                ) : null}
+
+                {hasAchievementBadge ? (
+                  <TouchableOpacity
+                    onPress={
+                      handleAchievementBadgePress
+                    }
+                    style={styles.badgeButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Treble achievement badge"
+                  >
+                    <Image
+                      source={ACHIEVEMENT_BADGE}
+                      style={
+                        styles.achievementBadgeIcon
+                      }
                     />
                   </TouchableOpacity>
                 ) : null}
@@ -3279,6 +3354,13 @@ const styles =
     badgeIcon: {
       width: 29,
       height: 29,
+
+      resizeMode: "contain",
+    },
+
+    achievementBadgeIcon: {
+      width: 34,
+      height: 34,
 
       resizeMode: "contain",
     },
