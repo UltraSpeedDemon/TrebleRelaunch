@@ -154,6 +154,11 @@ export default function Feed({ navigation }) {
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   const isFocused = useIsFocused();
+
+  const openCreatePost =
+    useCallback(() => {
+      navigation.navigate("CreatePost");
+    }, [navigation]);
   useEffect(() => {
     if (isDesktopWeb) {
       setMenuOpen(true);
@@ -2949,6 +2954,30 @@ export default function Feed({ navigation }) {
       </View>
 
       {/* =========================================================
+          CREATE POST BUTTON
+      ========================================================= */}
+      <TouchableOpacity
+        style={[
+          styles.createPostButton,
+          isDesktopWeb &&
+            styles.desktopCreatePostButton,
+          isMobileWeb &&
+            styles.mobileWebCreatePostButton,
+        ]}
+        onPress={openCreatePost}
+        activeOpacity={0.82}
+        accessibilityRole="button"
+        accessibilityLabel="Create a new post"
+        accessibilityHint="Opens the Treble post composer"
+      >
+        <Icon
+          name="add"
+          size={32}
+          color="#ffffff"
+        />
+      </TouchableOpacity>
+
+      {/* =========================================================
           MOBILE BOTTOM NAVIGATION
       ========================================================= */}
       <View
@@ -4078,6 +4107,63 @@ desktopBottomNavBar: {
   },
 
   /* =========================================================
+     CREATE POST BUTTON
+  ========================================================= */
+
+  createPostButton: {
+    position: "absolute",
+
+    right: 18,
+    bottom: 88,
+
+    zIndex: 160,
+    elevation: 16,
+
+    width: 58,
+    height: 58,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.22)",
+
+    borderRadius: 29,
+
+    backgroundColor:
+      colours.lightblue ||
+      "#35afe5",
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 7,
+    },
+    shadowOpacity: 0.32,
+    shadowRadius: 12,
+  },
+
+  desktopCreatePostButton: {
+    position: "fixed",
+
+    right: 32,
+    bottom: 32,
+
+    width: 62,
+    height: 62,
+
+    borderRadius: 31,
+  },
+
+  mobileWebCreatePostButton: {
+    position: "fixed",
+
+    right: 18,
+    bottom: 88,
+  },
+
+/* =========================================================
      SHARE MODAL
   ========================================================= */
 

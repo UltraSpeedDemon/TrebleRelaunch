@@ -10,6 +10,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -299,6 +300,24 @@ export default function UserProfiles({
     isAdmin,
     setIsAdmin,
   ] = useState(false);
+
+  const [
+    badgePopup,
+    setBadgePopup,
+  ] = useState({
+    visible: false,
+    title: "",
+    description: "",
+    image: null,
+  });
+
+  const closeBadgePopup =
+    useCallback(() => {
+      setBadgePopup((current) => ({
+        ...current,
+        visible: false,
+      }));
+    }, []);
 
   const [
     followRequested,
@@ -2352,7 +2371,9 @@ const finalButtonLabel =
                   style={
                     styles.username
                   }
-                  numberOfLines={1}
+                  numberOfLines={
+                    isCompact ? 2 : 1
+                  }
                   ellipsizeMode="tail"
                 >
                   {formatUsername(
@@ -2360,47 +2381,44 @@ const finalButtonLabel =
                   )}
                 </Text>
 
-                <View
-                  style={
-                    styles.badgeContainer
-                  }
-                >
-                  {isSpotifyLinked ? (
-                    <TouchableOpacity
-                      onPress={
-                        handleSpotifyBadgePress
-                      }
-                    >
-                      <Image
-                        source={
-                          SPOTIFY_LOGO
-                        }
-                        style={
-                          styles.badgeIcon
-                        }
-                      />
-                    </TouchableOpacity>
-                  ) : null}
+              </View>
 
-                  {isAdmin ? (
-                    <TouchableOpacity
-                      onPress={
-                        handleAdminBadgePress
-                      }
-                      accessibilityRole="button"
-                      accessibilityLabel="Treble Admin badge"
-                    >
-                      <Image
-                        source={
-                          ADMIN_BADGE
-                        }
-                        style={
-                          styles.badgeIcon
-                        }
-                      />
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
+              <View
+                style={[
+                  styles.badgeContainer,
+                  isCompact &&
+                    styles.compactBadgeContainer,
+                ]}
+              >
+                {isSpotifyLinked ? (
+                  <TouchableOpacity
+                    onPress={
+                      handleSpotifyBadgePress
+                    }
+                    style={styles.badgeButton}
+                  >
+                    <Image
+                      source={SPOTIFY_LOGO}
+                      style={styles.badgeIcon}
+                    />
+                  </TouchableOpacity>
+                ) : null}
+
+                {isAdmin ? (
+                  <TouchableOpacity
+                    onPress={
+                      handleAdminBadgePress
+                    }
+                    style={styles.badgeButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Treble Admin badge"
+                  >
+                    <Image
+                      source={ADMIN_BADGE}
+                      style={styles.badgeIcon}
+                    />
+                  </TouchableOpacity>
+                ) : null}
               </View>
 
               <Text
@@ -2770,6 +2788,57 @@ const finalButtonLabel =
         </ScrollView>
       </View>
 
+
+      <Modal
+        visible={badgePopup.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeBadgePopup}
+      >
+        <TouchableOpacity
+          style={styles.badgeModalBackdrop}
+          activeOpacity={1}
+          onPress={closeBadgePopup}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.badgeModalCard}
+            onPress={() => {}}
+          >
+            <View style={styles.badgeModalIconWrap}>
+              {badgePopup.image ? (
+                <Image
+                  source={badgePopup.image}
+                  style={styles.badgeModalIcon}
+                />
+              ) : null}
+            </View>
+
+            <Text style={styles.badgeModalKicker}>
+              TREBLE BADGE
+            </Text>
+
+            <Text style={styles.badgeModalTitle}>
+              {badgePopup.title}
+            </Text>
+
+            <Text style={styles.badgeModalDescription}>
+              {badgePopup.description}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.badgeModalCloseButton}
+              onPress={closeBadgePopup}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.badgeModalCloseText}>
+                Got it
+              </Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <View
         style={[
           styles.bottomNavBar,
@@ -2876,9 +2945,7 @@ const styles =
 
       borderRadius: 21,
 
-      backgroundColor:
-        colours.lightblue ||
-        "#35afe5",
+      backgroundColor: "#149fd3",
     },
 
     retryButtonText: {
@@ -3189,6 +3256,7 @@ const styles =
     username: {
       flexShrink: 1,
       minWidth: 0,
+      maxWidth: "100%",
 
       color: "#ffffff",
 
@@ -3210,16 +3278,38 @@ const styles =
       flexDirection: "row",
       alignItems: "center",
 
-      flexShrink: 0,
+      alignSelf: "flex-start",
 
-      marginLeft: 10,
+      marginTop: 10,
+
+      gap: 8,
+    },
+
+    compactBadgeContainer: {
+      alignSelf: "center",
+      justifyContent: "center",
+    },
+
+    badgeButton: {
+      width: 36,
+      height: 36,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(53,175,229,0.30)",
+
+      borderRadius: 18,
+
+      backgroundColor:
+        "rgba(255,255,255,0.07)",
     },
 
     badgeIcon: {
-      width: 27,
-      height: 27,
-
-      marginLeft: 6,
+      width: 25,
+      height: 25,
 
       resizeMode: "contain",
     },
@@ -3349,7 +3439,7 @@ const styles =
       borderRadius: 22,
 
       backgroundColor:
-        "rgba(53,175,229,0.12)",
+        "rgba(20,159,211,0.20)",
     },
 
     editProfileButtonText: {
@@ -3368,13 +3458,12 @@ const styles =
 
       borderWidth: 1,
       borderColor:
-        "rgba(255,255,255,0.1)",
+        "rgba(53,175,229,0.18)",
 
       borderRadius: 18,
 
       backgroundColor:
-        colours.darkblue ||
-        "rgba(255,255,255,0.045)",
+        "rgba(17,27,40,0.92)",
     },
 
     sectionHeader: {
@@ -3565,13 +3654,21 @@ const styles =
     },
 
     reviewSnippetCard: {
-      width: 340,
-      minHeight: 210,
+      width: 360,
+      minHeight: 220,
 
-      marginRight: 13,
+      marginRight: 14,
 
-      borderRadius: 14,
       overflow: "hidden",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(53,175,229,0.24)",
+
+      borderRadius: 16,
+
+      backgroundColor:
+        "rgba(10,21,35,0.94)",
     },
 
     sectionEmptyBox: {
@@ -3736,4 +3833,129 @@ const styles =
 
       right: 0,
     },
-  });
+  
+    badgeModalBackdrop: {
+      flex: 1,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      paddingHorizontal: 22,
+
+      backgroundColor:
+        "rgba(0,0,0,0.78)",
+    },
+
+    badgeModalCard: {
+      width: "100%",
+      maxWidth: 390,
+
+      alignItems: "center",
+
+      paddingHorizontal: 26,
+      paddingTop: 28,
+      paddingBottom: 24,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(53,175,229,0.42)",
+
+      borderRadius: 24,
+
+      backgroundColor:
+        "#111d2b",
+
+      shadowColor: "#000000",
+      shadowOffset: {
+        width: 0,
+        height: 10,
+      },
+      shadowOpacity: 0.38,
+      shadowRadius: 22,
+
+      elevation: 14,
+    },
+
+    badgeModalIconWrap: {
+      width: 78,
+      height: 78,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      marginBottom: 16,
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(53,175,229,0.34)",
+
+      borderRadius: 39,
+
+      backgroundColor:
+        "rgba(53,175,229,0.10)",
+    },
+
+    badgeModalIcon: {
+      width: 55,
+      height: 55,
+
+      resizeMode: "contain",
+    },
+
+    badgeModalKicker: {
+      color:
+        colours.lightblue ||
+        "#35afe5",
+
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.8,
+
+      marginBottom: 6,
+    },
+
+    badgeModalTitle: {
+      color: "#ffffff",
+
+      fontSize: 24,
+      lineHeight: 30,
+      fontWeight: "900",
+
+      textAlign: "center",
+    },
+
+    badgeModalDescription: {
+      color:
+        "rgba(255,255,255,0.66)",
+
+      fontSize: 14,
+      lineHeight: 21,
+
+      textAlign: "center",
+
+      marginTop: 9,
+    },
+
+    badgeModalCloseButton: {
+      minWidth: 130,
+      minHeight: 44,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      marginTop: 22,
+      paddingHorizontal: 22,
+
+      borderRadius: 22,
+
+      backgroundColor: "#149fd3",
+    },
+
+    badgeModalCloseText: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+});
