@@ -671,9 +671,9 @@ export default function CreatePost({
         >
           <LinearGradient
             colors={[
-              "rgba(53,175,229,0.18)",
-              "rgba(18,18,20,0.96)",
-              "rgba(8,8,9,0.98)",
+              "rgba(53,175,229,0.16)",
+              "rgba(31,31,34,0.98)",
+              "rgba(24,24,26,0.99)",
             ]}
             start={{
               x: 0,
@@ -1361,12 +1361,12 @@ const styles =
 
       borderWidth: 1,
       borderColor:
-        "rgba(53,175,229,0.17)",
+        "rgba(255,255,255,0.10)",
 
       borderRadius: 20,
 
       backgroundColor:
-        "rgba(8,8,9,0.97)",
+        "rgba(27,27,29,0.98)",
     },
 
     sectionHeader: {
@@ -1443,7 +1443,7 @@ const styles =
       borderRadius: 15,
 
       backgroundColor:
-        "rgba(255,255,255,0.045)",
+        "rgba(255,255,255,0.055)",
     },
 
     searchInput: {
@@ -1522,7 +1522,7 @@ const styles =
       borderRadius: 16,
 
       backgroundColor:
-        "rgba(6,6,7,0.99)",
+        "rgba(16,22,30,0.98)",
     },
 
     compactSongCard: {
@@ -1722,7 +1722,7 @@ const styles =
       borderRadius: 16,
 
       backgroundColor:
-        "rgba(255,255,255,0.045)",
+        "rgba(255,255,255,0.055)",
     },
 
     ratingLabel: {
