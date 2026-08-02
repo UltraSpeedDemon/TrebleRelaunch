@@ -2525,7 +2525,7 @@ desktopBottomNavBar: {
 
     left: 0,
     right: 0,
-    top: 9,
+    top: 7,
 
     flexDirection: "row",
     alignItems: "center",
