@@ -46,6 +46,7 @@ import {
 } from "../providers/rest";
 
 import colours from "../styles/colours";
+import { LinearGradient } from "expo-linear-gradient";
 
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
@@ -55,6 +56,27 @@ const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const BOTTOM_NAV_HEIGHT = 72;
 const MAX_CONTENT_WIDTH = 1080;
+
+const ADMIN_BADGE_EMAILS = new Set([
+  "mcplayzethan@gmail.com",
+]);
+
+function hasAdminBadge({
+  email,
+  isAdmin,
+} = {}) {
+  const normalizedEmail =
+    String(email || "")
+      .trim()
+      .toLowerCase();
+
+  return (
+    Boolean(isAdmin) ||
+    ADMIN_BADGE_EMAILS.has(
+      normalizedEmail
+    )
+  );
+}
 
 const FALLBACK_AVATAR =
   require("../images/avatarIcon.png");
@@ -1013,9 +1035,13 @@ console.log(
           );
 
           setIsAdmin(
-            Boolean(
-              data?.isAdmin
-            )
+            hasAdminBadge({
+              email:
+                data?.email ||
+                data?.userEmail,
+              isAdmin:
+                data?.isAdmin,
+            })
           );
 
           const [
@@ -2243,14 +2269,25 @@ const finalButtonLabel =
             fetchUserData(true)
           }
         >
-          <View
+          <LinearGradient
             style={[
               styles.profileHeader,
 
               isCompact &&
                 styles.compactProfileHeader,
             ]}
+          
+            colors={[
+              "rgba(53,175,229,0.26)",
+              "rgba(37,74,132,0.18)",
+              "rgba(255,255,255,0.045)",
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
           >
+            <View style={styles.profileGlowTop} />
+            <View style={styles.profileGlowBottom} />
+
             <View
               style={
                 styles.avatarContainer
@@ -2300,6 +2337,10 @@ const finalButtonLabel =
                   styles.compactHeaderInfo,
               ]}
             >
+              <Text style={styles.profileEyebrow}>
+                TREBLE COMMUNITY PROFILE
+              </Text>
+
               <View
                 style={[
                   styles.usernameRow,
@@ -2346,6 +2387,8 @@ const finalButtonLabel =
                       onPress={
                         handleAdminBadgePress
                       }
+                      accessibilityRole="button"
+                      accessibilityLabel="Treble Admin badge"
                     >
                       <Image
                         source={
@@ -2545,7 +2588,7 @@ const finalButtonLabel =
                 </Text>
               </TouchableOpacity>
             )}
-          </View>
+          </LinearGradient>
 
           {!canViewFullContent ? (
             <View
@@ -2969,23 +3012,60 @@ const styles =
     },
 
     profileHeader: {
+      position: "relative",
+      overflow: "hidden",
+
       width: "100%",
 
       flexDirection: "row",
       alignItems: "center",
 
-      padding: 24,
-      marginBottom: 20,
+      padding: 26,
+      marginBottom: 26,
 
       borderWidth: 1,
       borderColor:
-        "rgba(255,255,255,0.1)",
+        "rgba(53,175,229,0.30)",
 
-      borderRadius: 20,
+      borderRadius: 25,
+
+      shadowColor: "#000000",
+      shadowOffset: {
+        width: 0,
+        height: 8,
+      },
+      shadowOpacity: 0.22,
+      shadowRadius: 18,
+
+      elevation: 7,
+    },
+
+    profileGlowTop: {
+      position: "absolute",
+      top: -95,
+      right: -50,
+
+      width: 230,
+      height: 230,
+
+      borderRadius: 115,
 
       backgroundColor:
-        colours.darkblue ||
-        "rgba(255,255,255,0.045)",
+        "rgba(53,175,229,0.13)",
+    },
+
+    profileGlowBottom: {
+      position: "absolute",
+      left: 90,
+      bottom: -120,
+
+      width: 220,
+      height: 220,
+
+      borderRadius: 110,
+
+      backgroundColor:
+        "rgba(103,80,255,0.08)",
     },
 
     compactProfileHeader: {
@@ -3006,8 +3086,7 @@ const styles =
 
       borderWidth: 3,
       borderColor:
-        colours.lightblue ||
-        "#35afe5",
+        "rgba(53,175,229,0.72)",
 
       borderRadius: 59,
 
@@ -3045,6 +3124,7 @@ const styles =
       ],
 
       backgroundColor:
+        colours.secondaryblue ||
         "#299acb",
     },
 
@@ -3094,15 +3174,25 @@ const styles =
       justifyContent: "center",
     },
 
-    username: {
-      flexShrink: 1,
-      minWidth: 0,
-
+    profileEyebrow: {
       color:
         colours.lightblue ||
         "#35afe5",
 
-      fontSize: 27,
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.6,
+
+      marginBottom: 4,
+    },
+
+    username: {
+      flexShrink: 1,
+      minWidth: 0,
+
+      color: "#ffffff",
+
+      fontSize: 29,
       lineHeight: 34,
       fontWeight: "900",
     },
@@ -3189,6 +3279,9 @@ const styles =
     },
 
     followButton: {
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.16)",
       minWidth: 125,
       height: 44,
 
@@ -3267,6 +3360,7 @@ const styles =
     },
 
     cardSection: {
+      overflow: "hidden",
       width: "100%",
 
       padding: 20,

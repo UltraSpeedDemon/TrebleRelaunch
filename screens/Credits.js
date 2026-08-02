@@ -26,7 +26,7 @@ const CREDITS = [
     studentNumber: "1166648",
     featured: true,
     role:
-      "Revived Treble and published its 2026 relaunch with major improvements. Redesigned and remodelled the full app experience, rebuilt existing features, added new functionality, and completed front-end and back-end development. Same app, new look.",
+      "Revived Treble and published its 2026 relaunch with major improvements. Redesigned and remodelled the full app experience, rebuilt existing features, and completed front-end and back-end development. Created and improved Profiles, User Profiles, Following, Followers, Friends, Notifications, Badges, Settings, Achievements, Credits, mobile navigation, music playback, and other major Treble features. Same app, new look.",
   },
   {
     name: "Connor McElroy",
@@ -67,10 +67,25 @@ export default function Credits({
     useWindowDimensions();
 
   const isCompact = width < 768;
+  const isMobile =
+    Platform.OS !== "web" ||
+    width < 768;
+
+  /*
+   * Mobile uses a shorter one-time entrance and no infinite glow
+   * loop. This prevents the Credits page from becoming choppy.
+   */
+  const shouldAnimateGlow =
+    !isMobile;
 
   const rise = useRef(
     new Animated.Value(
-      Math.max(height * 0.35, 220)
+      isMobile
+        ? 32
+        : Math.max(
+            height * 0.24,
+            150
+          )
     )
   ).current;
 
@@ -90,23 +105,34 @@ export default function Credits({
     const entrance = Animated.parallel([
       Animated.timing(fade, {
         toValue: 1,
-        duration: 700,
+        duration:
+          isMobile
+            ? 220
+            : 520,
         useNativeDriver: true,
       }),
 
       Animated.timing(rise, {
         toValue: 0,
-        duration: 1200,
+        duration:
+          isMobile
+            ? 260
+            : 650,
         easing: Easing.out(
           Easing.cubic
         ),
         useNativeDriver: true,
       }),
 
-      Animated.spring(logoScale, {
+      Animated.timing(logoScale, {
         toValue: 1,
-        friction: 7,
-        tension: 55,
+        duration:
+          isMobile
+            ? 220
+            : 480,
+        easing: Easing.out(
+          Easing.cubic
+        ),
         useNativeDriver: true,
       }),
     ]);
@@ -128,16 +154,29 @@ export default function Credits({
     );
 
     entrance.start();
-    glowLoop.start();
+
+    if (shouldAnimateGlow) {
+      glowLoop.start();
+    } else {
+      glow.setValue(0.18);
+    }
 
     return () => {
+      entrance.stop();
       glowLoop.stop();
+
+      fade.stopAnimation();
+      rise.stopAnimation();
+      logoScale.stopAnimation();
+      glow.stopAnimation();
     };
   }, [
     fade,
     glow,
+    isMobile,
     logoScale,
     rise,
+    shouldAnimateGlow,
   ]);
 
   return (
@@ -190,6 +229,10 @@ export default function Credits({
           bounces={false}
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={
+            Platform.OS !== "web"
+          }
+          scrollEventThrottle={32}
         >
           <Animated.View
             style={[
@@ -277,7 +320,7 @@ export default function Credits({
             >
               {CREDITS.map(
                 (credit, index) => (
-                  <Animated.View
+                  <View
                     key={`${credit.name}-${index}`}
                     style={[
                       styles.creditRow,
@@ -321,7 +364,7 @@ export default function Credits({
                     <Text style={styles.roleText}>
                       {credit.role}
                     </Text>
-                  </Animated.View>
+                  </View>
                 )
               )}
             </View>
@@ -552,6 +595,7 @@ const styles = StyleSheet.create({
 
   logoGlowCompact: {
     display: "none",
+    opacity: 0,
   },
 
   logoImageCompact: {

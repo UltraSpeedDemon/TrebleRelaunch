@@ -30,6 +30,7 @@ import BottomNavbar from "../components/BottomNavbar";
 import ReviewCard from "../components/Review";
 
 import colours from "../styles/colours";
+import { LinearGradient } from "expo-linear-gradient";
 
 import {
   deleteReview,
@@ -51,6 +52,27 @@ const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const MAX_PROFILE_WIDTH = 1050;
 const BOTTOM_NAV_HEIGHT = 72;
+
+const ADMIN_BADGE_EMAILS = new Set([
+  "mcplayzethan@gmail.com",
+]);
+
+function hasAdminBadge({
+  email,
+  isAdmin,
+} = {}) {
+  const normalizedEmail =
+    String(email || "")
+      .trim()
+      .toLowerCase();
+
+  return (
+    Boolean(isAdmin) ||
+    ADMIN_BADGE_EMAILS.has(
+      normalizedEmail
+    )
+  );
+}
 
 
 function DraggableProfileRow({
@@ -739,7 +761,13 @@ export default function Profile({
         );
 
         setIsAdmin(
-          Boolean(userData?.isAdmin)
+          hasAdminBadge({
+            email:
+              userData?.email ||
+              currentUser.email,
+            isAdmin:
+              userData?.isAdmin,
+          })
         );
 
         if (
@@ -1046,8 +1074,8 @@ export default function Profile({
   const handleAdminBadgePress =
     useCallback(() => {
       Alert.alert(
-        "Admin Account",
-        "This account has administrator or developer access."
+        "Treble Admin",
+        "Official Treble administrator and developer badge."
       );
     }, []);
 
@@ -1496,13 +1524,24 @@ export default function Profile({
           nestedScrollEnabled
         >
           {/* PROFILE HEADER */}
-          <View
+          <LinearGradient
             style={[
               styles.profileHeader,
               isCompact &&
                 styles.compactProfileHeader,
             ]}
+          
+            colors={[
+              "rgba(53,175,229,0.26)",
+              "rgba(37,74,132,0.18)",
+              "rgba(255,255,255,0.045)",
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
           >
+            <View style={styles.profileGlowTop} />
+            <View style={styles.profileGlowBottom} />
+
             <View
               style={[
                 styles.profileMainRow,
@@ -1539,6 +1578,10 @@ export default function Profile({
                   styles.headerInfo
                 }
               >
+                <Text style={styles.profileEyebrow}>
+                  YOUR TREBLE PROFILE
+                </Text>
+
                 <Text
                   style={
                     styles.username
@@ -1592,6 +1635,8 @@ export default function Profile({
                       style={
                         styles.badgeButton
                       }
+                      accessibilityRole="button"
+                      accessibilityLabel="Treble Admin badge"
                     >
                       <Image
                         source={require("../images/adminBadge.png")}
@@ -1742,7 +1787,7 @@ export default function Profile({
                 </Text>
               </TouchableOpacity>
             ) : null}
-          </View>
+          </LinearGradient>
 
           {/* REVIEW SECTIONS */}
           {renderReviewSection({
@@ -2093,29 +2138,57 @@ desktopBottomNavBar: {
   ===================================================== */
 
   profileHeader: {
+    position: "relative",
+    overflow: "hidden",
+
     width: "100%",
 
-    padding: 22,
-    marginBottom: 18,
+    padding: 24,
+    marginBottom: 24,
 
     borderWidth: 1,
     borderColor:
-      "rgba(255,255,255,0.08)",
+      "rgba(53,175,229,0.30)",
 
-    borderRadius: 18,
-
-    backgroundColor:
-      colours.darkblue,
+    borderRadius: 25,
 
     shadowColor: "#000000",
     shadowOffset: {
       width: 0,
-      height: 5,
+      height: 8,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
 
-    elevation: 5,
+    elevation: 7,
+  },
+
+  profileGlowTop: {
+    position: "absolute",
+    top: -95,
+    right: -55,
+
+    width: 230,
+    height: 230,
+
+    borderRadius: 115,
+
+    backgroundColor:
+      "rgba(53,175,229,0.13)",
+  },
+
+  profileGlowBottom: {
+    position: "absolute",
+    left: 90,
+    bottom: -120,
+
+    width: 220,
+    height: 220,
+
+    borderRadius: 110,
+
+    backgroundColor:
+      "rgba(103,80,255,0.08)",
   },
 
   compactProfileHeader: {
@@ -2145,7 +2218,7 @@ desktopBottomNavBar: {
 
     borderWidth: 3,
     borderColor:
-      "rgba(255,255,255,0.1)",
+      "rgba(53,175,229,0.48)",
 
     backgroundColor:
       "rgba(255,255,255,0.08)",
@@ -2165,11 +2238,22 @@ desktopBottomNavBar: {
     minWidth: 0,
   },
 
-  username: {
+  profileEyebrow: {
     color:
-      colours.lightblue,
+      colours.lightblue ||
+      "#35afe5",
 
-    fontSize: 27,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.6,
+
+    marginBottom: 4,
+  },
+
+  username: {
+    color: "#ffffff",
+
+    fontSize: 29,
     lineHeight: 34,
     fontWeight: "800",
   },
@@ -2225,7 +2309,13 @@ desktopBottomNavBar: {
     borderRadius: 22,
 
     backgroundColor:
-      colours.lightblue,
+      colours.secondaryblue ||
+      colours.lightblue ||
+      "#35afe5",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.18)",
   },
 
   compactEditButton: {
@@ -2300,6 +2390,7 @@ desktopBottomNavBar: {
   ===================================================== */
 
   cardSection: {
+    overflow: "hidden",
     width: "100%",
 
     padding: 18,
@@ -2312,7 +2403,7 @@ desktopBottomNavBar: {
     borderRadius: 17,
 
     backgroundColor:
-      colours.darkblue,
+      "rgba(255,255,255,0.045)",
 
     shadowColor: "#000000",
     shadowOffset: {
