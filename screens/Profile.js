@@ -1,7 +1,7 @@
 import React, {
   useCallback,
   useEffect,
-  useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -21,17 +21,22 @@ import {
 } from "react-native";
 
 import {
-  useFocusEffect,
-  useRoute,
+  useIsFocused,
 } from "@react-navigation/native";
 
 import { auth } from "../utils/firebase";
 
+import Sidebar from "../components/Sidebar";
+import BottomNavbar from "../components/BottomNavbar";
+import ReviewCard from "../components/Review";
+
+import colours from "../styles/colours";
+import { LinearGradient } from "expo-linear-gradient";
+
 import {
   deleteReview,
-  followUser,
   getFollowers,
-  getFollowRequests,
+  getFollowing,
   getReviewSong,
   getSongFromDeezer,
   getUser,
@@ -41,22 +46,13 @@ import {
   getUserMostUpvoted,
   getUserTopReviews,
   removeUpvoteFromReview,
-  requestFollow,
-  unfollowUser,
   upvoteReview,
 } from "../providers/rest";
 
-import colours from "../styles/colours";
-import { LinearGradient } from "expo-linear-gradient";
-
-import Sidebar from "../components/Sidebar";
-import BottomNavbar from "../components/BottomNavbar";
-import ReviewCard from "../components/Review";
-
 const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
+const MAX_PROFILE_WIDTH = 1050;
 const BOTTOM_NAV_HEIGHT = 72;
-const MAX_CONTENT_WIDTH = 1080;
 
 const ADMIN_BADGE_EMAILS = new Set([
   "mcplayzethan@gmail.com",
@@ -79,22 +75,14 @@ function hasAdminBadge({
   );
 }
 
-const FALLBACK_AVATAR =
-  require("../images/avatarIcon.png");
-
-const SPOTIFY_LOGO =
-  require("../images/spotifyLogo.png");
-
-const ADMIN_BADGE =
-  require("../images/adminBadge.png");
 
 function DraggableProfileRow({
   children,
   useNativeScroll,
   contentStyle,
 }) {
-  const webScrollRef = React.useRef(null);
-  const dragRef = React.useRef({
+  const webScrollRef = useRef(null);
+  const dragRef = useRef({
     active: false,
     startX: 0,
     startScrollLeft: 0,
@@ -102,19 +90,19 @@ function DraggableProfileRow({
   });
 
   const [dragging, setDragging] =
-    React.useState(false);
+    useState(false);
 
   if (useNativeScroll) {
     return (
       <ScrollView
         horizontal
         nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
         directionalLockEnabled
+        keyboardShouldPersistTaps="handled"
         scrollEnabled
         bounces
         alwaysBounceHorizontal={false}
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
         contentContainerStyle={contentStyle}
         style={styles.mobileHorizontalScroller}
       >
@@ -144,15 +132,10 @@ function DraggableProfileRow({
           return;
         }
 
-        node.setPointerCapture?.(
-          event.pointerId
-        );
-
         dragRef.current = {
           active: true,
           startX: event.clientX,
-          startScrollLeft:
-            node.scrollLeft,
+          startScrollLeft: node.scrollLeft,
           moved: false,
         };
 
@@ -197,20 +180,28 @@ function DraggableProfileRow({
 
       style: {
         width: "100%",
+
         display: "flex",
         flexDirection: "row",
         alignItems: "stretch",
+
         overflowX: "auto",
         overflowY: "hidden",
+
         paddingRight: 12,
+
         boxSizing: "border-box",
+
         cursor:
           dragging
             ? "grabbing"
             : "grab",
+
         userSelect: "none",
         WebkitUserSelect: "none",
+
         touchAction: "pan-y",
+
         scrollbarWidth: "none",
         msOverflowStyle: "none",
       },
@@ -219,16 +210,12 @@ function DraggableProfileRow({
   );
 }
 
-export default function UserProfiles({
+export default function Profile({
   navigation,
 }) {
-  const route = useRoute();
+  const { width } = useWindowDimensions();
 
-  const { width } =
-    useWindowDimensions();
-
-  const isWeb =
-    Platform.OS === "web";
+  const isWeb = Platform.OS === "web";
 
   const isDesktopWeb =
     isWeb &&
@@ -238,68 +225,32 @@ export default function UserProfiles({
     isWeb &&
     width < DESKTOP_BREAKPOINT;
 
-  const isCompact =
-    width < 640;
+  const isCompact = width < 620;
 
-  const userId =
-    String(
-      route?.params?.userId ||
-      ""
-    );
+  const isFocused = useIsFocused();
 
-  const currentUserId =
-    String(
-      auth.currentUser?.uid ||
-      ""
-    );
+  const [menuOpen, setMenuOpen] =
+    useState(false);
 
-  const isSelf =
-    currentUserId === userId;
+  const [username, setUsername] =
+    useState("");
 
-  const [
-    username,
-    setUsername,
-  ] = useState("");
+  const [email, setEmail] =
+    useState("");
 
-  const [
-    avatar,
-    setAvatar,
-  ] = useState(null);
+  const [followers, setFollowers] =
+    useState(0);
 
-  const [
-    theirFollowers,
-    setTheirFollowers,
-  ] = useState([]);
-
-  const [
-    myFollowers,
-    setMyFollowers,
-  ] = useState([]);
-
-  const [
-    followersCount,
-    setFollowersCount,
-  ] = useState(0);
-
-  const [
-    followingCount,
-    setFollowingCount,
-  ] = useState(0);
-
-  const [
-    isPublic,
-    setIsPublic,
-  ] = useState(true);
+  const [following, setFollowing] =
+    useState(0);
 
   const [
     isSpotifyLinked,
     setIsSpotifyLinked,
   ] = useState(false);
 
-  const [
-    isAdmin,
-    setIsAdmin,
-  ] = useState(false);
+  const [isAdmin, setIsAdmin] =
+    useState(false);
 
   const [
     badgePopup,
@@ -319,71 +270,41 @@ export default function UserProfiles({
       }));
     }, []);
 
-  const [
-    followRequested,
-    setFollowRequested,
-  ] = useState(false);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [
-    followLoading,
-    setFollowLoading,
-  ] = useState(false);
+  const [avatar, setAvatar] =
+    useState(null);
 
-  const [
-    topReviews,
-    setTopReviews,
-  ] = useState([]);
+  const noAvatar =
+    require("../images/avatarIcon.png");
 
-  const [
-    likedSongs,
-    setLikedSongs,
-  ] = useState([]);
+  const [topReviews, setTopReviews] =
+    useState([]);
 
-  const [
-    favorites,
-    setFavorites,
-  ] = useState([]);
+  const [likedSongs, setLikedSongs] =
+    useState([]);
+
+  const [favorites, setFavorites] =
+    useState([]);
 
   const [
     mostUpvoted,
     setMostUpvoted,
   ] = useState([]);
 
-  const [
-    activity,
-    setActivity,
-  ] = useState([]);
+  const [activity, setActivity] =
+    useState([]);
 
   const [
     totalReviews,
     setTotalReviews,
   ] = useState(0);
 
-  const [
-    loading,
-    setLoading,
-  ] = useState(true);
-
-  const [
-    refreshing,
-    setRefreshing,
-  ] = useState(false);
-
-  const [
-    menuOpen,
-    setMenuOpen,
-  ] = useState(false);
-
-  const [
-    canViewFullContent,
-    setCanViewFullContent,
-  ] = useState(true);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState("");
-
+  /*
+   * Keep the menu permanently open on desktop.
+   * Mobile starts with the menu closed.
+   */
   useEffect(() => {
     if (isDesktopWeb) {
       setMenuOpen(true);
@@ -392,151 +313,71 @@ export default function UserProfiles({
     }
   }, [isDesktopWeb]);
 
-  const parseResponse =
-    useCallback(
-      async (
-        response,
-        fallbackMessage
-      ) => {
-        if (!response) {
-          throw new Error(
-            "The backend returned no response."
-          );
-        }
+  const formatUsername = useCallback(
+    (name) => {
+      if (!name) {
+        return "User";
+      }
 
-        const responseText =
-          await response.text();
+      return (
+        name.charAt(0).toUpperCase() +
+        name.slice(1)
+      );
+    },
+    []
+  );
 
-        let data = {};
-
-        try {
-          data = responseText
-            ? JSON.parse(responseText)
-            : {};
-        } catch {
-          throw new Error(
-            responseText ||
-            "The backend returned invalid data."
-          );
-        }
-
-        if (!response.ok) {
-          throw new Error(
-            data?.error ||
-            data?.message ||
-            `${fallbackMessage} HTTP ${response.status}`
-          );
-        }
-
-        return data;
-      },
-      []
-    );
-
-  const formatUsername =
-  useCallback((name) => {
-    const cleanName =
-      String(name || "").trim();
-
-    if (!cleanName) {
-      return "Treble User";
-    }
-
-    return (
-      cleanName.charAt(0).toUpperCase() +
-      cleanName.slice(1)
-    );
-  }, []);
-
-  const normalizeArray =
-  useCallback((data) => {
-    if (Array.isArray(data)) {
-      return data;
-    }
-
-    if (Array.isArray(data?.results)) {
-      return data.results;
-    }
-
-    if (Array.isArray(data?.users)) {
-      return data.users;
-    }
-
-    if (Array.isArray(data?.followers)) {
-      return data.followers;
-    }
-
-    if (Array.isArray(data?.following)) {
-      return data.following;
-    }
-
-    if (Array.isArray(data?.friends)) {
-      return data.friends;
-    }
-
-    if (Array.isArray(data?.requests)) {
-      return data.requests;
-    }
-
-    if (Array.isArray(data?.followRequests)) {
-      return data.followRequests;
-    }
-
-    if (Array.isArray(data?.notifications)) {
-      return data.notifications;
-    }
-
-    return [];
-  }, []);
-
+  /*
+   * Retrieve music details belonging to a review.
+   */
   const enrichReviewsWithSong =
-    useCallback(
-      async (reviews) => {
-        const safeReviews =
-          Array.isArray(reviews)
-            ? reviews
-            : [];
+    useCallback(async (reviews) => {
+      if (!Array.isArray(reviews)) {
+        return [];
+      }
 
-        return Promise.all(
-          safeReviews.map(
-            async (review) => {
-              if (review?.song) {
-                return review;
-              }
+      const currentUser =
+        auth.currentUser;
 
-              try {
-                const response =
-                  await getReviewSong(
-                    userId,
-                    review.id
-                  );
+      if (!currentUser?.uid) {
+        return reviews;
+      }
 
-                if (!response?.ok) {
-                  return review;
-                }
+      return Promise.all(
+        reviews.map(async (review) => {
+          if (review?.song) {
+            return review;
+          }
 
-                const songData =
-                  await response.json();
+          try {
+            const response =
+              await getReviewSong(
+                currentUser.uid,
+                review.id
+              );
 
-                return {
-                  ...review,
-                  song:
-                    songData,
-                };
-              } catch (error) {
-                console.warn(
-                  "[UserProfiles] Unable to enrich review:",
-                  error
-                );
-
-                return review;
-              }
+            if (!response?.ok) {
+              return review;
             }
-          )
-        );
-      },
-      [userId]
-    );
+
+            const songData =
+              await response.json();
+
+            return {
+              ...review,
+              song: songData,
+            };
+          } catch (error) {
+            console.error(
+              "[Profile] Review enrichment error:",
+              error
+            );
+
+            return review;
+          }
+        })
+      );
+    }, []);
 
   const normalizeLikedSong =
     useCallback((item) => {
@@ -612,7 +453,9 @@ export default function UserProfiles({
 
         artist:
           typeof rawArtist === "string"
-            ? { name: rawArtist }
+            ? {
+                name: rawArtist,
+              }
             : rawArtist || {
                 name: artistName,
               },
@@ -620,6 +463,7 @@ export default function UserProfiles({
         artistName,
         album,
         image,
+
         coverArt:
           song?.coverArt ||
           item?.coverArt ||
@@ -634,8 +478,22 @@ export default function UserProfiles({
       };
     }, []);
 
-  const loadAllReviewsSections =
+  const loadReviewSections =
     useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        setTopReviews([]);
+        setLikedSongs([]);
+        setFavorites([]);
+        setMostUpvoted([]);
+        setActivity([]);
+        setTotalReviews(0);
+
+        return;
+      }
+
       try {
         const [
           topResponse,
@@ -644,11 +502,21 @@ export default function UserProfiles({
           upvotedResponse,
           activityResponse,
         ] = await Promise.all([
-          getUserTopReviews(userId),
-          getUserLikes(userId),
-          getUserFavorites(userId),
-          getUserMostUpvoted(userId),
-          getUserActivity(userId),
+          getUserTopReviews(
+            currentUser.uid
+          ),
+          getUserLikes(
+            currentUser.uid
+          ),
+          getUserFavorites(
+            currentUser.uid
+          ),
+          getUserMostUpvoted(
+            currentUser.uid
+          ),
+          getUserActivity(
+            currentUser.uid
+          ),
         ]);
 
         const [
@@ -661,57 +529,59 @@ export default function UserProfiles({
           topResponse?.ok
             ? topResponse.json()
             : [],
-
           likedResponse?.ok
             ? likedResponse.json()
-            : { likes: [] },
-
+            : {
+                likes: [],
+              },
           favoritesResponse?.ok
             ? favoritesResponse.json()
             : [],
-
           upvotedResponse?.ok
             ? upvotedResponse.json()
             : [],
-
           activityResponse?.ok
             ? activityResponse.json()
             : [],
         ]);
 
-        const [
-          enrichedTop,
-          enrichedFavorites,
-          enrichedUpvoted,
-          enrichedActivity,
-        ] = await Promise.all([
-          enrichReviewsWithSong(
-            normalizeArray(topData)
-          ),
+        const enrichedTop =
+          await enrichReviewsWithSong(
+            Array.isArray(topData)
+              ? topData
+              : []
+          );
 
-          enrichReviewsWithSong(
-            normalizeArray(
-              favoritesData
-            )
-          ),
+        const enrichedFavorites =
+          await enrichReviewsWithSong(
+            Array.isArray(favoritesData)
+              ? favoritesData
+              : []
+          );
 
-          enrichReviewsWithSong(
-            normalizeArray(
-              upvotedData
-            )
-          ),
+        const enrichedUpvoted =
+          await enrichReviewsWithSong(
+            Array.isArray(upvotedData)
+              ? upvotedData
+              : []
+          );
 
-          enrichReviewsWithSong(
-            normalizeArray(
-              activityData
-            )
-          ),
-        ]);
+        const rawActivity =
+          Array.isArray(activityData)
+            ? activityData
+            : [];
+
+        const enrichedActivity =
+          await enrichReviewsWithSong(
+            rawActivity
+          );
 
         const rawLikes =
           Array.isArray(likedData?.likes)
             ? likedData.likes
-            : normalizeArray(likedData);
+            : Array.isArray(likedData)
+              ? likedData
+              : [];
 
         const normalizedLikedSongs =
           rawLikes
@@ -734,507 +604,300 @@ export default function UserProfiles({
             .slice(0, 20);
 
         setTopReviews(enrichedTop);
-        setLikedSongs(normalizedLikedSongs);
-        setFavorites(enrichedFavorites);
-        setMostUpvoted(enrichedUpvoted);
-        setActivity(enrichedActivity);
+        setLikedSongs(
+          normalizedLikedSongs
+        );
+        setFavorites(
+          enrichedFavorites
+        );
+        setMostUpvoted(
+          enrichedUpvoted
+        );
+        setActivity(
+          enrichedActivity
+        );
         setTotalReviews(
-          enrichedActivity.length
+          rawActivity.length
         );
       } catch (error) {
         console.error(
-          "[UserProfiles] Profile section error:",
+          "[Profile] Profile-section error:",
           error
         );
 
+        setTopReviews([]);
         setLikedSongs([]);
+        setFavorites([]);
+        setMostUpvoted([]);
+        setActivity([]);
+        setTotalReviews(0);
       }
     }, [
       enrichReviewsWithSong,
-      normalizeArray,
       normalizeLikedSong,
-      userId,
     ]);
 
-  const checkIfFollowing =
-    useCallback(
-      async (
-        targetUserId
-      ) => {
-        try {
-          const response =
-            await getFollowers(
-              targetUserId
-            );
+    const normalizeUserArray =
+  useCallback((data) => {
+    if (Array.isArray(data)) {
+      return data;
+    }
 
-          if (!response?.ok) {
-            return false;
-          }
+    if (Array.isArray(data?.users)) {
+      return data.users;
+    }
 
-          const data =
-            await response.json();
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
 
-          const followers =
-            normalizeArray(data);
+    if (Array.isArray(data?.followers)) {
+      return data.followers;
+    }
 
-          return followers.some(
-            (follower) =>
-              String(
-                follower?.userId ||
-                follower?.uid ||
-                ""
-              ) ===
-              currentUserId
-          );
-        } catch (error) {
-          console.error(
-            "[UserProfiles] Follow status error:",
-            error
-          );
+    if (Array.isArray(data?.following)) {
+      return data.following;
+    }
 
-          return false;
-        }
-      },
-      [
-        currentUserId,
-        normalizeArray,
-      ]
-    );
+    return [];
+  }, []);
 
-  const fetchTheirFollowers =
-    useCallback(async () => {
-      if (!userId) {
-        return [];
-      }
-
-      try {
-        const response =
-          await getFollowers(
-            userId
-          );
-
-        if (!response?.ok) {
-          return [];
-        }
-
-        const data =
-          await response.json();
-
-        const followers =
-          normalizeArray(data);
-
-        setTheirFollowers(
-          followers
-        );
-          console.log(
-      "[Followers]",
-      followers
-  );
-
-        return followers;
-      } catch (error) {
-        console.error(
-          "[UserProfiles] Followers error:",
-          error
-        );
-
-        return [];
-      }
-    }, [
-      normalizeArray,
-      userId,
-    ]);
-
-    const fetchMyFollowers =
+  const loadSocialCounts =
   useCallback(async () => {
-    if (!currentUserId) {
-      return [];
+    const currentUser =
+      auth.currentUser;
+
+    if (!currentUser?.uid) {
+      setFollowers(0);
+      setFollowing(0);
+
+      return;
     }
 
     try {
-      const response =
-        await getFollowers(
-          currentUserId
-        );
-console.log(
-    "Current User:",
-    currentUserId
-);
+      const [
+        followersResponse,
+        followingResponse,
+      ] = await Promise.all([
+        getFollowers(
+          currentUser.uid
+        ),
 
-      if (!response?.ok) {
-        return [];
+        getFollowing(
+          currentUser.uid
+        ),
+      ]);
+
+      if (followersResponse?.ok) {
+        const followersData =
+          await followersResponse.json();
+
+        setFollowers(
+          normalizeUserArray(
+            followersData
+          ).length
+        );
       }
 
-      const data =
-        await response.json();
+      if (followingResponse?.ok) {
+        const followingData =
+          await followingResponse.json();
 
-      const followers =
-        normalizeArray(data);
-
-      setMyFollowers(
-        followers
-      );
-      console.log(
-    "Their Followers:",
-    followers
-);
-      return followers;
+        setFollowing(
+          normalizeUserArray(
+            followingData
+          ).length
+        );
+      }
     } catch (error) {
       console.error(
-        "[UserProfiles] My followers error:",
+        "[Profile] Social-count error:",
         error
       );
-
-      return [];
     }
   }, [
-    currentUserId,
-    normalizeArray,
+    normalizeUserArray,
   ]);
 
-
-  const checkFollowRequest =
+  const loadProfile =
     useCallback(async () => {
-      if (
-        !userId ||
-        !currentUserId ||
-        isSelf
-      ) {
-        setFollowRequested(
-          false
-        );
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        navigation.navigate("Home");
 
         return;
       }
 
       try {
+        setLoading(true);
+
         const response =
-          await getFollowRequests(
-            userId
+          await getUser(
+            currentUser.uid
           );
 
         if (!response?.ok) {
-          return;
+          throw new Error(
+            "Failed to fetch user data."
+          );
         }
 
-        const data =
+        const userData =
           await response.json();
 
-        const requests =
-          normalizeArray(data);
+        setUsername(
+          userData?.username ||
+            currentUser.displayName ||
+            "User"
+        );
 
-        const requested =
-          requests.some(
-            (request) =>
-              String(
-                request?.userId ||
-                request?.requesterId ||
-                request?.fromUserId ||
-                ""
-              ) ===
-              currentUserId
-          );
+        setEmail(
+          userData?.email ||
+            currentUser.email ||
+            ""
+        );
 
-        setFollowRequested(
-          requested
+        setFollowers(
+          Number(
+            userData?.followersCount ||
+              0
+          )
+        );
+
+        setFollowing(
+          Number(
+            userData?.followingCount ||
+              0
+          )
+        );
+
+        setIsSpotifyLinked(
+          Boolean(
+            userData?.spotifyAccessToken
+          )
+        );
+
+        setIsAdmin(
+          hasAdminBadge({
+            email:
+              userData?.email ||
+              currentUser.email,
+            isAdmin:
+              userData?.isAdmin,
+          })
+        );
+
+        if (
+          userData?.avatar &&
+          userData.avatar !== "None" &&
+          (
+            userData.avatar.startsWith(
+              "data:"
+            ) ||
+            userData.avatar.startsWith(
+              "http"
+            )
+          )
+        ) {
+          setAvatar(userData.avatar);
+        } else {
+          setAvatar(null);
+        }
+
+        const sectionResults =
+          await Promise.allSettled([
+            loadReviewSections(),
+            loadSocialCounts(),
+          ]);
+
+        sectionResults.forEach(
+          (result, index) => {
+            if (
+              result.status ===
+              "rejected"
+            ) {
+              console.warn(
+                index === 0
+                  ? "[Profile] Review sections could not load:"
+                  : "[Profile] Social counts could not load:",
+                result.reason
+              );
+            }
+          }
         );
       } catch (error) {
         console.error(
-          "[UserProfiles] Follow request error:",
+          "[Profile] Main profile load error:",
           error
         );
+
+        setUsername(
+          (currentValue) =>
+            currentValue ||
+            currentUser.displayName ||
+            "Treble User"
+        );
+
+        setEmail(
+          (currentValue) =>
+            currentValue ||
+            currentUser.email ||
+            ""
+        );
+
+        Alert.alert(
+          "Profile temporarily unavailable",
+          "Treble could not refresh all profile details. Your saved profile is still shown."
+        );
+      } finally {
+        setLoading(false);
       }
     }, [
-      currentUserId,
-      isSelf,
-      normalizeArray,
-      userId,
+      loadReviewSections,
+      loadSocialCounts,
+      navigation,
     ]);
 
-  const fetchUserData =
-    useCallback(
-      async (
-        isRefresh = false
-      ) => {
-        if (!userId) {
-          setErrorMessage(
-            "No user was selected."
-          );
-
-          setLoading(false);
-
-          return;
-        }
-
-        try {
-          if (isRefresh) {
-            setRefreshing(true);
-          } else {
-            setLoading(true);
-          }
-
-          setErrorMessage("");
-
-          const response =
-            await getUser(
-              userId
-            );
-
-          const data =
-            await parseResponse(
-              response,
-              "Unable to load this profile."
-            );
-
-          const finalUsername =
-            String(
-              data?.username ||
-              data?.displayName ||
-              "Treble User"
-            );
-
-          const finalAvatar =
-            typeof data?.avatar ===
-              "string" &&
-            data.avatar !== "None" &&
-            (
-              data.avatar.startsWith(
-                "http://"
-              ) ||
-              data.avatar.startsWith(
-                "https://"
-              ) ||
-              data.avatar.startsWith(
-                "data:"
-              )
-            )
-              ? data.avatar
-              : null;
-
-          const publicValue =
-            data?.isPublic;
-
-          const finalIsPublic =
-            publicValue === true ||
-            publicValue ===
-              "true" ||
-            publicValue === 1 ||
-            publicValue ===
-              undefined;
-
-          setUsername(
-            finalUsername
-          );
-
-          setAvatar(
-            finalAvatar
-          );
-
-          setFollowersCount(
-            Number(
-              data?.followersCount
-            ) || 0
-          );
-
-          setFollowingCount(
-            Number(
-              data?.followingCount
-            ) || 0
-          );
-
-          setIsPublic(
-            finalIsPublic
-          );
-
-          setIsSpotifyLinked(
-            data?.spotifyIsLinked ===
-              true ||
-            data?.spotifyIsLinked ===
-              "true"
-          );
-
-          setIsAdmin(
-            hasAdminBadge({
-              email:
-                data?.email ||
-                data?.userEmail,
-              isAdmin:
-                data?.isAdmin,
-            })
-          );
-
-          const [
-            following,
-          ] = await Promise.all([
-            checkIfFollowing(
-              userId
-            ),
-
-            fetchTheirFollowers(),
-
-            fetchMyFollowers(),
-
-            checkFollowRequest(),
-          ]);
-
-          const canView =
-            finalIsPublic ||
-            isSelf ||
-            following;
-
-          setCanViewFullContent(
-            canView
-          );
-
-          if (canView) {
-            await loadAllReviewsSections();
-          } else {
-            setTopReviews([]);
-            setLikedSongs([]);
-            setFavorites([]);
-            setMostUpvoted([]);
-            setActivity([]);
-            setTotalReviews(0);
-          }
-        } catch (error) {
-          console.error(
-            "[UserProfiles] Load error:",
-            error
-          );
-
-          setErrorMessage(
-            error?.message ||
-            "Unable to load this profile."
-          );
-        } finally {
-          setLoading(false);
-          setRefreshing(false);
-        }
-      },
-      [
-      checkFollowRequest,
-      checkIfFollowing,
-      fetchMyFollowers,
-      fetchTheirFollowers,
-      isSelf,
-      loadAllReviewsSections,
-      parseResponse,
-      userId,
-    ]
-    );
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchUserData(false);
-    }, [fetchUserData])
-  );
-
-  const iAmFollowing =
-  useMemo(
-    () =>
-      theirFollowers.some(
-        (follower) =>
-          String(
-            follower?.userId ||
-            follower?.uid ||
-            follower?.id ||
-            follower?.followerId ||
-            follower?.follower_id ||
-            ""
-          ) ===
-          currentUserId
-      ),
-    [
-      currentUserId,
-      theirFollowers,
-    ]
-  );
-
-  const theyFollowMe =
-  useMemo(
-    () =>
-      myFollowers.some(
-        (follower) =>
-          String(
-            follower?.userId ||
-            follower?.uid ||
-            follower?.id ||
-            follower?.followerId ||
-            follower?.follower_id ||
-            ""
-          ) ===
-          userId
-      ),
-    [
-      myFollowers,
-      userId,
-    ]
-  );
-
-const isFriend =
-  iAmFollowing &&
-  theyFollowMe;
-
-const finalButtonLabel =
-  useMemo(() => {
-    if (isFriend) {
-      return "Friends";
+  useEffect(() => {
+    if (isFocused) {
+      loadProfile();
     }
-
-    if (iAmFollowing) {
-      return "Following";
-    }
-
-    if (
-      !isPublic &&
-      followRequested
-    ) {
-      return "Requested";
-    }
-
-    if (theyFollowMe) {
-      return "Follow Back";
-    }
-
-    return "Follow";
   }, [
-    followRequested,
-    iAmFollowing,
-    isFriend,
-    isPublic,
-    theyFollowMe,
+    isFocused,
+    loadProfile,
   ]);
 
   const updateReviewArray =
     useCallback(
       (
-        reviews,
+        reviewArray,
         reviewId
-      ) =>
-        reviews.map(
-          (review) => {
+      ) => {
+        return reviewArray.map(
+          (reviewItem) => {
             if (
-              String(review?.id) !==
-              String(reviewId)
+              reviewItem.id !==
+              reviewId
             ) {
-              return review;
+              return reviewItem;
             }
-
-            const currentlyUpvoted =
-              Boolean(
-                review?.upvoted
-              );
 
             const currentUpvotes =
               Number(
-                review?.upvotes
-              ) || 0;
+                reviewItem.upvotes ||
+                  0
+              );
 
             return {
-              ...review,
+              ...reviewItem,
+
+              upvoted:
+                !reviewItem.upvoted,
 
               upvotes:
-                currentlyUpvoted
+                reviewItem.upvoted
                   ? Math.max(
                       0,
                       currentUpvotes -
@@ -1242,84 +905,94 @@ const finalButtonLabel =
                     )
                   : currentUpvotes +
                     1,
-
-              upvoted:
-                !currentlyUpvoted,
             };
           }
-        ),
+        );
+      },
       []
     );
 
   const handleUpvote =
     useCallback(
       async (reviewId) => {
-        const combined = [
+        const combinedReviews = [
           ...topReviews,
           ...favorites,
           ...mostUpvoted,
           ...activity,
         ];
 
-        const review =
-          combined.find(
-            (item) =>
-              String(item?.id) ===
-              String(reviewId)
+        const existingReview =
+          combinedReviews.find(
+            (reviewItem) =>
+              reviewItem.id ===
+              reviewId
           );
 
-        if (!review) {
+        if (!existingReview) {
           return;
         }
 
         try {
+          const response =
+            existingReview.upvoted
+              ? await removeUpvoteFromReview(
+                  reviewId
+                )
+              : await upvoteReview(
+                  reviewId
+                );
+
           if (
-            review?.upvoted
+            response &&
+            response.ok === false
           ) {
-            await removeUpvoteFromReview(
-              reviewId
-            );
-          } else {
-            await upvoteReview(
-              reviewId
+            throw new Error(
+              "Unable to update review."
             );
           }
 
           setTopReviews(
-            (current) =>
+            (currentReviews) =>
               updateReviewArray(
-                current,
+                currentReviews,
                 reviewId
               )
           );
 
           setFavorites(
-            (current) =>
+            (currentReviews) =>
               updateReviewArray(
-                current,
+                currentReviews,
                 reviewId
               )
           );
 
           setMostUpvoted(
-            (current) =>
+            (currentReviews) =>
               updateReviewArray(
-                current,
+                currentReviews,
                 reviewId
               )
           );
 
           setActivity(
-            (current) =>
+            (currentReviews) =>
               updateReviewArray(
-                current,
+                currentReviews,
                 reviewId
               )
           );
         } catch (error) {
           console.error(
-            "[UserProfiles] Upvote error:",
+            "[Profile] Upvote error:",
             error
+          );
+
+          Alert.alert(
+            "Unable to update review",
+            error?.message ||
+              "Please try again."
           );
         }
       },
@@ -1335,540 +1008,253 @@ const finalButtonLabel =
   const handleDelete =
     useCallback(
       async (reviewId) => {
-        const combined = [
+        const combinedReviews = [
           ...topReviews,
           ...favorites,
           ...mostUpvoted,
           ...activity,
         ];
 
-        const review =
-          combined.find(
-            (item) =>
-              String(item?.id) ===
-              String(reviewId)
+        const existingReview =
+          combinedReviews.find(
+            (reviewItem) =>
+              reviewItem.id ===
+              reviewId
           );
 
-        if (
-          !review ||
-          !review?.isUser
-        ) {
+        if (!existingReview) {
           return;
         }
 
-        try {
-          await deleteReview(
-            reviewId
+        const currentUserId =
+          String(
+            auth.currentUser?.uid ||
+            ""
           );
 
-          await loadAllReviewsSections();
-        } catch (error) {
-          console.error(
-            "[UserProfiles] Delete error:",
-            error
+        const reviewOwnerId =
+          String(
+            existingReview?.userId ||
+            existingReview?.user_id ||
+            existingReview?.uid ||
+            existingReview?.user?.userId ||
+            existingReview?.user?.uid ||
+            ""
           );
+
+        if (
+          !currentUserId ||
+          !reviewOwnerId ||
+          currentUserId !==
+            reviewOwnerId
+        ) {
+          Alert.alert(
+            "Unable to delete",
+            "You can only delete your own reviews."
+          );
+
+          return;
         }
+
+        Alert.alert(
+          "Delete Review?",
+          "Are you sure you want to delete this review?",
+          [
+            {
+              text: "Cancel",
+              style: "cancel",
+            },
+            {
+              text: "Delete",
+              style: "destructive",
+
+              onPress: async () => {
+                try {
+                  const response =
+                    await deleteReview(
+                      reviewId
+                    );
+
+                  if (
+                    response &&
+                    response.ok ===
+                      false
+                  ) {
+                    throw new Error(
+                      "Unable to delete review."
+                    );
+                  }
+
+                  await loadReviewSections();
+                } catch (error) {
+                  console.error(
+                    "[Profile] Delete error:",
+                    error
+                  );
+
+                  Alert.alert(
+                    "Unable to delete review",
+                    error?.message ||
+                      "Please try again."
+                  );
+                }
+              },
+            },
+          ]
+        );
       },
       [
         activity,
         favorites,
-        loadAllReviewsSections,
+        loadReviewSections,
         mostUpvoted,
         topReviews,
       ]
     );
 
-  const handleFollowPress =
-    useCallback(async () => {
-      if (
-        followLoading ||
-        !currentUserId ||
-        !userId ||
-        isSelf
-      ) {
-        return;
-      }
-
-      try {
-        setFollowLoading(true);
-
-        if (
-            finalButtonLabel === "Following" ||
-            finalButtonLabel === "Friends"
-          ) {
-            const response =
-            await unfollowUser(
-              currentUserId,
-              userId
-            );
-
-          await parseResponse(
-            response,
-            "Unable to unfollow this user."
-          );
-
-          setFollowersCount(
-            (current) =>
-              Math.max(
-                0,
-                current - 1
-              )
-          );
-
-          await Promise.all([
-            fetchTheirFollowers(),
-            fetchMyFollowers(),
-          ]);
-
-          return;
-        }
-
-        if (isPublic) {
-          const response =
-            await followUser(
-              currentUserId,
-              userId
-            );
-
-          await parseResponse(
-            response,
-            "Unable to follow this user."
-          );
-
-          setFollowersCount(
-            (current) =>
-              current + 1
-          );
-
-          await Promise.all([
-            fetchTheirFollowers(),
-            fetchMyFollowers(),
-          ]);
-
-          return;
-        }
-
-        if (!followRequested) {
-          const response =
-            await requestFollow(
-              currentUserId,
-              userId
-            );
-
-          await parseResponse(
-            response,
-            "Unable to send the follow request."
-          );
-
-          setFollowRequested(
-            true
-          );
-
-          if (
-            Platform.OS === "web"
-          ) {
-            window.alert(
-              "Your follow request was sent."
-            );
-          } else {
-            Alert.alert(
-              "Request sent",
-              "Your follow request was sent."
-            );
-          }
-        }
-      } catch (error) {
-        console.error(
-          "[UserProfiles] Follow action error:",
-          error
-        );
-
-        const message =
-          error?.message ||
-          "Please try again.";
-
-        if (
-          Platform.OS === "web"
-        ) {
-          window.alert(
-            message
-          );
-        } else {
-          Alert.alert(
-            "Unable to update follow status",
-            message
-          );
-        }
-      } finally {
-        setFollowLoading(false);
-      }
-    }, [
-    currentUserId,
-    fetchMyFollowers,
-    fetchTheirFollowers,
-    finalButtonLabel,
-    followLoading,
-    followRequested,
-    isPublic,
-    isSelf,
-    parseResponse,
-    userId,
-  ]);
-
   const handleSpotifyBadgePress =
     useCallback(() => {
-      if (
-        Platform.OS === "web"
-      ) {
-        window.alert(
-          "This user has linked their Spotify account."
-        );
-      } else {
-        Alert.alert(
-          "Spotify linked",
-          "This user has linked their Spotify account."
-        );
-      }
+      setBadgePopup({
+        visible: true,
+        title: "Spotify Connected",
+        description:
+          "This Treble profile is connected to Spotify.",
+        image: require("../images/spotifyLogo.png"),
+      });
     }, []);
 
   const handleAdminBadgePress =
     useCallback(() => {
-      if (
-        Platform.OS === "web"
-      ) {
-        window.alert(
-          "This user is a Treble administrator or developer."
-        );
-      } else {
-        Alert.alert(
-          "Treble administrator",
-          "This user is a Treble administrator or developer."
-        );
-      }
+      setBadgePopup({
+        visible: true,
+        title: "Treble Admin",
+        description:
+          "Official Treble administrator and developer badge.",
+        image: require("../images/adminBadge.png"),
+      });
     }, []);
 
-  const avatarSource =
-    avatar
-      ? {
-          uri: avatar,
-        }
-      : FALLBACK_AVATAR;
-
-  const navigateToSongPage =
+  const renderHorizontalReview =
     useCallback(
-      (track) => {
-        const safeTrack = {
-          ...track,
-
-          id: String(
-            track?.id ||
-            track?.listenableId ||
-            track?.listenable_id ||
-            ""
-          ),
-
-          listenableId: String(
-            track?.listenableId ||
-            track?.listenable_id ||
-            track?.id ||
-            ""
-          ),
-
-          listenable_id: String(
-            track?.listenable_id ||
-            track?.listenableId ||
-            track?.id ||
-            ""
-          ),
-
-          type: "track",
-        };
-
-        /*
-         * UserProfiles can be opened from different navigators.
-         * Try the current navigator first, then walk upward.
-         */
-        let currentNavigator =
-          navigation;
-
-        while (currentNavigator) {
-          try {
-            currentNavigator.navigate(
-              "SongPage",
-              {
-                track: safeTrack,
-              }
-            );
-
-            return;
-          } catch (error) {
-            currentNavigator =
-              currentNavigator.getParent?.();
-          }
-        }
-
-        Alert.alert(
-          "Unable to open song",
-          "The Song page could not be opened from this screen."
-        );
-      },
-      [navigation]
+      ({ item }) => (
+        <View
+          style={[
+            styles.reviewSnippetCard,
+            isCompact &&
+              styles.compactReviewSnippetCard,
+          ]}
+        >
+          <ReviewCard
+            item={item}
+            avatar={
+              avatar || noAvatar
+            }
+            handleUpvote={
+              handleUpvote
+            }
+            handleDelete={
+              handleDelete
+            }
+            navigation={navigation}
+            showReplyInput={false}
+            showComments={false}
+            profileReviewMode
+          />
+        </View>
+      ),
+      [
+        avatar,
+        handleDelete,
+        handleUpvote,
+        isCompact,
+        navigation,
+        noAvatar,
+      ]
     );
 
-  const getTrackFromValue =
-    useCallback((value) => {
-      const candidates = [
-        value,
-        value?.song,
-        value?.song?.song,
-        value?.song?.item_info,
-        value?.item_info,
-        value?.track,
-        value?.track?.item_info,
-        value?.listenable,
-        value?.music,
-        value?.musicData,
-      ].filter(Boolean);
-
-      for (const candidate of candidates) {
-        const id =
-          candidate?.id ||
-          candidate?.listenableId ||
-          candidate?.listenable_id ||
-          candidate?.itemId ||
-          candidate?.item_id ||
-          candidate?.musicId ||
-          candidate?.music_id ||
-          value?.listenableId ||
-          value?.listenable_id ||
-          value?.itemId ||
-          value?.item_id ||
-          value?.musicId ||
-          value?.music_id ||
-          "";
-
-        if (!id) {
-          continue;
-        }
-
-        return {
-          ...candidate,
-
-          id: String(id),
-          listenableId: String(id),
-          listenable_id: String(id),
-          type: "track",
-
-          title:
-            candidate?.title ||
-            candidate?.name ||
-            value?.title ||
-            value?.songTitle ||
-            "Unknown Track",
-
-          name:
-            candidate?.name ||
-            candidate?.title ||
-            value?.title ||
-            value?.songTitle ||
-            "Unknown Track",
-
-          image:
-            candidate?.image ||
-            candidate?.coverArt ||
-            candidate?.album?.cover_xl ||
-            candidate?.album?.cover_big ||
-            value?.image ||
-            value?.coverArt ||
-            "",
-
-          coverArt:
-            candidate?.coverArt ||
-            candidate?.image ||
-            candidate?.album?.cover_xl ||
-            candidate?.album?.cover_big ||
-            value?.coverArt ||
-            value?.image ||
-            "",
-
-          artist:
-            candidate?.artist ||
-            (
-              candidate?.artistName
-                ? {
-                    name:
-                      candidate.artistName,
-                  }
-                : value?.artist ||
-                  (
-                    value?.artistName
-                      ? {
-                          name:
-                            value.artistName,
-                        }
-                      : null
-                  )
-            ),
-
-          artistName:
-            candidate?.artistName ||
-            candidate?.artist?.name ||
-            value?.artistName ||
-            value?.artist?.name ||
-            "",
-
-          album:
-            candidate?.album ||
-            value?.album ||
-            null,
-
-          preview:
-            candidate?.preview ||
-            candidate?.previewUrl ||
-            value?.preview ||
-            value?.previewUrl ||
-            "",
-
-          previewUrl:
-            candidate?.previewUrl ||
-            candidate?.preview ||
-            value?.previewUrl ||
-            value?.preview ||
-            "",
-        };
-      }
-
-      return null;
-    }, []);
-
-  const hydrateTrackInBackground =
+  const openLikedSong =
     useCallback(
-      async (track) => {
-        const trackId =
-          String(
-            track?.id ||
-            track?.listenableId ||
-            track?.listenable_id ||
-            ""
-          );
+      async (song) => {
+        const trackId = String(
+          song?.id ||
+          song?.listenableId ||
+          song?.listenable_id ||
+          ""
+        );
 
         if (!trackId) {
+          Alert.alert(
+            "Unable to open song",
+            "This song does not have a valid track ID."
+          );
           return;
         }
 
+        let fullTrack = {
+          ...song,
+          id: trackId,
+          listenableId: trackId,
+          listenable_id: trackId,
+          type: "track",
+        };
+
         try {
           const response =
-            await getSongFromDeezer(
-              trackId
-            );
+            await getSongFromDeezer(trackId);
 
-          if (!response?.ok) {
-            return;
-          }
+          if (response?.ok) {
+            const deezerTrack =
+              await response.json();
 
-          const deezerTrack =
-            await response.json();
-
-          /*
-           * Replace the current SongPage parameters when possible.
-           * SongPage may also hydrate itself, so this is only an
-           * enhancement and never blocks navigation.
-           */
-          navigation.setParams?.({
-            track: {
-              ...track,
+            fullTrack = {
+              ...song,
               ...deezerTrack,
-
               id: String(
                 deezerTrack?.id ||
                 trackId
               ),
-
               listenableId: String(
                 deezerTrack?.listenableId ||
                 deezerTrack?.id ||
                 trackId
               ),
-
               listenable_id: String(
                 deezerTrack?.listenable_id ||
                 deezerTrack?.listenableId ||
                 deezerTrack?.id ||
                 trackId
               ),
-
               type: "track",
-            },
-          });
+              preview:
+                deezerTrack?.preview ||
+                deezerTrack?.previewUrl ||
+                song?.preview ||
+                song?.previewUrl ||
+                "",
+              previewUrl:
+                deezerTrack?.previewUrl ||
+                deezerTrack?.preview ||
+                song?.previewUrl ||
+                song?.preview ||
+                "",
+            };
+          }
         } catch (error) {
           console.warn(
-            "[UserProfiles] Background song hydration failed:",
+            "[Profile] Unable to hydrate song before opening:",
             error
           );
         }
+
+        navigation.navigate(
+          "SongPage",
+          {
+            track: fullTrack,
+          }
+        );
       },
       [navigation]
     );
-
-  const openLikedSong =
-    useCallback(
-      (song) => {
-        const track =
-          getTrackFromValue(song);
-
-        if (!track) {
-          Alert.alert(
-            "Unable to open song",
-            "This song does not have a valid track ID."
-          );
-
-          return;
-        }
-
-        /*
-         * Navigate immediately. Never make the user wait for Deezer.
-         */
-        navigateToSongPage(track);
-
-        hydrateTrackInBackground(
-          track
-        );
-      },
-      [
-        getTrackFromValue,
-        hydrateTrackInBackground,
-        navigateToSongPage,
-      ]
-    );
-
-  const openReviewSong =
-    useCallback(
-      (review) => {
-        const track =
-          getTrackFromValue(review);
-
-        if (!track) {
-          Alert.alert(
-            "Unable to open song",
-            "This review does not contain a valid song."
-          );
-
-          return;
-        }
-
-        navigateToSongPage(track);
-
-        hydrateTrackInBackground(
-          track
-        );
-      },
-      [
-        getTrackFromValue,
-        hydrateTrackInBackground,
-        navigateToSongPage,
-      ]
-    );
-
 
   const renderLikedSongsSection =
     useCallback(
@@ -1889,7 +1275,7 @@ const finalButtonLabel =
                   styles.sectionDescription
                 }
               >
-                Songs they recently liked
+                Songs you recently liked
               </Text>
             </View>
 
@@ -1901,7 +1287,7 @@ const finalButtonLabel =
           {likedSongs.length === 0 ? (
             <View
               style={
-                styles.sectionEmptyBox
+                styles.sectionEmptyState
               }
             >
               <Text
@@ -1936,8 +1322,6 @@ const finalButtonLabel =
                         styles.compactLikedSongCard,
                     ]}
                     activeOpacity={0.82}
-                    accessibilityRole="link"
-                    accessibilityLabel={`Open ${song?.title || song?.name || "song"}`}
                     onPress={() =>
                       openLikedSong(song)
                     }
@@ -1991,7 +1375,7 @@ const finalButtonLabel =
                       >
                         {song?.artistName ||
                           song?.artist?.name ||
-                          ""}
+                          "Unknown Artist"}
                       </Text>
                     </View>
 
@@ -2017,7 +1401,7 @@ const finalButtonLabel =
       ),
       [
         isCompact,
-        isDesktopWeb,
+        isWeb,
         likedSongs,
         openLikedSong,
       ]
@@ -2025,42 +1409,53 @@ const finalButtonLabel =
 
   const renderReviewSection =
     useCallback(
-      (
+      ({
         title,
-        reviews,
-        emptyMessage
-      ) => (
-        <View
-          style={
-            styles.cardSection
-          }
-        >
+        description,
+        data,
+        emptyText,
+      }) => (
+        <View style={styles.cardSection}>
           <View
             style={
               styles.sectionHeader
             }
           >
-            <Text
+            <View
               style={
-                styles.sectionTitle
+                styles.sectionHeadingGroup
               }
             >
-              {title}
-            </Text>
+              <Text
+                style={
+                  styles.sectionTitle
+                }
+              >
+                {title}
+              </Text>
+
+              {description ? (
+                <Text
+                  style={
+                    styles.sectionDescription
+                  }
+                >
+                  {description}
+                </Text>
+              ) : null}
+            </View>
 
             <Text
-              style={
-                styles.sectionCount
-              }
+              style={styles.sectionCount}
             >
-              {reviews.length}
+              {data.length}
             </Text>
           </View>
 
-          {reviews.length === 0 ? (
+          {data.length === 0 ? (
             <View
               style={
-                styles.sectionEmptyBox
+                styles.sectionEmptyState
               }
             >
               <Text
@@ -2068,149 +1463,52 @@ const finalButtonLabel =
                   styles.sectionPlaceholder
                 }
               >
-                {emptyMessage}
+                {emptyText}
               </Text>
             </View>
           ) : (
             <DraggableProfileRow
-              useNativeScroll={
-                !isDesktopWeb
-              }
+              useNativeScroll={!isDesktopWeb}
               contentStyle={
                 styles.horizontalReviewList
               }
             >
-              {reviews.map(
+              {data.map(
                 (item, index) => (
-                  <TouchableOpacity
-                    key={
-                      `${title}-${item?.id || index}`
-                    }
-                    style={
-                      styles.reviewSnippetCard
-                    }
-                    activeOpacity={0.9}
-                    accessibilityRole="link"
-                    accessibilityLabel={`Open ${item?.song?.title || item?.title || "review song"}`}
-                    onPress={() =>
-                      openReviewSong(item)
-                    }
+                  <React.Fragment
+                    key={String(
+                      item?.id ||
+                        `${title}-${index}`
+                    )}
                   >
-                    <ReviewCard
-                      item={
-                        item
-                      }
-                      avatar={
-                        avatar ||
-                        FALLBACK_AVATAR
-                      }
-                      handleUpvote={
-                        handleUpvote
-                      }
-                      handleDelete={
-                        handleDelete
-                      }
-                      navigation={
-                        navigation
-                      }
-                      showReplyInput={false}
-                      showComments={false}
-                      profileReviewMode
-                      onPress={() =>
-                        openReviewSong(item)
-                      }
-                      onSongPress={() =>
-                        openReviewSong(item)
-                      }
-                      onImagePress={() =>
-                        openReviewSong(item)
-                      }
-                    />
-                  </TouchableOpacity>
+                    {renderHorizontalReview({
+                      item,
+                    })}
+                  </React.Fragment>
                 )
               )}
             </DraggableProfileRow>
           )}
         </View>
       ),
-      [
-        avatar,
-        handleDelete,
-        handleUpvote,
-        isDesktopWeb,
-        navigation,
-        openReviewSong,
-      ]
+      [renderHorizontalReview]
     );
 
   if (loading) {
     return (
-      <View
-        style={
-          styles.loader
-        }
-      >
+      <View style={styles.loader}>
         <ActivityIndicator
           size="large"
           color={
-            colours.lightblue ||
-            "#35afe5"
+            colours.lightblue
           }
         />
 
         <Text
-          style={
-            styles.loaderText
-          }
+          style={styles.loadingText}
         >
-          Loading reviews...
+          Loading Profile...
         </Text>
-      </View>
-    );
-  }
-
-  if (
-    errorMessage &&
-    !username
-  ) {
-    return (
-      <View
-        style={
-          styles.loader
-        }
-      >
-        <Text
-          style={
-            styles.errorTitle
-          }
-        >
-          Unable to load profile
-        </Text>
-
-        <Text
-          style={
-            styles.errorText
-          }
-        >
-          {errorMessage}
-        </Text>
-
-        <TouchableOpacity
-          style={
-            styles.retryButton
-          }
-          onPress={() =>
-            fetchUserData(false)
-          }
-        >
-          <Text
-            style={
-              styles.retryButtonText
-            }
-          >
-            Try Again
-          </Text>
-        </TouchableOpacity>
       </View>
     );
   }
@@ -2219,18 +1517,18 @@ const finalButtonLabel =
     <View
       style={[
         styles.container,
-
         isWeb &&
           styles.webContainer,
       ]}
     >
+      {/* =====================================================
+          SIDEBAR
+      ===================================================== */}
       <View
         style={[
           styles.sideMenu,
-
           isDesktopWeb &&
             styles.desktopSideMenu,
-
           isMobileWeb &&
             styles.mobileSideMenu,
         ]}
@@ -2247,19 +1545,18 @@ const finalButtonLabel =
               ? () => {}
               : setMenuOpen
           }
-          isDesktop={
-            isDesktopWeb
-          }
+          isDesktop={isDesktopWeb}
         />
       </View>
 
+      {/* =====================================================
+          PROFILE CONTENT
+      ===================================================== */}
       <View
         style={[
           styles.pageContent,
-
           isDesktopWeb &&
             styles.desktopPageContent,
-
           isMobileWeb &&
             styles.mobilePageContent,
         ]}
@@ -2267,13 +1564,11 @@ const finalButtonLabel =
         <ScrollView
           style={[
             styles.profileScroll,
-
             isWeb &&
               styles.webProfileScroll,
           ]}
           contentContainerStyle={[
             styles.scrollContainer,
-
             isDesktopWeb &&
               styles.desktopScrollContainer,
           ]}
@@ -2281,17 +1576,12 @@ const finalButtonLabel =
             false
           }
           keyboardShouldPersistTaps="handled"
-          refreshing={
-            refreshing
-          }
-          onRefresh={() =>
-            fetchUserData(true)
-          }
+          nestedScrollEnabled
         >
+          {/* PROFILE HEADER */}
           <LinearGradient
             style={[
               styles.profileHeader,
-
               isCompact &&
                 styles.compactProfileHeader,
             ]}
@@ -2308,69 +1598,53 @@ const finalButtonLabel =
             <View style={styles.profileGlowBottom} />
 
             <View
-              style={
-                styles.avatarContainer
-              }
-            >
-              <Image
-                key={
-                  avatar ||
-                  "fallback-avatar"
-                }
-                source={
-                  avatarSource
-                }
-                style={
-                  styles.avatar
-                }
-                onError={() =>
-                  setAvatar(null)
-                }
-              />
-
-              <View
-                style={[
-                  styles.privacyBadge,
-
-                  !isPublic &&
-                    styles.privateBadge,
-                ]}
-              >
-                <Text
-                  style={
-                    styles.privacyBadgeText
-                  }
-                >
-                  {isPublic
-                    ? "Public"
-                    : "Private"}
-                </Text>
-              </View>
-            </View>
-
-            <View
               style={[
-                styles.headerInfo,
-
+                styles.profileMainRow,
                 isCompact &&
-                  styles.compactHeaderInfo,
+                  styles.compactProfileMainRow,
               ]}
             >
-              <Text style={styles.profileEyebrow}>
-                TREBLE COMMUNITY PROFILE
-              </Text>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate(
+                    "EditProfile"
+                  )
+                }
+                activeOpacity={0.8}
+              >
+                <Image
+                  source={
+                    avatar
+                      ? {
+                          uri: avatar,
+                        }
+                      : noAvatar
+                  }
+                  style={[
+                    styles.avatar,
+                    isCompact &&
+                      styles.compactAvatar,
+                  ]}
+                />
+              </TouchableOpacity>
 
               <View
                 style={[
-                  styles.usernameRow,
+                  styles.headerInfo,
                   isCompact &&
-                    styles.compactUsernameRow,
+                    styles.compactHeaderInfo,
                 ]}
               >
+                <Text style={styles.profileEyebrow}>
+                  YOUR TREBLE PROFILE
+                </Text>
+
                 <Text
-                  style={
-                    styles.username
-                  }
+                  style={[
+                    styles.username,
+                    isCompact &&
+                      styles.compactUsername,
+                  ]}
                   numberOfLines={
                     isCompact ? 2 : 1
                   }
@@ -2381,216 +1655,189 @@ const finalButtonLabel =
                   )}
                 </Text>
 
-              </View>
-
-              <View
-                style={[
-                  styles.badgeContainer,
-                  isCompact &&
-                    styles.compactBadgeContainer,
-                ]}
-              >
-                {isSpotifyLinked ? (
-                  <TouchableOpacity
-                    onPress={
-                      handleSpotifyBadgePress
-                    }
-                    style={styles.badgeButton}
+                {email ? (
+                  <Text
+                    style={[
+                      styles.email,
+                      isCompact &&
+                        styles.compactEmail,
+                    ]}
+                    numberOfLines={1}
                   >
-                    <Image
-                      source={SPOTIFY_LOGO}
-                      style={styles.badgeIcon}
-                    />
-                  </TouchableOpacity>
+                    {email}
+                  </Text>
                 ) : null}
 
-                {isAdmin ? (
-                  <TouchableOpacity
-                    onPress={
-                      handleAdminBadgePress
-                    }
-                    style={styles.badgeButton}
-                    accessibilityRole="button"
-                    accessibilityLabel="Treble Admin badge"
-                  >
-                    <Image
-                      source={ADMIN_BADGE}
-                      style={styles.badgeIcon}
-                    />
-                  </TouchableOpacity>
-                ) : null}
+                <View
+                  style={[
+                    styles.badgeContainer,
+                    isCompact &&
+                      styles.compactBadgeContainer,
+                  ]}
+                >
+                  {isSpotifyLinked ? (
+                    <TouchableOpacity
+                      onPress={
+                        handleSpotifyBadgePress
+                      }
+                      style={
+                        styles.badgeButton
+                      }
+                    >
+                      <Image
+                        source={require("../images/spotifyLogo.png")}
+                        style={
+                          styles.badgeIcon
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {isAdmin ? (
+                    <TouchableOpacity
+                      onPress={
+                        handleAdminBadgePress
+                      }
+                      style={
+                        styles.badgeButton
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="Treble Admin badge"
+                    >
+                      <Image
+                        source={require("../images/adminBadge.png")}
+                        style={
+                          styles.badgeIcon
+                        }
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
 
-              <Text
+              {!isCompact ? (
+                <TouchableOpacity
+                  style={
+                    styles.editButton
+                  }
+                  onPress={() =>
+                    navigation.navigate(
+                      "EditProfile"
+                    )
+                  }
+                >
+                  <Text
+                    style={
+                      styles.editButtonText
+                    }
+                  >
+                    Edit Profile
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* SOCIAL STATS */}
+            <View
+              style={
+                styles.socialStatsRow
+              }
+            >
+              <TouchableOpacity
                 style={
-                  styles.profileLabel
+                  styles.statButton
+                }
+                onPress={() =>
+                  navigation.navigate(
+                    "FollowersList"
+                  )
                 }
               >
-                Treble profile
-              </Text>
+                <Text
+                  style={
+                    styles.statNumber
+                  }
+                >
+                  {followers}
+                </Text>
+
+                <Text
+                  style={
+                    styles.statLabel
+                  }
+                >
+                  Followers
+                </Text>
+              </TouchableOpacity>
 
               <View
                 style={
-                  styles.statsRow
+                  styles.statDivider
+                }
+              />
+
+              <TouchableOpacity
+                style={
+                  styles.statButton
+                }
+                onPress={() =>
+                  navigation.navigate(
+                    "FollowingList"
+                  )
                 }
               >
-                <View
+                <Text
                   style={
-                    styles.statBox
+                    styles.statNumber
                   }
                 >
-                  <Text
-                    style={
-                      styles.statNumber
-                    }
-                  >
-                    {
-                      followersCount
-                    }
-                  </Text>
+                  {following}
+                </Text>
 
-                  <Text
-                    style={
-                      styles.statLabel
-                    }
-                  >
-                    Followers
-                  </Text>
-                </View>
-
-                <View
+                <Text
                   style={
-                    styles.statDivider
-                  }
-                />
-
-                <View
-                  style={
-                    styles.statBox
+                    styles.statLabel
                   }
                 >
-                  <Text
-                    style={
-                      styles.statNumber
-                    }
-                  >
-                    {
-                      followingCount
-                    }
-                  </Text>
+                  Following
+                </Text>
+              </TouchableOpacity>
 
-                  <Text
-                    style={
-                      styles.statLabel
-                    }
-                  >
-                    Following
-                  </Text>
-                </View>
+              <View
+                style={
+                  styles.statDivider
+                }
+              />
 
-                <View
+              <View
+                style={
+                  styles.statButton
+                }
+              >
+                <Text
                   style={
-                    styles.statDivider
-                  }
-                />
-
-                <View
-                  style={
-                    styles.statBox
+                    styles.statNumber
                   }
                 >
-                  <Text
-                    style={
-                      styles.statNumber
-                    }
-                  >
-                    {
-                      totalReviews
-                    }
-                  </Text>
+                  {totalReviews}
+                </Text>
 
-                  <Text
-                    style={
-                      styles.statLabel
-                    }
-                  >
-                    Reviews
-                  </Text>
-                </View>
+                <Text
+                  style={
+                    styles.statLabel
+                  }
+                >
+                  Reviews
+                </Text>
               </View>
             </View>
 
-            {!isSelf ? (
-              <View
-                style={[
-                  styles.followContainer,
-
-                  isCompact &&
-                    styles.compactFollowContainer,
-                ]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.followButton,
-
-                    (
-                      finalButtonLabel === "Following" ||
-                      finalButtonLabel === "Friends"
-                    ) &&
-                      styles.followingButton,
-
-                    finalButtonLabel ===
-                      "Requested" &&
-                      styles.requestedButton,
-
-                    followLoading &&
-                      styles.disabledButton,
-                  ]}
-                  onPress={
-                    handleFollowPress
-                  }
-                  disabled={
-                    followLoading ||
-                    finalButtonLabel ===
-                      "Requested"
-                  }
-                  activeOpacity={
-                    0.8
-                  }
-                >
-                  {followLoading ? (
-                    <ActivityIndicator
-                      size="small"
-                      color="#ffffff"
-                    />
-                  ) : (
-                    <Text
-                      style={
-                        styles.followButtonText
-                      }
-                    >
-                      {
-                        finalButtonLabel
-                      }
-                    </Text>
-                  )}
-                </TouchableOpacity>
-
-                {isFriend ? (
-                <Text style={styles.friendText}>
-                  ✓ Friends — Music Sharing Enabled
-                </Text>
-              ) : theyFollowMe && !iAmFollowing ? (
-                <Text style={styles.followsYouText}>
-                  Follows you
-                </Text>
-              ) : null}
-              </View>
-            ) : (
+            {isCompact ? (
               <TouchableOpacity
-                style={
-                  styles.editProfileButton
-                }
+                style={[
+                  styles.editButton,
+                  styles.compactEditButton,
+                ]}
                 onPress={() =>
                   navigation.navigate(
                     "EditProfile"
@@ -2599,192 +1846,162 @@ const finalButtonLabel =
               >
                 <Text
                   style={
-                    styles.editProfileButtonText
+                    styles.editButtonText
                   }
                 >
                   Edit Profile
                 </Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </LinearGradient>
 
-          {!canViewFullContent ? (
+          {/* REVIEW SECTIONS */}
+          {renderReviewSection({
+            title: "Top Reviews",
+            description:
+              "Your strongest reviews",
+            data: topReviews,
+            emptyText:
+              "No top reviews yet.",
+          })}
+
+          {renderLikedSongsSection()}
+
+          {renderReviewSection({
+            title: "Favourites",
+            description:
+              "Reviews you marked as favourites",
+            data: favorites,
+            emptyText:
+              "No favourite reviews yet.",
+          })}
+
+          {renderReviewSection({
+            title: "Most Upvoted",
+            description:
+              "Reviews with the most community support",
+            data: mostUpvoted,
+            emptyText:
+              "No upvoted reviews yet.",
+          })}
+
+          {/* LATEST ACTIVITY */}
+          <View
+            style={[
+              styles.cardSection,
+              styles.activitySection,
+            ]}
+          >
             <View
               style={
-                styles.privateContainer
+                styles.sectionHeader
               }
             >
               <View
                 style={
-                  styles.privateIcon
+                  styles.sectionHeadingGroup
                 }
               >
                 <Text
                   style={
-                    styles.privateIconText
+                    styles.sectionTitle
                   }
                 >
-                  🔒
+                  Latest Activity
+                </Text>
+
+                <Text
+                  style={
+                    styles.sectionDescription
+                  }
+                >
+                  Newest to oldest
                 </Text>
               </View>
 
               <Text
                 style={
-                  styles.privateText
+                  styles.sectionCount
                 }
               >
-                This profile is private
-              </Text>
-
-              <Text
-                style={
-                  styles.privateText2
-                }
-              >
-                Send a follow request to view this user’s reviews, favourites, and activity.
+                {totalReviews}
               </Text>
             </View>
-          ) : (
-            <>
-              {renderReviewSection(
-                "Top Reviews",
-                topReviews,
-                "No top reviews yet."
-              )}
 
-              {renderLikedSongsSection()}
-
-              {renderReviewSection(
-                "Favourites",
-                favorites,
-                "No favourites yet."
-              )}
-
-              {renderReviewSection(
-                "Most Upvoted",
-                mostUpvoted,
-                "No upvoted reviews yet."
-              )}
-
+            {activity.length === 0 ? (
               <View
                 style={
-                  styles.cardSection
+                  styles.activityEmptyState
                 }
               >
-                <View
+                <Text
                   style={
-                    styles.activityHeader
+                    styles.activityEmptyTitle
                   }
                 >
-                  <View>
-                    <Text
-                      style={
-                        styles.sectionTitle
-                      }
-                    >
-                      Activity
-                    </Text>
+                  No activity yet
+                </Text>
 
-                    <Text
+                <Text
+                  style={
+                    styles.sectionPlaceholder
+                  }
+                >
+                  Start reviewing songs, albums, and artists.
+                </Text>
+              </View>
+            ) : (
+              <View
+                style={
+                  styles.activityContainer
+                }
+              >
+                {activity.map(
+                  (
+                    item,
+                    index
+                  ) => (
+                    <View
+                      key={String(
+                        item?.id ||
+                          `activity-${index}`
+                      )}
                       style={
-                        styles.activitySubtitle
+                        styles.activityReviewWrapper
                       }
                     >
-                      Newest reviews first
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.activityCountBadge
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.activityCountText
-                      }
-                    >
-                      {
-                        totalReviews
-                      }
-                    </Text>
-                  </View>
-                </View>
-
-                {activity.length ===
-                0 ? (
-                  <View
-                    style={
-                      styles.sectionEmptyBox
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.sectionPlaceholder
-                      }
-                    >
-                      No activity found.
-                    </Text>
-                  </View>
-                ) : (
-                  <View
-                    style={
-                      styles.activityContainer
-                    }
-                  >
-                    {activity.map(
-                      (
-                        item,
-                        index
-                      ) => (
-                        <TouchableOpacity
-                          key={`activity-${item?.id || index}`}
-                          style={
-                            styles.activityReviewWrapper
-                          }
-                          activeOpacity={0.94}
-                          onPress={() =>
-                            openReviewSong(item)
-                          }
-                        >
-                          <ReviewCard
-                            item={
-                              item
-                            }
-                            avatar={
-                              avatar ||
-                              FALLBACK_AVATAR
-                            }
-                            handleUpvote={
-                              handleUpvote
-                            }
-                            handleDelete={
-                              handleDelete
-                            }
-                            navigation={
-                              navigation
-                            }
-                            showReplyInput={false}
-                            showComments={false}
-                            profileReviewMode
-                            onPress={() =>
-                              openReviewSong(item)
-                            }
-                            onSongPress={() =>
-                              openReviewSong(item)
-                            }
-                            onImagePress={() =>
-                              openReviewSong(item)
-                            }
-                          />
-                        </TouchableOpacity>
-                      )
-                    )}
-                  </View>
+                      <ReviewCard
+                        item={item}
+                        avatar={
+                          avatar
+                            ? {
+                                uri: avatar,
+                              }
+                            : noAvatar
+                        }
+                        handleUpvote={
+                          handleUpvote
+                        }
+                        handleDelete={
+                          handleDelete
+                        }
+                        navigation={
+                          navigation
+                        }
+                        showReplyInput={
+                          false
+                        }
+                        showComments={
+                          false
+                        }
+                        profileReviewMode
+                      />
+                    </View>
+                  )
                 )}
               </View>
-            </>
-          )}
+            )}
+          </View>
         </ScrollView>
       </View>
 
@@ -2839,1123 +2056,910 @@ const finalButtonLabel =
         </TouchableOpacity>
       </Modal>
 
+      {/* MOBILE BOTTOM NAVIGATION */}
       <View
         style={[
           styles.bottomNavBar,
-
-          isDesktopWeb &&
-            styles.desktopBottomNavBar,
+          isDesktopWeb && styles.desktopBottomNavBar,
         ]}
       >
-        <BottomNavbar />
+        <BottomNavbar />  
       </View>
     </View>
   );
 }
 
-const styles =
-  StyleSheet.create({
-
-    followsYouText: {
-  color: "rgba(255,255,255,0.6)",
-
-  fontSize: 12,
-  fontWeight: "700",
-
-  marginTop: 8,
+const styles = StyleSheet.create({
+  /* =====================================================
+     PAGE
+  ===================================================== */
+desktopBottomNavBar: {
+  left: DESKTOP_SIDEBAR_WIDTH,
+  right: 0,
 },
-    mobileHorizontalScroller: {
-      width: "100%",
-      flexGrow: 0,
-    },
+  mobileHorizontalScroller: {
+    width: "100%",
+    flexGrow: 0,
+  },
 
-    container: {
-      flex: 1,
-      minHeight: 0,
+  container: {
+    flex: 1,
+    minHeight: 0,
 
-      backgroundColor:
-        colours.background ||
-        colours.bluegrey ||
-        "#101010",
-    },
+    backgroundColor:
+      colours.background,
+  },
 
-    webContainer: {
-      width: "100%",
-      height: "100vh",
+  webContainer: {
+    width: "100%",
+    height: "100vh",
 
-      minHeight: 0,
+    minHeight: 0,
 
-      overflow: "hidden",
-    },
+    overflow: "hidden",
+  },
 
-    loader: {
-      flex: 1,
+  loader: {
+    flex: 1,
 
-      alignItems: "center",
-      justifyContent: "center",
+    alignItems: "center",
+    justifyContent: "center",
 
-      paddingHorizontal: 24,
+    backgroundColor:
+      colours.background,
+  },
 
-      backgroundColor:
-        colours.background ||
-        colours.bluegrey ||
-        "#101010",
-    },
+  loadingText: {
+    color:
+      "rgba(255,255,255,0.7)",
 
-    loaderText: {
-      color:
-        "rgba(255,255,255,0.65)",
+    fontSize: 14,
 
-      fontSize: 14,
+    marginTop: 12,
+  },
 
-      marginTop: 12,
-    },
+  /* =====================================================
+     SIDEBAR
+  ===================================================== */
 
-    errorTitle: {
-      color: "#ffffff",
-
-      fontSize: 22,
-      fontWeight: "800",
-
-      textAlign: "center",
-    },
-
-    errorText: {
-      maxWidth: 420,
-
-      color:
-        "rgba(255,255,255,0.6)",
-
-      fontSize: 14,
-      lineHeight: 21,
-
-      textAlign: "center",
-
-      marginTop: 8,
-    },
-
-    retryButton: {
-      minWidth: 130,
-      height: 42,
-
-      alignItems: "center",
-      justifyContent: "center",
-
-      marginTop: 18,
-
-      borderRadius: 21,
-
-      backgroundColor: "#149fd3",
-    },
-
-    retryButtonText: {
-      color: "#ffffff",
-
-      fontSize: 14,
-      fontWeight: "800",
-    },
-
-    sideMenu: {
-      position: "absolute",
-
-      top: 40,
-      left: 0,
-      bottom: 0,
-
-      zIndex: 100,
-      elevation: 20,
-    },
-
-    desktopSideMenu: {
-      position: "fixed",
-
-      top: 0,
-      left: 0,
-      right: undefined,
-      bottom: 0,
-
-      width:
-        DESKTOP_SIDEBAR_WIDTH,
-
-      height: "100vh",
-
-      overflow: "hidden",
-
-      zIndex: 100,
-      elevation: 20,
-    },
-
-    mobileSideMenu: {
-      position: "absolute",
-
-      top: 40,
-      left: 0,
-      right: undefined,
-      bottom: 0,
-
-      zIndex: 100,
-    },
-
-    pageContent: {
-      flex: 1,
-      minHeight: 0,
-
-      paddingBottom: 0,
-
-      overflow: "hidden",
-    },
-
-    desktopPageContent: {
-      position: "absolute",
-
-      top: 0,
-
-      left:
-        DESKTOP_SIDEBAR_WIDTH,
-
-      right: 0,
-
-      bottom:
-        BOTTOM_NAV_HEIGHT,
-
-      minHeight: 0,
-
-      paddingTop: 24,
-      paddingHorizontal: 28,
-
-      overflow: "hidden",
-    },
-
-    mobilePageContent: {
+  sideMenu: {
     position: "absolute",
+
+    top: 40,
+    left: 0,
+    bottom: 0,
+
+    zIndex: 100,
+    elevation: 20,
+  },
+
+  desktopSideMenu: {
+    position: "fixed",
 
     top: 0,
     left: 0,
+    right: undefined,
+    bottom: 0,
+
+    width:
+      DESKTOP_SIDEBAR_WIDTH,
+
+    height: "100vh",
+
+    overflow: "hidden",
+
+    zIndex: 100,
+    elevation: 20,
+  },
+
+  mobileSideMenu: {
+    position: "absolute",
+
+    top: 40,
+    left: 0,
+    right: undefined,
+    bottom: 0,
+
+    zIndex: 100,
+  },
+
+  /* =====================================================
+     PAGE CONTENT AND SCROLLING
+  ===================================================== */
+
+  pageContent: {
+  flex: 1,
+  minHeight: 0,
+
+  paddingBottom: 0,
+
+  overflow: "hidden",
+},
+
+  desktopPageContent: {
+    position: "absolute",
+
+    top: 0,
+    left:
+      DESKTOP_SIDEBAR_WIDTH,
     right: 0,
     bottom: 0,
 
     minHeight: 0,
 
-    paddingTop: 69,
-    paddingBottom: BOTTOM_NAV_HEIGHT,
-    paddingHorizontal: 12,
+    paddingTop: 24,
+    paddingLeft: 28,
+    paddingRight: 28,
 
     overflow: "hidden",
   },
 
-    profileScroll: {
-      flex: 1,
-      minHeight: 0,
-
-      width: "100%",
-    },
-
-    webProfileScroll: {
-      height: "100%",
-
-      overflowY: "auto",
-      overflowX: "hidden",
-
-      WebkitOverflowScrolling:
-        "touch",
-
-      scrollbarWidth: "none",
-      msOverflowStyle: "none",
-    },
-
-    scrollContainer: {
-      width: "100%",
-
-      paddingBottom: 45,
-    },
-
-    desktopScrollContainer: {
-      width: "100%",
-
-      maxWidth:
-        MAX_CONTENT_WIDTH,
-
-      alignSelf: "center",
-    },
-
-    profileHeader: {
-      position: "relative",
-      overflow: "hidden",
-
-      width: "100%",
-
-      flexDirection: "row",
-      alignItems: "center",
-
-      padding: 26,
-      marginBottom: 26,
-
-      borderWidth: 1,
-      borderColor:
-        "rgba(53,175,229,0.30)",
-
-      borderRadius: 25,
-
-      shadowColor: "#000000",
-      shadowOffset: {
-        width: 0,
-        height: 8,
-      },
-      shadowOpacity: 0.22,
-      shadowRadius: 18,
-
-      elevation: 7,
-    },
-
-    profileGlowTop: {
-      position: "absolute",
-      top: -95,
-      right: -50,
-
-      width: 230,
-      height: 230,
-
-      borderRadius: 115,
-
-      backgroundColor:
-        "rgba(53,175,229,0.13)",
-    },
-
-    profileGlowBottom: {
-      position: "absolute",
-      left: 90,
-      bottom: -120,
-
-      width: 220,
-      height: 220,
-
-      borderRadius: 110,
+  mobilePageContent: {
+  position: "absolute",
 
-      backgroundColor:
-        "rgba(103,80,255,0.08)",
-    },
-
-    compactProfileHeader: {
-      flexDirection: "column",
-
-      alignItems: "center",
-    },
-
-    avatarContainer: {
-      position: "relative",
-
-      flexShrink: 0,
-    },
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
 
-    avatar: {
-      width: 118,
-      height: 118,
+  minHeight: 0,
 
-      borderWidth: 3,
-      borderColor:
-        "rgba(53,175,229,0.72)",
+  paddingTop: 69,
+  paddingBottom: BOTTOM_NAV_HEIGHT,
+  paddingHorizontal: 12,
 
-      borderRadius: 59,
+  overflow: "hidden",
+},
 
-      resizeMode: "cover",
+  profileScroll: {
+    flex: 1,
+    minHeight: 0,
 
-      backgroundColor:
-        "rgba(255,255,255,0.08)",
-    },
-
-    privacyBadge: {
-      position: "absolute",
-
-      left: "50%",
-      bottom: -9,
-
-      minWidth: 68,
-      height: 25,
+    width: "100%",
+  },
 
-      alignItems: "center",
-      justifyContent: "center",
+  webProfileScroll: {
+    height: "100%",
 
-      paddingHorizontal: 10,
+    overflowY: "auto",
+    overflowX: "hidden",
 
-      borderWidth: 2,
-      borderColor:
-        colours.darkblue ||
-        "#142334",
+    WebkitOverflowScrolling:
+      "touch",
 
-      borderRadius: 13,
+    overscrollBehaviorY:
+      "contain",
 
-      transform: [
-        {
-          translateX: -34,
-        },
-      ],
+    scrollbarWidth: "none",
+    msOverflowStyle: "none",
+  },
 
-      backgroundColor:
-        colours.secondaryblue ||
-        "#299acb",
-    },
-
-    privateBadge: {
-      backgroundColor:
-        "#777777",
-    },
+  scrollContainer: {
+    width: "100%",
 
-    privacyBadgeText: {
-      color: "#ffffff",
+    paddingBottom: 115,
+  },
 
-      fontSize: 10,
-      fontWeight: "800",
-    },
+  desktopScrollContainer: {
+    width: "100%",
+    maxWidth:
+      MAX_PROFILE_WIDTH,
 
-    headerInfo: {
-      flex: 1,
-      minWidth: 0,
+    alignSelf: "center",
 
-      marginLeft: 24,
-    },
+    paddingBottom: 65,
+  },
 
-    /*
-     * On mobile the profile header becomes vertical. Reset the
-     * desktop left margin and add space below the avatar badge.
-     */
-    compactHeaderInfo: {
-      width: "100%",
+  /* =====================================================
+     PROFILE HEADER
+  ===================================================== */
 
-      alignItems: "center",
+  profileHeader: {
+    position: "relative",
+    overflow: "hidden",
 
-      marginLeft: 0,
-      marginTop: 30,
-    },
+    width: "100%",
 
-    usernameRow: {
-      width: "100%",
+    padding: 24,
+    marginBottom: 24,
 
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "flex-start",
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.30)",
 
-      flexWrap: "wrap",
-    },
+    borderRadius: 25,
 
-    compactUsernameRow: {
-      justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 8,
     },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
 
-    profileEyebrow: {
-      color:
-        colours.lightblue ||
-        "#35afe5",
+    elevation: 7,
+  },
 
-      fontSize: 9,
-      fontWeight: "900",
-      letterSpacing: 1.6,
+  profileGlowTop: {
+    position: "absolute",
+    top: -95,
+    right: -55,
 
-      marginBottom: 4,
-    },
-
-    username: {
-      flexShrink: 1,
-      minWidth: 0,
-      maxWidth: "100%",
+    width: 230,
+    height: 230,
 
-      color: "#ffffff",
-
-      fontSize: 29,
-      lineHeight: 34,
-      fontWeight: "900",
-    },
+    borderRadius: 115,
 
-    profileLabel: {
-      color:
-        "rgba(255,255,255,0.52)",
+    backgroundColor:
+      "rgba(53,175,229,0.13)",
+  },
 
-      fontSize: 13,
+  profileGlowBottom: {
+    position: "absolute",
+    left: 90,
+    bottom: -120,
 
-      marginTop: 2,
-    },
+    width: 220,
+    height: 220,
 
-    badgeContainer: {
-      flexDirection: "row",
-      alignItems: "center",
+    borderRadius: 110,
 
-      alignSelf: "flex-start",
+    backgroundColor:
+      "rgba(103,80,255,0.08)",
+  },
 
-      marginTop: 10,
+  compactProfileHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 16,
 
-      gap: 8,
-    },
+    borderRadius: 18,
+  },
 
-    compactBadgeContainer: {
-      alignSelf: "center",
-      justifyContent: "center",
-    },
+  profileMainRow: {
+    width: "100%",
 
-    badgeButton: {
-      width: 36,
-      height: 36,
+    flexDirection: "row",
+    alignItems: "center",
+  },
 
-      alignItems: "center",
-      justifyContent: "center",
+  compactProfileMainRow: {
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(53,175,229,0.30)",
+  avatar: {
+    width: 104,
+    height: 104,
 
-      borderRadius: 18,
+    marginRight: 20,
 
-      backgroundColor:
-        "rgba(255,255,255,0.07)",
-    },
+    borderRadius: 52,
 
-    badgeIcon: {
-      width: 25,
-      height: 25,
+    borderWidth: 3,
+    borderColor:
+      "rgba(53,175,229,0.48)",
 
-      resizeMode: "contain",
-    },
+    backgroundColor:
+      "rgba(255,255,255,0.08)",
+  },
 
-    statsRow: {
-      flexDirection: "row",
-      alignItems: "center",
+  compactAvatar: {
+    width: 88,
+    height: 88,
 
-      marginTop: 19,
-    },
+    marginRight: 0,
+    marginBottom: 10,
 
-    statBox: {
-      minWidth: 78,
+    borderRadius: 44,
+  },
 
-      alignItems: "flex-start",
-    },
+  headerInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
 
-    statNumber: {
-      color: "#ffffff",
+  compactHeaderInfo: {
+    width: "100%",
+    flex: 0,
 
-      fontSize: 18,
-      fontWeight: "900",
-    },
+    alignItems: "center",
 
-    statLabel: {
-      color:
-        "rgba(255,255,255,0.5)",
+    marginTop: 0,
+  },
 
-      fontSize: 11,
+  profileEyebrow: {
+    color:
+      colours.lightblue ||
+      "#35afe5",
 
-      marginTop: 2,
-    },
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.6,
 
-    statDivider: {
-      width: 1,
-      height: 34,
+    marginBottom: 4,
+  },
 
-      marginHorizontal: 18,
+  username: {
+    maxWidth: "100%",
 
-      backgroundColor:
-        "rgba(255,255,255,0.11)",
-    },
+    color: "#ffffff",
 
-    followContainer: {
-      alignItems: "center",
+    fontSize: 29,
+    lineHeight: 34,
+    fontWeight: "900",
+  },
 
-      flexShrink: 0,
+  compactUsername: {
+    width: "100%",
 
-      marginLeft: 20,
-    },
+    fontSize: 25,
+    lineHeight: 30,
 
-    compactFollowContainer: {
-      width: "100%",
+    textAlign: "center",
+  },
 
-      marginLeft: 0,
-      marginTop: 24,
-    },
+  email: {
+    color:
+      "rgba(255,255,255,0.57)",
 
-    followButton: {
-      borderWidth: 1,
-      borderColor:
-        "rgba(255,255,255,0.16)",
-      minWidth: 125,
-      height: 44,
+    fontSize: 14,
+    lineHeight: 20,
 
-      alignItems: "center",
-      justifyContent: "center",
+    marginTop: 3,
+  },
 
-      paddingHorizontal: 20,
+  compactEmail: {
+    width: "100%",
+    textAlign: "center",
+  },
 
-      borderRadius: 22,
+  badgeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
 
-      backgroundColor:
-        colours.lightblue ||
-        "#35afe5",
-    },
+    marginTop: 9,
 
-    followingButton: {
-      backgroundColor:
-        "#237fa9",
-    },
+    gap: 8,
+  },
 
-    requestedButton: {
-      backgroundColor:
-        "#777777",
-    },
+  compactBadgeContainer: {
+    width: "100%",
 
-    followButtonText: {
-      color: "#ffffff",
+    justifyContent: "center",
 
-      fontSize: 14,
-      fontWeight: "900",
-    },
+    marginTop: 7,
+    marginBottom: 0,
+  },
 
-    disabledButton: {
-      opacity: 0.55,
-    },
+  badgeButton: {
+    width: 33,
+    height: 33,
 
-    friendText: {
-      color:
-        colours.lightblue ||
-        "#35afe5",
+    alignItems: "center",
+    justifyContent: "center",
 
-      fontSize: 12,
-      fontWeight: "800",
+    borderRadius: 17,
 
-      marginTop: 8,
-    },
+    backgroundColor:
+      "rgba(255,255,255,0.07)",
+  },
 
-    editProfileButton: {
-      minWidth: 125,
-      height: 44,
+  badgeIcon: {
+    width: 23,
+    height: 23,
 
-      alignItems: "center",
-      justifyContent: "center",
+    resizeMode: "contain",
+  },
 
-      flexShrink: 0,
+  editButton: {
+    minHeight: 43,
 
-      marginLeft: 20,
-      paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
 
-      borderWidth: 1,
-      borderColor:
-        colours.lightblue ||
-        "#35afe5",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
 
-      borderRadius: 22,
+    borderRadius: 22,
 
-      backgroundColor:
-        "rgba(20,159,211,0.20)",
-    },
+    backgroundColor: "#149fd3",
 
-    editProfileButtonText: {
-      color: "#ffffff",
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.72)",
+  },
 
-      fontSize: 14,
-      fontWeight: "800",
-    },
+  compactEditButton: {
+    width: "100%",
 
-    cardSection: {
-      overflow: "hidden",
-      width: "100%",
+    marginTop: 13,
+  },
 
-      padding: 20,
-      marginBottom: 18,
+  editButtonText: {
+    color: "#ffffff",
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(255,255,255,0.09)",
+    fontSize: 14,
+    fontWeight: "800",
+  },
 
-      borderRadius: 18,
+  /* =====================================================
+     PROFILE STATISTICS
+  ===================================================== */
 
-      backgroundColor:
-        "rgba(27,27,29,0.98)",
-    },
+  socialStatsRow: {
+    width: "100%",
 
-    sectionHeader: {
-      width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
 
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
+    marginTop: 13,
+    paddingTop: 15,
 
-      marginBottom: 14,
-    },
+    borderTopWidth: 1,
+    borderTopColor:
+      "rgba(255,255,255,0.1)",
+  },
 
-    sectionHeadingGroup: {
-      flex: 1,
-      minWidth: 0,
-    },
+  statButton: {
+    flex: 1,
 
-    sectionDescription: {
-      color:
-        "rgba(255,255,255,0.52)",
+    alignItems: "center",
+    justifyContent: "center",
 
-      fontSize: 12,
-      lineHeight: 17,
+    paddingHorizontal: 8,
+  },
 
-      marginTop: 3,
-    },
+  statNumber: {
+    color: "#ffffff",
 
-    sectionTitle: {
-      color:
-        colours.lightblue ||
-        "#35afe5",
-
-      fontSize: 20,
-      lineHeight: 26,
-      fontWeight: "900",
-    },
+    fontSize: 21,
+    lineHeight: 27,
+    fontWeight: "800",
+  },
 
-    sectionCount: {
-      minWidth: 30,
-      height: 26,
+  statLabel: {
+    color:
+      "rgba(255,255,255,0.56)",
 
-      color: "#ffffff",
+    fontSize: 12,
+    lineHeight: 17,
 
-      fontSize: 12,
-      lineHeight: 26,
-      fontWeight: "800",
+    marginTop: 2,
+  },
 
-      textAlign: "center",
+  statDivider: {
+    width: 1,
+    height: 34,
 
-      paddingHorizontal: 8,
+    backgroundColor:
+      "rgba(255,255,255,0.12)",
+  },
 
-      borderRadius: 13,
+  /* =====================================================
+     PROFILE SECTIONS
+  ===================================================== */
 
-      backgroundColor:
-        "rgba(255,255,255,0.1)",
-    },
+  cardSection: {
+    overflow: "hidden",
+    width: "100%",
 
-    horizontalReviewList: {
-      paddingRight: 12,
-    },
+    padding: 18,
+    marginBottom: 17,
 
-    likedSongsSubtitle: {
-      color:
-        "rgba(255,255,255,0.48)",
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.22)",
 
-      fontSize: 12,
+    borderRadius: 17,
 
-      marginTop: 2,
-    },
+    backgroundColor:
+      "rgba(27,27,29,0.98)",
 
-    horizontalLikedList: {
-      paddingRight: 12,
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
     },
-
-    likedSongCard: {
-      position: "relative",
-
-      width: 188,
+    shadowOpacity: 0.14,
+    shadowRadius: 9,
 
-      flexShrink: 0,
+    elevation: 3,
+  },
 
-      marginRight: 13,
+  sectionHeader: {
+    width: "100%",
 
-      overflow: "hidden",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent:
+      "space-between",
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(53,175,229,0.30)",
+    marginBottom: 13,
+  },
 
-      borderRadius: 14,
+  sectionHeadingGroup: {
+    flex: 1,
+    minWidth: 0,
 
-      backgroundColor:
-        "rgba(16,22,30,0.98)",
+    paddingRight: 12,
+  },
 
-      shadowColor:
-        colours.lightblue ||
-        "#35afe5",
-      shadowOffset: {
-        width: 0,
-        height: 5,
-      },
-      shadowOpacity: 0.16,
-      shadowRadius: 10,
-      elevation: 3,
-    },
+  sectionTitle: {
+    color:
+      colours.lightblue,
 
-    compactLikedSongCard: {
-      width: 158,
-    },
+    fontSize: 19,
+    lineHeight: 25,
+    fontWeight: "800",
+  },
 
-    likedSongImage: {
-      width: "100%",
-      height: 158,
+  sectionDescription: {
+    color:
+      "rgba(255,255,255,0.48)",
 
-      resizeMode: "cover",
+    fontSize: 12,
+    lineHeight: 17,
 
-      backgroundColor:
-        "rgba(255,255,255,0.06)",
-    },
+    marginTop: 2,
+  },
 
-    likedSongPlaceholder: {
-      width: "100%",
-      height: 158,
+  sectionCount: {
+    minWidth: 31,
+    height: 31,
 
-      alignItems: "center",
-      justifyContent: "center",
+    color: "#ffffff",
 
-      backgroundColor:
-        "rgba(255,255,255,0.06)",
-    },
+    fontSize: 12,
+    lineHeight: 31,
+    fontWeight: "800",
 
-    likedSongPlaceholderText: {
-      color:
-        "rgba(255,255,255,0.65)",
+    textAlign: "center",
 
-      fontSize: 42,
-    },
+    borderRadius: 16,
 
-    likedSongInfo: {
-      paddingHorizontal: 12,
-      paddingTop: 11,
-      paddingBottom: 13,
-    },
+    backgroundColor:
+      "rgba(255,255,255,0.07)",
+  },
 
-    likedSongTitle: {
-      color: "#ffffff",
+  sectionEmptyState: {
+    minHeight: 76,
 
-      fontSize: 14,
-      lineHeight: 19,
-      fontWeight: "800",
-    },
+    alignItems: "center",
+    justifyContent: "center",
 
-    likedSongArtist: {
-      color:
-        "rgba(255,255,255,0.54)",
+    paddingHorizontal: 16,
 
-      fontSize: 12,
-      lineHeight: 17,
+    borderRadius: 12,
 
-      marginTop: 2,
-    },
+    backgroundColor:
+      "rgba(255,255,255,0.035)",
+  },
 
-    likedSongHeartBadge: {
-      position: "absolute",
+  sectionPlaceholder: {
+    color:
+      "rgba(255,255,255,0.6)",
 
-      top: 9,
-      right: 9,
+    fontSize: 14,
+    lineHeight: 20,
 
-      width: 30,
-      height: 30,
+    textAlign: "center",
+  },
 
-      alignItems: "center",
-      justifyContent: "center",
+  horizontalReviewList: {
+    paddingRight: 4,
+  },
 
-      borderRadius: 15,
+  reviewSnippetCard: {
+    width: 360,
+    minHeight: 220,
 
-      backgroundColor:
-        "rgba(0,0,0,0.72)",
-    },
+    marginRight: 14,
 
-    likedSongHeart: {
-      color:
-        colours.lightblue ||
-        "#35afe5",
+    overflow: "hidden",
 
-      fontSize: 16,
-      lineHeight: 18,
-    },
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.24)",
 
-    reviewSnippetCard: {
-      width: 360,
-      minHeight: 220,
+    borderRadius: 16,
 
-      marginRight: 14,
+    backgroundColor:
+      "rgba(16,22,30,0.98)",
+  },
 
-      overflow: "hidden",
+  compactReviewSnippetCard: {
+    width: 300,
+    minHeight: 220,
+  },
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(53,175,229,0.28)",
+  horizontalLikedList: {
+    paddingRight: 4,
+  },
 
-      borderRadius: 16,
+  likedSongCard: {
+    position: "relative",
 
-      backgroundColor:
-        "rgba(16,22,30,0.98)",
-    },
+    width: 188,
 
-    sectionEmptyBox: {
-      width: "100%",
+    flexShrink: 0,
 
-      alignItems: "center",
-      justifyContent: "center",
+    marginRight: 13,
 
-      minHeight: 76,
+    overflow: "hidden",
 
-      padding: 15,
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.28)",
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(255,255,255,0.07)",
+    borderRadius: 14,
 
-      borderRadius: 12,
+    backgroundColor:
+      "rgba(16,22,30,0.98)",
+  },
 
-      backgroundColor:
-        "rgba(255,255,255,0.025)",
-    },
+  compactLikedSongCard: {
+    width: 158,
+  },
 
-    sectionPlaceholder: {
-      color:
-        "rgba(255,255,255,0.5)",
+  likedSongImage: {
+    width: "100%",
+    height: 158,
 
-      fontSize: 14,
-      fontStyle: "italic",
+    resizeMode: "cover",
 
-      textAlign: "center",
-    },
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
+  },
 
-    activityHeader: {
-      width: "100%",
+  likedSongPlaceholder: {
+    width: "100%",
+    height: 158,
 
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
+    alignItems: "center",
+    justifyContent: "center",
 
-      marginBottom: 15,
-    },
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
+  },
 
-    activitySubtitle: {
-      color:
-        "rgba(255,255,255,0.48)",
+  likedSongPlaceholderText: {
+    color:
+      "rgba(255,255,255,0.65)",
 
-      fontSize: 12,
+    fontSize: 42,
+  },
 
-      marginTop: 2,
-    },
+  likedSongInfo: {
+    paddingHorizontal: 12,
+    paddingTop: 11,
+    paddingBottom: 13,
+  },
 
-    activityCountBadge: {
-      minWidth: 38,
-      height: 30,
+  likedSongTitle: {
+    color: "#ffffff",
 
-      alignItems: "center",
-      justifyContent: "center",
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "800",
+  },
 
-      paddingHorizontal: 10,
+  likedSongArtist: {
+    color:
+      "rgba(255,255,255,0.54)",
 
-      borderRadius: 15,
+    fontSize: 12,
+    lineHeight: 17,
 
-      backgroundColor:
-        "rgba(53,175,229,0.15)",
-    },
+    marginTop: 2,
+  },
 
-    activityCountText: {
-      color:
-        colours.lightblue ||
-        "#35afe5",
+  likedSongHeartBadge: {
+    position: "absolute",
 
-      fontSize: 13,
-      fontWeight: "900",
-    },
+    top: 9,
+    right: 9,
 
-    activityContainer: {
-      width: "100%",
-    },
+    width: 30,
+    height: 30,
 
-    activityReviewWrapper: {
-      width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
 
-      marginBottom: 12,
-    },
+    borderRadius: 15,
 
-    privateContainer: {
-      width: "100%",
+    backgroundColor:
+      "rgba(0,0,0,0.72)",
+  },
 
-      minHeight: 310,
+  likedSongHeart: {
+    color: "#ffffff",
 
-      alignItems: "center",
-      justifyContent: "center",
+    fontSize: 16,
+    lineHeight: 18,
+  },
 
-      padding: 28,
+  /* =====================================================
+     ACTIVITY
+  ===================================================== */
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(255,255,255,0.1)",
+  activitySection: {
+    marginBottom: 0,
+  },
 
-      borderRadius: 18,
+  activityContainer: {
+    width: "100%",
+  },
 
-      backgroundColor:
-        colours.darkblue ||
-        "rgba(255,255,255,0.045)",
-    },
+  activityReviewWrapper: {
+    width: "100%",
 
-    privateIcon: {
-      width: 68,
-      height: 68,
+    marginBottom: 13,
+  },
 
-      alignItems: "center",
-      justifyContent: "center",
+  activityEmptyState: {
+    minHeight: 130,
 
-      borderRadius: 34,
+    alignItems: "center",
+    justifyContent: "center",
 
-      backgroundColor:
-        "rgba(255,255,255,0.07)",
-    },
+    paddingHorizontal: 20,
 
-    privateIconText: {
-      fontSize: 27,
-    },
+    borderRadius: 12,
 
-    privateText: {
-      color:
-        colours.lightblue ||
-        "#35afe5",
+    backgroundColor:
+      "rgba(255,255,255,0.035)",
+  },
 
-      fontSize: 21,
-      fontWeight: "900",
+  activityEmptyTitle: {
+    color: "#ffffff",
 
-      marginTop: 18,
-    },
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: "800",
 
-    privateText2: {
-      maxWidth: 460,
+    marginBottom: 5,
+  },
 
-      color:
-        "rgba(255,255,255,0.55)",
 
-      fontSize: 14,
-      lineHeight: 21,
+  badgeModalBackdrop: {
+    flex: 1,
 
-      textAlign: "center",
+    alignItems: "center",
+    justifyContent: "center",
 
-      marginTop: 7,
-    },
+    paddingHorizontal: 22,
 
-    bottomNavBar: {
-      position: "absolute",
+    backgroundColor:
+      "rgba(0,0,0,0.78)",
+  },
 
-      left: 0,
-      right: 0,
-      bottom: 0,
+  badgeModalCard: {
+    width: "100%",
+    maxWidth: 390,
 
-      zIndex: 90,
-    },
+    alignItems: "center",
 
-    desktopBottomNavBar: {
-      left:
-        DESKTOP_SIDEBAR_WIDTH,
+    paddingHorizontal: 26,
+    paddingTop: 28,
+    paddingBottom: 24,
 
-      right: 0,
-    },
-  
-    badgeModalBackdrop: {
-      flex: 1,
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.42)",
 
-      alignItems: "center",
-      justifyContent: "center",
+    borderRadius: 24,
 
-      paddingHorizontal: 22,
+    backgroundColor:
+      "#111d2b",
 
-      backgroundColor:
-        "rgba(0,0,0,0.78)",
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 10,
     },
-
-    badgeModalCard: {
-      width: "100%",
-      maxWidth: 390,
-
-      alignItems: "center",
-
-      paddingHorizontal: 26,
-      paddingTop: 28,
-      paddingBottom: 24,
-
-      borderWidth: 1,
-      borderColor:
-        "rgba(53,175,229,0.30)",
+    shadowOpacity: 0.38,
+    shadowRadius: 22,
 
-      borderRadius: 24,
+    elevation: 14,
+  },
 
-      backgroundColor:
-        "#111d2b",
+  badgeModalIconWrap: {
+    width: 78,
+    height: 78,
 
-      shadowColor: "#000000",
-      shadowOffset: {
-        width: 0,
-        height: 10,
-      },
-      shadowOpacity: 0.38,
-      shadowRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
 
-      elevation: 14,
-    },
+    marginBottom: 16,
 
-    badgeModalIconWrap: {
-      width: 78,
-      height: 78,
+    borderWidth: 1,
+    borderColor:
+      "rgba(53,175,229,0.34)",
 
-      alignItems: "center",
-      justifyContent: "center",
+    borderRadius: 39,
 
-      marginBottom: 16,
+    backgroundColor:
+      "rgba(53,175,229,0.10)",
+  },
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(53,175,229,0.34)",
+  badgeModalIcon: {
+    width: 55,
+    height: 55,
 
-      borderRadius: 39,
+    resizeMode: "contain",
+  },
 
-      backgroundColor:
-        "rgba(53,175,229,0.10)",
-    },
+  badgeModalKicker: {
+    color:
+      colours.lightblue ||
+      "#35afe5",
 
-    badgeModalIcon: {
-      width: 55,
-      height: 55,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.8,
 
-      resizeMode: "contain",
-    },
+    marginBottom: 6,
+  },
 
-    badgeModalKicker: {
-      color:
-        colours.lightblue ||
-        "#35afe5",
+  badgeModalTitle: {
+    color: "#ffffff",
 
-      fontSize: 9,
-      fontWeight: "900",
-      letterSpacing: 1.8,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "900",
 
-      marginBottom: 6,
-    },
+    textAlign: "center",
+  },
 
-    badgeModalTitle: {
-      color: "#ffffff",
+  badgeModalDescription: {
+    color:
+      "rgba(255,255,255,0.66)",
 
-      fontSize: 24,
-      lineHeight: 30,
-      fontWeight: "900",
+    fontSize: 14,
+    lineHeight: 21,
 
-      textAlign: "center",
-    },
+    textAlign: "center",
 
-    badgeModalDescription: {
-      color:
-        "rgba(255,255,255,0.66)",
+    marginTop: 9,
+  },
 
-      fontSize: 14,
-      lineHeight: 21,
+  badgeModalCloseButton: {
+    minWidth: 130,
+    minHeight: 44,
 
-      textAlign: "center",
+    alignItems: "center",
+    justifyContent: "center",
 
-      marginTop: 9,
-    },
+    marginTop: 22,
+    paddingHorizontal: 22,
 
-    badgeModalCloseButton: {
-      minWidth: 130,
-      minHeight: 44,
+    borderRadius: 22,
 
-      alignItems: "center",
-      justifyContent: "center",
+    backgroundColor: "#149fd3",
+  },
 
-      marginTop: 22,
-      paddingHorizontal: 22,
+  badgeModalCloseText: {
+    color: "#ffffff",
 
-      borderRadius: 22,
+    fontSize: 14,
+    fontWeight: "900",
+  },
 
-      backgroundColor: "#149fd3",
-    },
+  /* =====================================================
+     MOBILE NAVIGATION
+  ===================================================== */
 
-    badgeModalCloseText: {
-      color: "#ffffff",
+  bottomNavBar: {
+    position: "absolute",
 
-      fontSize: 14,
-      fontWeight: "900",
-    },
+    left: 0,
+    right: 0,
+    bottom: 0,
 
+    zIndex: 90,
+  },
 });
