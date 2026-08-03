@@ -39,6 +39,9 @@ const DESKTOP_SIDEBAR_WIDTH = 280;
 const MAX_CONTENT_WIDTH = 960;
 const BOTTOM_NAV_HEIGHT = 72;
 
+const CREATE_POST_ICON =
+  require("../images/addPost.png");
+
 const MOCK_SONGS = [
   {
     id: "1",
@@ -671,9 +674,9 @@ export default function CreatePost({
         >
           <LinearGradient
             colors={[
-              "rgba(53,175,229,0.16)",
-              "rgba(31,31,34,0.98)",
-              "rgba(24,24,26,0.99)",
+              "rgba(53,175,229,0.22)",
+              "rgba(25,31,40,0.98)",
+              "rgba(16,19,25,0.99)",
             ]}
             start={{
               x: 0,
@@ -683,7 +686,11 @@ export default function CreatePost({
               x: 1,
               y: 1,
             }}
-            style={styles.heroCard}
+            style={[
+              styles.heroCard,
+              isCompact &&
+                styles.compactHeroCard,
+            ]}
           >
             <View
               style={
@@ -698,17 +705,18 @@ export default function CreatePost({
             />
 
             <View
-              style={
-                styles.heroIcon
-              }
+              style={[
+                styles.heroIcon,
+                isCompact &&
+                  styles.compactHeroIcon,
+              ]}
             >
-              <Text
+              <Image
+                source={CREATE_POST_ICON}
                 style={
-                  styles.heroIconText
+                  styles.heroIconImage
                 }
-              >
-                ＋
-              </Text>
+              />
             </View>
 
             <View
@@ -1061,14 +1069,18 @@ export default function CreatePost({
           </View>
 
           <View
-            style={
-              styles.actionRow
-            }
+            style={[
+              styles.actionRow,
+              isCompact &&
+                styles.compactActionRow,
+            ]}
           >
             <TouchableOpacity
-              style={
-                styles.cancelButton
-              }
+              style={[
+                styles.cancelButton,
+                isCompact &&
+                  styles.compactActionButton,
+              ]}
               onPress={() =>
                 navigation.goBack()
               }
@@ -1086,6 +1098,8 @@ export default function CreatePost({
             <TouchableOpacity
               style={[
                 styles.submitButton,
+                isCompact &&
+                  styles.compactActionButton,
                 (
                   !selectedSong ||
                   !postComment.trim()
@@ -1237,6 +1251,29 @@ const styles =
       paddingBottom: 120,
     },
 
+    compactHeroCard: {
+      flexDirection: "column",
+      alignItems: "flex-start",
+
+      padding: 18,
+    },
+
+    compactHeroIcon: {
+      marginRight: 0,
+      marginBottom: 14,
+    },
+
+    compactActionRow: {
+      flexDirection: "column-reverse",
+      alignItems: "stretch",
+
+      gap: 10,
+    },
+
+    compactActionButton: {
+      width: "100%",
+    },
+
     heroCard: {
       position: "relative",
       overflow: "hidden",
@@ -1287,33 +1324,40 @@ const styles =
     },
 
     heroIcon: {
-      width: 62,
-      height: 62,
+      width: 76,
+      height: 76,
 
       alignItems: "center",
       justifyContent: "center",
 
-      marginRight: 18,
+      marginRight: 20,
+      marginBottom: 0,
+
+      borderRadius: 24,
+
+      backgroundColor:
+        "rgba(7,20,35,0.72)",
 
       borderWidth: 1,
       borderColor:
-        "rgba(255,255,255,0.18)",
+        "rgba(53,175,229,0.34)",
 
-      borderRadius: 20,
+      shadowColor: "#35afe5",
+      shadowOffset: {
+        width: 0,
+        height: 7,
+      },
+      shadowOpacity: 0.24,
+      shadowRadius: 16,
 
-      backgroundColor:
-        colours.secondaryblue ||
-        "#2878c7",
+      elevation: 6,
     },
 
-    heroIconText: {
-      color: "#ffffff",
+    heroIconImage: {
+      width: 68,
+      height: 68,
 
-      fontSize: 36,
-      lineHeight: 40,
-      fontWeight: "500",
-
-      textAlign: "center",
+      resizeMode: "contain",
     },
 
     heroTextWrap: {
@@ -1361,12 +1405,22 @@ const styles =
 
       borderWidth: 1,
       borderColor:
-        "rgba(255,255,255,0.10)",
+        "rgba(53,175,229,0.16)",
 
-      borderRadius: 20,
+      borderRadius: 22,
 
       backgroundColor:
-        "rgba(27,27,29,0.98)",
+        "rgba(24,26,31,0.98)",
+
+      shadowColor: "#000000",
+      shadowOffset: {
+        width: 0,
+        height: 8,
+      },
+      shadowOpacity: 0.18,
+      shadowRadius: 14,
+
+      elevation: 4,
     },
 
     sectionHeader: {
@@ -1438,12 +1492,12 @@ const styles =
 
       borderWidth: 1,
       borderColor:
-        "rgba(53,175,229,0.20)",
+        "rgba(53,175,229,0.30)",
 
-      borderRadius: 15,
+      borderRadius: 16,
 
       backgroundColor:
-        "rgba(255,255,255,0.055)",
+        "rgba(9,17,27,0.82)",
     },
 
     searchInput: {
@@ -1569,6 +1623,20 @@ const styles =
       backgroundColor:
         colours.lightblue ||
         "#35afe5",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.18)",
+
+      shadowColor: "#35afe5",
+      shadowOffset: {
+        width: 0,
+        height: 6,
+      },
+      shadowOpacity: 0.28,
+      shadowRadius: 14,
+
+      elevation: 5,
     },
 
     songName: {
@@ -1717,12 +1785,12 @@ const styles =
 
       borderWidth: 1,
       borderColor:
-        "rgba(53,175,229,0.20)",
+        "rgba(53,175,229,0.30)",
 
-      borderRadius: 16,
+      borderRadius: 18,
 
       backgroundColor:
-        "rgba(255,255,255,0.055)",
+        "rgba(9,17,27,0.82)",
     },
 
     ratingLabel: {
