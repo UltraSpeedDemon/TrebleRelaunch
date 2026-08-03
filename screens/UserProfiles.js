@@ -390,6 +390,18 @@ export default function UserProfiles({
   ] = useState(0);
 
   const [
+    sectionLoading,
+    setSectionLoading,
+  ] = useState({
+    posts: true,
+    reviews: true,
+    likedSongs: true,
+    favorites: true,
+    mostUpvoted: true,
+    activity: true,
+  });
+
+  const [
     loading,
     setLoading,
   ] = useState(true);
@@ -672,6 +684,13 @@ export default function UserProfiles({
 
   const loadCreatedPosts =
     useCallback(async () => {
+      setSectionLoading(
+        (current) => ({
+          ...current,
+          posts: true,
+        })
+      );
+
       if (!userId) {
         setCreatedPosts([]);
         return;
@@ -728,6 +747,13 @@ export default function UserProfiles({
         );
 
         setCreatedPosts([]);
+      } finally {
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            posts: false,
+          })
+        );
       }
     }, [userId]);
 
@@ -761,7 +787,32 @@ export default function UserProfiles({
             </Text>
           </View>
 
-          {createdPosts.length === 0 ? (
+          {sectionLoading.posts ? (
+            <View
+              style={
+                styles.sectionLoadingWrap
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color={
+                  colours.lightblue ||
+                  "#35afe5"
+                }
+                style={
+                  styles.sectionLoadingIndicator
+                }
+              />
+
+              <Text
+                style={
+                  styles.sectionLoadingText
+                }
+              >
+                Loading posts...
+              </Text>
+            </View>
+          ) : createdPosts.length === 0 ? (
             <View
               style={
                 styles.sectionEmptyState ||
@@ -946,11 +997,23 @@ export default function UserProfiles({
       [
         createdPosts,
         navigation,
+        sectionLoading.posts,
       ]
     );
 
   const loadAllReviewsSections =
     useCallback(async () => {
+      setSectionLoading(
+        (current) => ({
+          ...current,
+          reviews: true,
+          likedSongs: true,
+          favorites: true,
+          mostUpvoted: true,
+          activity: true,
+        })
+      );
+
       try {
         const [
           topResponse,
@@ -1063,6 +1126,17 @@ export default function UserProfiles({
         );
 
         setLikedSongs([]);
+      } finally {
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            reviews: false,
+            likedSongs: false,
+            favorites: false,
+            mostUpvoted: false,
+            activity: false,
+          })
+        );
       }
     }, [
       enrichReviewsWithSong,
@@ -2580,7 +2654,32 @@ const finalButtonLabel =
             </Text>
           </View>
 
-          {likedSongs.length === 0 ? (
+          {sectionLoading.likedSongs ? (
+            <View
+              style={
+                styles.sectionLoadingWrap
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color={
+                  colours.lightblue ||
+                  "#35afe5"
+                }
+                style={
+                  styles.sectionLoadingIndicator
+                }
+              />
+
+              <Text
+                style={
+                  styles.sectionLoadingText
+                }
+              >
+                Loading liked songs...
+              </Text>
+            </View>
+          ) : likedSongs.length === 0 ? (
             <View
               style={
                 styles.sectionEmptyBox
@@ -2710,7 +2809,8 @@ const finalButtonLabel =
       (
         title,
         reviews,
-        emptyMessage
+        emptyMessage,
+        isSectionLoading = false
       ) => (
         <View
           style={
@@ -2739,7 +2839,32 @@ const finalButtonLabel =
             </Text>
           </View>
 
-          {reviews.length === 0 ? (
+          {isSectionLoading ? (
+            <View
+              style={
+                styles.sectionLoadingWrap
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color={
+                  colours.lightblue ||
+                  "#35afe5"
+                }
+                style={
+                  styles.sectionLoadingIndicator
+                }
+              />
+
+              <Text
+                style={
+                  styles.sectionLoadingText
+                }
+              >
+                Loading {title.toLowerCase()}...
+              </Text>
+            </View>
+          ) : reviews.length === 0 ? (
             <View
               style={
                 styles.sectionEmptyBox
@@ -3364,7 +3489,8 @@ const finalButtonLabel =
               {renderReviewSection(
                 "Top Reviews",
                 topReviews,
-                "No top reviews yet."
+                "No top reviews yet.",
+                sectionLoading.reviews
               )}
 
               {renderLikedSongsSection()}
@@ -3372,13 +3498,15 @@ const finalButtonLabel =
               {renderReviewSection(
                 "Favourites",
                 favorites,
-                "No favourites yet."
+                "No favourites yet.",
+                sectionLoading.favorites
               )}
 
               {renderReviewSection(
                 "Most Upvoted",
                 mostUpvoted,
-                "No upvoted reviews yet."
+                "No upvoted reviews yet.",
+                sectionLoading.mostUpvoted
               )}
 
               <View
@@ -4213,6 +4341,51 @@ const styles =
       fontSize: 20,
       lineHeight: 26,
       fontWeight: "900",
+    },
+
+    sectionLoadingWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+
+      minHeight: 88,
+      width: "100%",
+
+      borderRadius: 14,
+
+      backgroundColor:
+        "rgba(255,255,255,0.025)",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.06)",
+    },
+
+    sectionLoadingIndicator: {
+      marginRight: 9,
+    },
+
+    sectionLoadingText: {
+      color:
+        "rgba(255,255,255,0.62)",
+
+      fontSize: 12,
+      fontWeight: "700",
+    },
+
+    sectionHeaderLoading: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    sectionHeaderLoadingText: {
+      color:
+        "rgba(255,255,255,0.48)",
+
+      fontSize: 10,
+      fontWeight: "800",
+
+      marginLeft: 6,
     },
 
     sectionCount: {

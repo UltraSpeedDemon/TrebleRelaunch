@@ -333,6 +333,18 @@ export default function Profile({
     setTotalReviews,
   ] = useState(0);
 
+  const [
+    sectionLoading,
+    setSectionLoading,
+  ] = useState({
+    posts: true,
+    reviews: true,
+    likedSongs: true,
+    favorites: true,
+    mostUpvoted: true,
+    activity: true,
+  });
+
   /*
    * Keep the menu permanently open on desktop.
    * Mobile starts with the menu closed.
@@ -512,6 +524,13 @@ export default function Profile({
 
   const loadCreatedPosts =
     useCallback(async () => {
+      setSectionLoading(
+        (current) => ({
+          ...current,
+          posts: true,
+        })
+      );
+
       const currentUser =
         auth.currentUser;
 
@@ -573,6 +592,13 @@ export default function Profile({
         );
 
         setCreatedPosts([]);
+      } finally {
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            posts: false,
+          })
+        );
       }
     }, []);
 
@@ -625,7 +651,31 @@ export default function Profile({
             </Text>
           </View>
 
-          {createdPosts.length === 0 ? (
+          {sectionLoading.posts ? (
+            <View
+              style={
+                styles.sectionLoadingWrap
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color={
+                  colours.lightblue
+                }
+                style={
+                  styles.sectionLoadingIndicator
+                }
+              />
+
+              <Text
+                style={
+                  styles.sectionLoadingText
+                }
+              >
+                Loading posts...
+              </Text>
+            </View>
+          ) : createdPosts.length === 0 ? (
             <View
               style={
                 styles.sectionEmptyState ||
@@ -810,11 +860,23 @@ export default function Profile({
       [
         createdPosts,
         navigation,
+        sectionLoading.posts,
       ]
     );
 
   const loadReviewSections =
     useCallback(async () => {
+      setSectionLoading(
+        (current) => ({
+          ...current,
+          reviews: true,
+          likedSongs: true,
+          favorites: true,
+          mostUpvoted: true,
+          activity: true,
+        })
+      );
+
       const currentUser =
         auth.currentUser;
 
@@ -966,6 +1028,17 @@ export default function Profile({
         setMostUpvoted([]);
         setActivity([]);
         setTotalReviews(0);
+      } finally {
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            reviews: false,
+            likedSongs: false,
+            favorites: false,
+            mostUpvoted: false,
+            activity: false,
+          })
+        );
       }
     }, [
       enrichReviewsWithSong,
@@ -1986,7 +2059,31 @@ export default function Profile({
             </Text>
           </View>
 
-          {likedSongs.length === 0 ? (
+          {sectionLoading.likedSongs ? (
+            <View
+              style={
+                styles.sectionLoadingWrap
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color={
+                  colours.lightblue
+                }
+                style={
+                  styles.sectionLoadingIndicator
+                }
+              />
+
+              <Text
+                style={
+                  styles.sectionLoadingText
+                }
+              >
+                Loading liked songs...
+              </Text>
+            </View>
+          ) : likedSongs.length === 0 ? (
             <View
               style={
                 styles.sectionEmptyState
@@ -2116,6 +2213,7 @@ export default function Profile({
         description,
         data,
         emptyText,
+        isLoading = false,
       }) => (
         <View style={styles.cardSection}>
           <View
@@ -2154,7 +2252,31 @@ export default function Profile({
             </Text>
           </View>
 
-          {data.length === 0 ? (
+          {isLoading ? (
+            <View
+              style={
+                styles.sectionLoadingWrap
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color={
+                  colours.lightblue
+                }
+                style={
+                  styles.sectionLoadingIndicator
+                }
+              />
+
+              <Text
+                style={
+                  styles.sectionLoadingText
+                }
+              >
+                Loading {title.toLowerCase()}...
+              </Text>
+            </View>
+          ) : data.length === 0 ? (
             <View
               style={
                 styles.sectionEmptyState
@@ -2677,6 +2799,8 @@ export default function Profile({
             data: topReviews,
             emptyText:
               "No top reviews yet.",
+            isLoading:
+              sectionLoading.reviews,
           })}
 
           {renderLikedSongsSection()}
@@ -2688,6 +2812,8 @@ export default function Profile({
             data: favorites,
             emptyText:
               "No favourite reviews yet.",
+            isLoading:
+              sectionLoading.favorites,
           })}
 
           {renderReviewSection({
@@ -2697,6 +2823,8 @@ export default function Profile({
             data: mostUpvoted,
             emptyText:
               "No upvoted reviews yet.",
+            isLoading:
+              sectionLoading.mostUpvoted,
           })}
 
           {/* LATEST ACTIVITY */}
@@ -2742,7 +2870,31 @@ export default function Profile({
               </Text>
             </View>
 
-            {activity.length === 0 ? (
+            {sectionLoading.activity ? (
+              <View
+                style={
+                  styles.sectionLoadingWrap
+                }
+              >
+                <ActivityIndicator
+                  size="small"
+                  color={
+                    colours.lightblue
+                  }
+                  style={
+                    styles.sectionLoadingIndicator
+                  }
+                />
+
+                <Text
+                  style={
+                    styles.sectionLoadingText
+                  }
+                >
+                  Loading activity...
+                </Text>
+              </View>
+            ) : activity.length === 0 ? (
               <View
                 style={
                   styles.activityEmptyState
@@ -3481,7 +3633,52 @@ desktopBottomNavBar: {
     marginTop: 2,
   },
 
-  sectionCount: {
+  sectionLoadingWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+
+      minHeight: 88,
+      width: "100%",
+
+      borderRadius: 14,
+
+      backgroundColor:
+        "rgba(255,255,255,0.025)",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.06)",
+    },
+
+    sectionLoadingIndicator: {
+      marginRight: 9,
+    },
+
+    sectionLoadingText: {
+      color:
+        "rgba(255,255,255,0.62)",
+
+      fontSize: 12,
+      fontWeight: "700",
+    },
+
+    sectionHeaderLoading: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    sectionHeaderLoadingText: {
+      color:
+        "rgba(255,255,255,0.48)",
+
+      fontSize: 10,
+      fontWeight: "800",
+
+      marginLeft: 6,
+    },
+
+    sectionCount: {
     minWidth: 31,
     height: 31,
 
