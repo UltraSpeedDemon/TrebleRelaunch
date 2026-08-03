@@ -250,6 +250,76 @@ export async function updateUser(userId, userData) {
   return await serverPut(`users/${userId}`, userData);
 }
 
+export async function connectSpotify(
+  userId,
+  spotifyConnection
+) {
+  const currentUser =
+    auth.currentUser;
+
+  if (!currentUser?.uid) {
+    throw new Error(
+      "You must be signed in to connect Spotify."
+    );
+  }
+
+  if (
+    String(currentUser.uid) !==
+    String(userId)
+  ) {
+    throw new Error(
+      "You cannot connect Spotify for another user."
+    );
+  }
+
+  const idToken =
+    await currentUser.getIdToken();
+
+  return await serverPost(
+    `users/${encodeURIComponent(
+      userId
+    )}/spotify/connect`,
+    {
+      ...(spotifyConnection || {}),
+      id_token: idToken,
+    }
+  );
+}
+
+export async function disconnectSpotify(
+  userId
+) {
+  const currentUser =
+    auth.currentUser;
+
+  if (!currentUser?.uid) {
+    throw new Error(
+      "You must be signed in to unlink Spotify."
+    );
+  }
+
+  if (
+    String(currentUser.uid) !==
+    String(userId)
+  ) {
+    throw new Error(
+      "You cannot unlink Spotify for another user."
+    );
+  }
+
+  const idToken =
+    await currentUser.getIdToken();
+
+  return await serverDelete(
+    `users/${encodeURIComponent(
+      userId
+    )}/spotify`,
+    {
+      id_token: idToken,
+    }
+  );
+}
+
 export async function followUser(follower_id, followed_id) {
   return await serverPost("users/follow", { follower_id, followed_id });
 }

@@ -1093,9 +1093,10 @@ export default function Profile({
         );
 
         setIsSpotifyLinked(
-          Boolean(
-            userData?.spotifyAccessToken
-          )
+          userData?.spotifyIsLinked ===
+            true ||
+          userData?.spotifyIsLinked ===
+            "true"
         );
 
         setIsAdmin(
@@ -2869,6 +2870,7 @@ desktopBottomNavBar: {
     fontSize: 29,
     lineHeight: 34,
     fontWeight: "900",
+    marginBottom: 3,
   },
 
   compactUsername: {

@@ -1349,7 +1349,9 @@ console.log(
             data?.spotifyIsLinked ===
               true ||
             data?.spotifyIsLinked ===
-              "true"
+              "true" ||
+            data?.spotifyIsLinked ===
+              1
           );
 
           setIsAdmin(

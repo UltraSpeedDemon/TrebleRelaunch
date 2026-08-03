@@ -7167,6 +7167,378 @@ app.get("/album/summary", async (req, res) => {
   }
 });
 
+
+/* =========================================================
+   SPOTIFY ACCOUNT CONNECTION
+========================================================= */
+
+function sanitizeUserForClient(userData = {}) {
+  const {
+    spotifyAccessToken,
+    spotifyRefreshToken,
+    ...safeUser
+  } = userData || {};
+
+  return safeUser;
+}
+
+async function requireMatchingFirebaseUser(
+  req,
+  requestedUid
+) {
+  const decodedUser =
+    await verifyFirebaseUser(req);
+
+  if (
+    String(decodedUser?.uid || "") !==
+    String(requestedUid || "")
+  ) {
+    const error =
+      new Error(
+        "You are not allowed to modify this Spotify connection."
+      );
+
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return decodedUser;
+}
+
+async function getSpotifyAccountProfile(
+  accessToken
+) {
+  const cleanToken =
+    String(accessToken || "").trim();
+
+  if (!cleanToken) {
+    throw new Error(
+      "Spotify access token is required."
+    );
+  }
+
+  const response =
+    await fetch(
+      "https://api.spotify.com/v1/me",
+      {
+        headers: {
+          Authorization:
+            `Bearer ${cleanToken}`,
+          Accept:
+            "application/json",
+        },
+      }
+    );
+
+  const responseText =
+    await response.text();
+
+  let data = {};
+
+  try {
+    data =
+      responseText
+        ? JSON.parse(responseText)
+        : {};
+  } catch {
+    data = {};
+  }
+
+  if (!response.ok) {
+    const error =
+      new Error(
+        data?.error?.message ||
+        "Spotify rejected the access token."
+      );
+
+    error.statusCode =
+      response.status;
+
+    throw error;
+  }
+
+  return data;
+}
+
+app.post(
+  "/users/:uid/spotify/connect",
+  async (req, res) => {
+    try {
+      const uid =
+        String(
+          req.params.uid || ""
+        ).trim();
+
+      if (!uid) {
+        return res.status(400).json({
+          ok: false,
+          error: "User ID is required.",
+        });
+      }
+
+      await requireMatchingFirebaseUser(
+        req,
+        uid
+      );
+
+      const {
+        accessToken,
+        refreshToken,
+        tokenType,
+        expiresIn,
+        issuedAt,
+        scope,
+      } = req.body || {};
+
+      const cleanAccessToken =
+        String(
+          accessToken || ""
+        ).trim();
+
+      if (!cleanAccessToken) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Spotify access token is required.",
+        });
+      }
+
+      const spotifyProfile =
+        await getSpotifyAccountProfile(
+          cleanAccessToken
+        );
+
+      const userRef =
+        db.collection("users").doc(uid);
+
+      const snapshot =
+        await userRef.get();
+
+      if (!snapshot.exists) {
+        return res.status(404).json({
+          ok: false,
+          error:
+            "Treble user was not found.",
+        });
+      }
+
+      const existingData =
+        snapshot.data() || {};
+
+      const cleanRefreshToken =
+        String(
+          refreshToken || ""
+        ).trim();
+
+      const updates = {
+        spotifyIsLinked: true,
+        spotifyAccessToken:
+          cleanAccessToken,
+        spotifyRefreshToken:
+          cleanRefreshToken ||
+          existingData.spotifyRefreshToken ||
+          "",
+        spotifyTokenType:
+          String(tokenType || "Bearer"),
+        spotifyTokenExpiresIn:
+          Math.max(
+            0,
+            Number(expiresIn || 3600)
+          ),
+        spotifyTokenIssuedAt:
+          String(
+            issuedAt ||
+            new Date().toISOString()
+          ),
+        spotifyScope:
+          String(scope || ""),
+        spotifyUserId:
+          String(
+            spotifyProfile?.id || ""
+          ),
+        spotifyDisplayName:
+          String(
+            spotifyProfile?.display_name ||
+            ""
+          ),
+        spotifyEmail:
+          String(
+            spotifyProfile?.email || ""
+          ),
+        spotifyCountry:
+          String(
+            spotifyProfile?.country || ""
+          ),
+        spotifyProduct:
+          String(
+            spotifyProfile?.product || ""
+          ),
+        spotifyProfileUrl:
+          String(
+            spotifyProfile?.external_urls
+              ?.spotify ||
+            ""
+          ),
+        spotifyAvatar:
+          String(
+            spotifyProfile?.images?.[0]
+              ?.url ||
+            ""
+          ),
+        spotifyLinkedAt:
+          FieldValue.serverTimestamp(),
+        updatedAt:
+          FieldValue.serverTimestamp(),
+      };
+
+      await userRef.set(
+        updates,
+        { merge: true }
+      );
+
+      const updatedSnapshot =
+        await userRef.get();
+
+      return res.status(200).json({
+        ok: true,
+        connected: true,
+        user:
+          sanitizeUserForClient({
+            id: updatedSnapshot.id,
+            ...updatedSnapshot.data(),
+          }),
+        spotify: {
+          id: updates.spotifyUserId,
+          displayName:
+            updates.spotifyDisplayName,
+          email: updates.spotifyEmail,
+          avatar: updates.spotifyAvatar,
+          product: updates.spotifyProduct,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "POST /users/:uid/spotify/connect error:",
+        error
+      );
+
+      return res
+        .status(
+          Number(
+            error?.statusCode || 500
+          )
+        )
+        .json({
+          ok: false,
+          error:
+            error?.message ||
+            "Unable to connect Spotify.",
+        });
+    }
+  }
+);
+
+app.delete(
+  "/users/:uid/spotify",
+  async (req, res) => {
+    try {
+      const uid =
+        String(
+          req.params.uid || ""
+        ).trim();
+
+      if (!uid) {
+        return res.status(400).json({
+          ok: false,
+          error: "User ID is required.",
+        });
+      }
+
+      await requireMatchingFirebaseUser(
+        req,
+        uid
+      );
+
+      const userRef =
+        db.collection("users").doc(uid);
+
+      const snapshot =
+        await userRef.get();
+
+      if (!snapshot.exists) {
+        return res.status(404).json({
+          ok: false,
+          error:
+            "Treble user was not found.",
+        });
+      }
+
+      await userRef.set(
+        {
+          spotifyIsLinked: false,
+          spotifyAccessToken:
+            FieldValue.delete(),
+          spotifyRefreshToken:
+            FieldValue.delete(),
+          spotifyTokenType:
+            FieldValue.delete(),
+          spotifyTokenExpiresIn:
+            FieldValue.delete(),
+          spotifyTokenIssuedAt:
+            FieldValue.delete(),
+          spotifyScope:
+            FieldValue.delete(),
+          spotifyUserId:
+            FieldValue.delete(),
+          spotifyDisplayName:
+            FieldValue.delete(),
+          spotifyEmail:
+            FieldValue.delete(),
+          spotifyCountry:
+            FieldValue.delete(),
+          spotifyProduct:
+            FieldValue.delete(),
+          spotifyProfileUrl:
+            FieldValue.delete(),
+          spotifyAvatar:
+            FieldValue.delete(),
+          spotifyLinkedAt:
+            FieldValue.delete(),
+          spotifyUnlinkedAt:
+            FieldValue.serverTimestamp(),
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return res.status(200).json({
+        ok: true,
+        connected: false,
+        spotifyIsLinked: false,
+      });
+    } catch (error) {
+      console.error(
+        "DELETE /users/:uid/spotify error:",
+        error
+      );
+
+      return res
+        .status(
+          Number(
+            error?.statusCode || 500
+          )
+        )
+        .json({
+          ok: false,
+          error:
+            error?.message ||
+            "Unable to unlink Spotify.",
+        });
+    }
+  }
+);
+
 app.put("/users/:uid", async (req, res) => {
   try {
     const uid = String(
@@ -7352,7 +7724,9 @@ app.get("/users/:uid", async (req, res) => {
       }
 
       return res.json({
-        ...existingUser,
+        ...sanitizeUserForClient(
+          existingUser
+        ),
 
         // These values must always use the Firebase UID.
         uid,

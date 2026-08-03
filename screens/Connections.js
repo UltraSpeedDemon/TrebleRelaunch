@@ -29,8 +29,9 @@ import {
 } from "../utils/spotifyAuth";
 
 import {
+  connectSpotify,
+  disconnectSpotify,
   getUser,
-  updateUser,
 } from "../providers/rest";
 
 import Sidebar from "../components/Sidebar";
@@ -70,6 +71,11 @@ export default function Connections({
 
   const [linkingSpotify, setLinkingSpotify] =
     useState(false);
+
+  const [
+    unlinkingSpotify,
+    setUnlinkingSpotify,
+  ] = useState(false);
 
   const [
     isSpotifyLinked,
@@ -323,35 +329,31 @@ export default function Connections({
           }
 
           const updateResponse =
-            await updateUser(
+            await connectSpotify(
               currentUser.uid,
               {
-                spotifyAccessToken:
-                  accessToken,
+                accessToken,
 
-                spotifyRefreshToken:
+                refreshToken:
                   refreshToken ||
                   "",
 
-                spotifyTokenType:
+                tokenType:
                   tokenResponse?.tokenType ||
                   "Bearer",
 
-                spotifyTokenExpiresIn:
+                expiresIn:
                   Number(
                     tokenResponse?.expiresIn ||
                     3600
                   ),
 
-                spotifyTokenIssuedAt:
+                issuedAt:
                   new Date().toISOString(),
 
-                spotifyScope:
+                scope:
                   tokenResponse?.scope ||
                   "",
-
-                spotifyIsLinked:
-                  true,
               }
             );
 
@@ -463,6 +465,85 @@ export default function Connections({
     ]);
 
 
+
+  const performSpotifyUnlink =
+    useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
+
+      if (
+        !currentUser?.uid ||
+        unlinkingSpotify
+      ) {
+        return;
+      }
+
+      try {
+        setUnlinkingSpotify(true);
+
+        const response =
+          await disconnectSpotify(
+            currentUser.uid
+          );
+
+        await parseResponse(
+          response,
+          "Unable to unlink Spotify."
+        );
+
+        setIsSpotifyLinked(false);
+
+        Alert.alert(
+          "Spotify unlinked",
+          "Spotify was removed from your Treble account. The Spotify badge has also been removed."
+        );
+      } catch (error) {
+        console.error(
+          "[Connections] Spotify unlink error:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to unlink Spotify",
+          error?.message ||
+            "Please try again."
+        );
+      } finally {
+        setUnlinkingSpotify(false);
+      }
+    }, [
+      parseResponse,
+      unlinkingSpotify,
+    ]);
+
+  const handleSpotifyButtonPress =
+    useCallback(() => {
+      if (!isSpotifyLinked) {
+        handleSpotifyLogin();
+        return;
+      }
+
+      Alert.alert(
+        "Unlink Spotify?",
+        "This removes the Spotify connection and Spotify badge from your Treble profile.",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Unlink",
+            style: "destructive",
+            onPress:
+              performSpotifyUnlink,
+          },
+        ]
+      );
+    }, [
+      handleSpotifyLogin,
+      isSpotifyLinked,
+      performSpotifyUnlink,
+    ]);
 
   if (loading) {
     return (
@@ -652,10 +733,11 @@ export default function Connections({
               style={[
                 styles.button,
                 isSpotifyLinked
-                  ? styles.connectedButton
+                  ? styles.unlinkButton
                   : styles.connectButton,
                 (
                   linkingSpotify ||
+                  unlinkingSpotify ||
                   !request ||
                   !spotifyConfigured
                 ) &&
@@ -665,16 +747,22 @@ export default function Connections({
                   styles.compactButton,
               ]}
               onPress={
-                handleSpotifyLogin
+                handleSpotifyButtonPress
               }
               disabled={
-                isSpotifyLinked ||
                 linkingSpotify ||
-                !request ||
-                !spotifyConfigured
+                unlinkingSpotify ||
+                (
+                  !isSpotifyLinked &&
+                  (
+                    !request ||
+                    !spotifyConfigured
+                  )
+                )
               }
             >
-              {linkingSpotify ? (
+              {linkingSpotify ||
+              unlinkingSpotify ? (
                 <ActivityIndicator
                   size="small"
                   color="#ffffff"
@@ -686,7 +774,7 @@ export default function Connections({
                   }
                 >
                   {isSpotifyLinked
-                    ? "Connected"
+                    ? "Unlink"
                     : !spotifyConfigured
                       ? "Setup Required"
                       : "Connect"}
@@ -1203,6 +1291,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor:
       "rgba(69,214,123,0.55)",
+  },
+
+  unlinkButton: {
+    backgroundColor:
+      "rgba(255,86,86,0.14)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,86,86,0.48)",
   },
 
   comingSoonButton: {
