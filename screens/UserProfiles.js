@@ -30,6 +30,7 @@ import { auth } from "../utils/firebase";
 import {
   deleteReview,
   followUser,
+  getAchievements,
   getFeedPosts,
   getFollowers,
   getFollowRequests,
@@ -714,21 +715,7 @@ export default function UserProfiles({
       }
     }, [userId]);
 
-  const openCreatedPost =
-    useCallback(
-      (post) => {
-        const track =
-          post?.item_info ||
-          post;
 
-        if (!track?.id) {
-          return;
-        }
-
-        navigateToSongPage(track);
-      },
-      [navigateToSongPage]
-    );
 
   const renderCreatedPostsSection =
     useCallback(

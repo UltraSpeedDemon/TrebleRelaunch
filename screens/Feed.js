@@ -1927,41 +1927,89 @@ export default function Feed({
   ]);
 
   useEffect(() => {
-    const fetchNotifications = async () => {
-      const currentUser = auth.currentUser;
+    if (!isFocused) {
+      return undefined;
+    }
 
-      if (!currentUser?.uid) {
-        return;
-      }
+    let cancelled = false;
 
-      try {
-        const response =
-          await getFollowRequests(
-            currentUser.uid
-          );
+    const fetchNotifications =
+      async () => {
+        const currentUser =
+          auth.currentUser;
 
-        if (!response?.ok) {
+        if (!currentUser?.uid) {
+          if (!cancelled) {
+            setNotificationsCount(0);
+          }
+
           return;
         }
 
-        const requests =
-          await response.json();
+        try {
+          const response =
+            await getFollowRequests(
+              currentUser.uid
+            );
 
-        setNotificationsCount(
-          Array.isArray(requests)
-            ? requests.length
-            : 0
-        );
-      } catch (error) {
-        console.error(
-          "[Feed] Notification error:",
-          error
-        );
-      }
-    };
+          if (!response?.ok) {
+            return;
+          }
+
+          const result =
+            await response.json();
+
+          const requests =
+            Array.isArray(result)
+              ? result
+              : Array.isArray(
+                    result?.requests
+                  )
+                ? result.requests
+                : Array.isArray(
+                      result?.followRequests
+                    )
+                  ? result.followRequests
+                  : [];
+
+          const unreadRequests =
+            requests.filter(
+              (request) =>
+                request?.read !== true &&
+                request?.seen !== true &&
+                String(
+                  request?.status ||
+                  "pending"
+                ).toLowerCase() !==
+                  "accepted"
+            );
+
+          if (!cancelled) {
+            setNotificationsCount(
+              unreadRequests.length
+            );
+          }
+        } catch (error) {
+          console.error(
+            "[Feed] Notification error:",
+            error
+          );
+        }
+      };
 
     fetchNotifications();
-  }, []);
+
+    const intervalId =
+      setInterval(
+        fetchNotifications,
+        30 * 1000
+      );
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [isFocused]);
 
   const updateLikedState = useCallback(
     (itemId, liked) => {
@@ -3769,7 +3817,19 @@ export default function Feed({
 
           <TouchableOpacity
             style={styles.notificationsButton}
-            onPress={() => navigation.navigate("Notifications")}
+            onPress={() =>
+              navigation.navigate(
+                "Notifications"
+              )
+            }
+            activeOpacity={0.78}
+            accessibilityRole="button"
+            accessibilityLabel={
+              notificationsCount > 0
+                ? `${notificationsCount} unread notifications`
+                : "Notifications"
+            }
+            hitSlop={8}
           >
             <Image
               source={require("../images/notificationsIcon2.png")}
@@ -4805,6 +4865,9 @@ desktopBottomNavBar: {
 
   createPostFeedCard: {
     width: "100%",
+    maxWidth: 720,
+
+    alignSelf: "center",
 
     padding: 14,
     marginBottom: 14,
@@ -4830,6 +4893,9 @@ desktopBottomNavBar: {
   },
 
   createPostFeedCardCompact: {
+    width: "100%",
+    maxWidth: "100%",
+
     padding: 12,
     borderRadius: 16,
   },

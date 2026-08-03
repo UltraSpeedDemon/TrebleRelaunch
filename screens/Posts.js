@@ -23,7 +23,7 @@ import colours from "../styles/colours";
 
 const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
-const MAX_CONTENT_WIDTH = 920;
+const MAX_CONTENT_WIDTH = 1120;
 const BOTTOM_NAV_HEIGHT = 72;
 
 export default function Posts({
@@ -503,15 +503,15 @@ export default function Posts({
         </ScrollView>
       </View>
 
-      {!isDesktopWeb ? (
-        <View
-          style={
-            styles.bottomNavBar
-          }
-        >
-          <BottomNavbar />
-        </View>
-      ) : null}
+      <View
+        style={[
+          styles.bottomNavBar,
+          isDesktopWeb &&
+            styles.desktopBottomNavBar,
+        ]}
+      >
+        <BottomNavbar />
+      </View>
     </View>
   );
 }
@@ -575,6 +575,9 @@ const styles =
       marginLeft:
         DESKTOP_SIDEBAR_WIDTH,
 
+      width:
+        `calc(100% - ${DESKTOP_SIDEBAR_WIDTH}px)`,
+
       alignItems: "center",
     },
 
@@ -596,8 +599,12 @@ const styles =
     },
 
     scrollContentDesktop: {
-      paddingTop: 48,
-      paddingHorizontal: 28,
+      width: "100%",
+
+      paddingTop: 58,
+      paddingHorizontal: 36,
+      paddingBottom:
+        BOTTOM_NAV_HEIGHT + 54,
     },
 
     scrollContentMobile: {
@@ -619,8 +626,8 @@ const styles =
     },
 
     topBarDesktop: {
-      maxWidth:
-        MAX_CONTENT_WIDTH,
+      width: "100%",
+      maxWidth: 1020,
 
       alignSelf: "center",
     },
@@ -689,10 +696,12 @@ const styles =
     },
 
     postCardDesktop: {
-      maxWidth: 880,
+      width: "100%",
+      maxWidth: 1020,
+
       alignSelf: "center",
 
-      padding: 26,
+      padding: 32,
     },
 
     postCardCompact: {
@@ -765,10 +774,10 @@ const styles =
     artworkButton: {
       position: "relative",
 
-      width: 190,
-      height: 190,
+      width: 240,
+      height: 240,
 
-      marginRight: 24,
+      marginRight: 32,
 
       borderRadius: 20,
 
@@ -828,8 +837,8 @@ const styles =
     songTitle: {
       color: "#ffffff",
 
-      fontSize: 27,
-      lineHeight: 33,
+      fontSize: 32,
+      lineHeight: 38,
       fontWeight: "900",
     },
 
@@ -889,8 +898,17 @@ const styles =
 
     bottomNavBar: {
       position: "absolute",
+
       left: 0,
       right: 0,
       bottom: 0,
+
+      zIndex: 200,
+      elevation: 40,
+    },
+
+    desktopBottomNavBar: {
+      left:
+        DESKTOP_SIDEBAR_WIDTH,
     },
   });
