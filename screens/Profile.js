@@ -1379,13 +1379,30 @@ export default function Profile({
         profileRowsRestored.current =
           true;
 
+        /*
+         * Do not show an empty-state message just because the cached
+         * array is empty. Keep that section loading until the live
+         * backend request completes.
+         */
         setSectionLoading({
-          posts: false,
-          reviews: false,
-          likedSongs: false,
-          favorites: false,
-          mostUpvoted: false,
-          activity: false,
+          posts:
+            !Array.isArray(cached.createdPosts) ||
+            cached.createdPosts.length === 0,
+          reviews:
+            !Array.isArray(cached.topReviews) ||
+            cached.topReviews.length === 0,
+          likedSongs:
+            !Array.isArray(cached.likedSongs) ||
+            cached.likedSongs.length === 0,
+          favorites:
+            !Array.isArray(cached.favorites) ||
+            cached.favorites.length === 0,
+          mostUpvoted:
+            !Array.isArray(cached.mostUpvoted) ||
+            cached.mostUpvoted.length === 0,
+          activity:
+            !Array.isArray(cached.activity) ||
+            cached.activity.length === 0,
         });
 
         profileHasPainted.current = true;

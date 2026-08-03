@@ -1586,13 +1586,30 @@ console.log(
       profileRowsRestored.current =
         true;
 
+      /*
+       * Cached empty arrays are not proof that a section is empty.
+       * Keep those sections loading until their live request finishes.
+       * Cached sections with content can paint immediately.
+       */
       setSectionLoading({
-        posts: false,
-        reviews: false,
-        likedSongs: false,
-        favorites: false,
-        mostUpvoted: false,
-        activity: false,
+        posts:
+          !Array.isArray(cached.createdPosts) ||
+          cached.createdPosts.length === 0,
+        reviews:
+          !Array.isArray(cached.topReviews) ||
+          cached.topReviews.length === 0,
+        likedSongs:
+          !Array.isArray(cached.likedSongs) ||
+          cached.likedSongs.length === 0,
+        favorites:
+          !Array.isArray(cached.favorites) ||
+          cached.favorites.length === 0,
+        mostUpvoted:
+          !Array.isArray(cached.mostUpvoted) ||
+          cached.mostUpvoted.length === 0,
+        activity:
+          !Array.isArray(cached.activity) ||
+          cached.activity.length === 0,
       });
 
       profileHasPainted.current = true;
@@ -3777,7 +3794,33 @@ const finalButtonLabel =
                   </View>
                 </View>
 
-                {activity.length ===
+                {sectionLoading.activity &&
+                activity.length === 0 ? (
+                  <View
+                    style={
+                      styles.sectionLoadingWrap
+                    }
+                  >
+                    <ActivityIndicator
+                      size="small"
+                      color={
+                        colours.lightblue ||
+                        "#35afe5"
+                      }
+                      style={
+                        styles.sectionLoadingIndicator
+                      }
+                    />
+
+                    <Text
+                      style={
+                        styles.sectionLoadingText
+                      }
+                    >
+                      Loading activity...
+                    </Text>
+                  </View>
+                ) : activity.length ===
                 0 ? (
                   <View
                     style={
