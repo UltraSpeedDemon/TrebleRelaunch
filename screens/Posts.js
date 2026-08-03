@@ -433,25 +433,27 @@ export default function Posts({
         />
       </View>
 
-      <TouchableOpacity
-        style={[
-          styles.rootBackButton,
-          isDesktopWeb &&
-            styles.desktopRootBackButton,
-        ]}
-        onPress={() =>
-          navigation.goBack()
-        }
-        activeOpacity={0.8}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-      >
-        <Icon
-          name="arrow-back"
-          size={26}
-          color="#ffffff"
-        />
-      </TouchableOpacity>
+      {(isDesktopWeb || !menuOpen) ? (
+        <TouchableOpacity
+          style={[
+            styles.rootBackButton,
+            isDesktopWeb &&
+              styles.desktopRootBackButton,
+          ]}
+          onPress={() =>
+            navigation.goBack()
+          }
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Icon
+            name="arrow-back"
+            size={26}
+            color="#ffffff"
+          />
+        </TouchableOpacity>
+      ) : null}
 
       <View
         style={[
