@@ -24,6 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
   useFocusEffect,
+  useIsFocused,
   useRoute,
 } from "@react-navigation/native";
 
@@ -244,6 +245,9 @@ export default function UserProfiles({
 }) {
   const route = useRoute();
 
+  const isFocused =
+    useIsFocused();
+
   const { width } =
     useWindowDimensions();
 
@@ -411,6 +415,13 @@ export default function UserProfiles({
 
   const profileHasPainted =
     React.useRef(false);
+
+  /*
+   * Prevent state updates from recreating fetchUserData and restarting every
+   * row loader while this same profile is already open.
+   */
+  const loadedProfileFocusKey =
+    React.useRef("");
 
   const [
     refreshing,
@@ -693,6 +704,14 @@ export default function UserProfiles({
 
       if (!userId) {
         setCreatedPosts([]);
+
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            posts: false,
+          })
+        );
+
         return;
       }
 
@@ -1847,9 +1866,46 @@ console.log(
       ]
     );
 
+  useEffect(() => {
+    if (!isFocused) {
+      loadedProfileFocusKey.current =
+        "";
+    }
+  }, [isFocused]);
+
+  useEffect(() => {
+    /*
+     * Opening a different user's profile must allow one new load.
+     */
+    loadedProfileFocusKey.current =
+      "";
+    profileHasPainted.current =
+      false;
+  }, [userId]);
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
+
+      const focusKey =
+        String(userId || "");
+
+      /*
+       * useFocusEffect can rerun when callback dependencies change. Without
+       * this guard, loaded rows switch back to "Loading..." repeatedly.
+       */
+      if (
+        !focusKey ||
+        loadedProfileFocusKey.current ===
+          focusKey
+      ) {
+        return () => {
+          active = false;
+        };
+      }
+
+      loadedProfileFocusKey.current =
+        focusKey;
 
       const start = async () => {
         if (
@@ -1871,6 +1927,7 @@ console.log(
     }, [
       fetchUserData,
       restoreProfileCache,
+      userId,
     ])
   );
 

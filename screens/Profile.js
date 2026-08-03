@@ -302,6 +302,13 @@ export default function Profile({
   const profileRequestId =
     useRef(0);
 
+  /*
+   * loadProfile is recreated as row data changes. This ref prevents those
+   * state changes from starting the profile loaders again during one visit.
+   */
+  const loadedThisFocus =
+    useRef(false);
+
   const [avatar, setAvatar] =
     useState(null);
 
@@ -536,6 +543,14 @@ export default function Profile({
 
       if (!currentUser?.uid) {
         setCreatedPosts([]);
+
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            posts: false,
+          })
+        );
+
         return;
       }
 
@@ -887,6 +902,17 @@ export default function Profile({
         setMostUpvoted([]);
         setActivity([]);
         setTotalReviews(0);
+
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            reviews: false,
+            likedSongs: false,
+            favorites: false,
+            mostUpvoted: false,
+            activity: false,
+          })
+        );
 
         return;
       }
@@ -1601,11 +1627,32 @@ export default function Profile({
   useEffect(() => {
     let active = true;
 
-    const start = async () => {
-      if (!isFocused) {
-        return;
-      }
+    if (!isFocused) {
+      /*
+       * Allow exactly one fresh load the next time the user opens Profile.
+       */
+      loadedThisFocus.current =
+        false;
 
+      return () => {
+        active = false;
+      };
+    }
+
+    /*
+     * loadProfile changes identity when row data changes because it uses
+     * cache helpers. Do not let that restart every section spinner.
+     */
+    if (loadedThisFocus.current) {
+      return () => {
+        active = false;
+      };
+    }
+
+    loadedThisFocus.current =
+      true;
+
+    const start = async () => {
       if (
         !profileHasPainted.current
       ) {

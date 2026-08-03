@@ -1587,9 +1587,12 @@ export default function Notifications({
               </View>
             ) : (
               <TouchableOpacity
-                style={
-                  styles.viewButton
-                }
+                style={[
+                  styles.viewButton,
+
+                  isCompact &&
+                    styles.compactViewButton,
+                ]}
                 onPress={() =>
                   handleNotificationPress(
                     item
@@ -2328,6 +2331,15 @@ const styles =
 
       backgroundColor:
         "rgba(53,175,229,0.12)",
+    },
+
+    compactViewButton: {
+      width: "100%",
+
+      marginLeft: 0,
+      marginTop: 12,
+
+      alignSelf: "stretch",
     },
 
     viewButtonText: {
