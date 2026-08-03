@@ -20,6 +20,8 @@ import {
   View,
 } from "react-native";
 
+import Icon from "react-native-vector-icons/MaterialIcons";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
@@ -3300,6 +3302,28 @@ const finalButtonLabel =
         />
       </View>
 
+      <TouchableOpacity
+        style={[
+          styles.rootBackButton,
+          isDesktopWeb &&
+            styles.desktopRootBackButton,
+        ]}
+        onPress={() =>
+          navigation.goBack()
+        }
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Icon
+          name="arrow-back"
+          size={23}
+          color="#ffffff"
+        />
+      </TouchableOpacity>
+
+
+
       <View
         style={[
           styles.pageContent,
@@ -3964,6 +3988,36 @@ const finalButtonLabel =
 
 const styles =
   StyleSheet.create({
+
+  rootBackButton: {
+    position: "absolute",
+    top: Platform.OS === "web" ? 20 : -16,
+    left: 88,
+    zIndex: 100,
+    elevation: 20,
+
+    width: 44,
+    height: 44,
+
+    borderRadius: 22,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    backgroundColor:
+      "rgba(255,255,255,0.10)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.14)",
+  },
+
+  desktopRootBackButton: {
+    top: 20,
+    left: DESKTOP_SIDEBAR_WIDTH + 20,
+  },
+
+
 
     followsYouText: {
   color: "rgba(255,255,255,0.6)",

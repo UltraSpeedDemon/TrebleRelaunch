@@ -1295,60 +1295,6 @@ export default function FollowersList({
             }
           />
         ) : null}
-
-        <View
-          style={[
-            styles.searchContainer,
-
-            isMobileWeb &&
-              styles.mobileSearchContainer,
-          ]}
-        >
-          <SearchBar />
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.notificationsButton,
-
-            isMobileWeb &&
-              styles.mobileNotificationsButton,
-          ]}
-          onPress={() =>
-            navigation.navigate(
-              "Notifications"
-            )
-          }
-        >
-          <Image
-            source={
-              NOTIFICATIONS_ICON
-            }
-            style={
-              styles.notificationsIcon
-            }
-          />
-
-          {notificationsCount >
-          0 ? (
-            <View
-              style={
-                styles.notificationBadge
-              }
-            >
-              <Text
-                style={
-                  styles.notificationBadgeText
-                }
-              >
-                {notificationsCount >
-                99
-                  ? "99+"
-                  : notificationsCount}
-              </Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
       </View>
 
       {/* SIDEBAR */}
