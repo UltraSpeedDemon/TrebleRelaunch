@@ -5,6 +5,7 @@ import React, {
 } from "react";
 
 import {
+  ActivityIndicator,
   Image,
   Platform,
   ScrollView,
@@ -20,6 +21,8 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
+
+import { getSongFromDeezer } from "../providers/rest";
 
 const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
@@ -53,6 +56,11 @@ export default function Posts({
   const [
     menuOpen,
     setMenuOpen,
+  ] = useState(false);
+
+  const [
+    openingSong,
+    setOpeningSong,
   ] = useState(false);
 
   useEffect(() => {
@@ -234,21 +242,166 @@ export default function Posts({
     }, [post?.createdAt]);
 
   const openSong =
-    () => {
-      if (!songTrackId) {
-        console.warn(
-          "[Posts] Cannot open SongPage because the post has no listenable ID.",
-          post
-        );
+    async () => {
+      if (
+        !songTrackId ||
+        openingSong
+      ) {
+        if (!songTrackId) {
+          console.warn(
+            "[Posts] Cannot open SongPage because the post has no listenable ID.",
+            post
+          );
+        }
 
         return;
       }
 
-      navigation.navigate(
+      setOpeningSong(true);
+
+      let finalTrack =
+        songTrack;
+
+      try {
+        /*
+         * Hydrate the post's Deezer song before opening SongPage.
+         * This prevents SongPage from reusing stale artwork from the
+         * previously-opened song while keeping the post data as fallback.
+         */
+        const response =
+          await getSongFromDeezer(
+            songTrackId,
+            {
+              refresh: true,
+              forceRefresh: false,
+            }
+          );
+
+        if (response?.ok) {
+          const deezerTrack =
+            await response.json();
+
+          const hydratedImage =
+            deezerTrack?.image ||
+            deezerTrack?.coverArt ||
+            deezerTrack?.album?.cover_xl ||
+            deezerTrack?.album?.cover_big ||
+            deezerTrack?.album?.cover_medium ||
+            songTrack?.image ||
+            songTrack?.coverArt ||
+            "";
+
+          finalTrack = {
+            ...songTrack,
+            ...deezerTrack,
+
+            id:
+              String(
+                deezerTrack?.id ||
+                songTrackId
+              ),
+
+            listenableId:
+              String(
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                songTrackId
+              ),
+
+            listenable_id:
+              String(
+                deezerTrack?.listenable_id ||
+                deezerTrack?.listenableId ||
+                deezerTrack?.id ||
+                songTrackId
+              ),
+
+            songId:
+              String(songTrackId),
+
+            type: "track",
+
+            title:
+              deezerTrack?.title ||
+              songTrack?.title ||
+              songTrack?.name ||
+              "Shared Song",
+
+            name:
+              deezerTrack?.name ||
+              deezerTrack?.title ||
+              songTrack?.name ||
+              songTrack?.title ||
+              "Shared Song",
+
+            image:
+              hydratedImage,
+
+            coverArt:
+              hydratedImage,
+
+            album: {
+              ...(songTrack?.album || {}),
+              ...(deezerTrack?.album || {}),
+
+              cover_xl:
+                deezerTrack?.album?.cover_xl ||
+                hydratedImage,
+
+              cover_big:
+                deezerTrack?.album?.cover_big ||
+                hydratedImage,
+
+              cover_medium:
+                deezerTrack?.album?.cover_medium ||
+                hydratedImage,
+            },
+
+            artist:
+              deezerTrack?.artist ||
+              songTrack?.artist ||
+              {
+                name:
+                  songTrack?.artistName ||
+                  "",
+              },
+
+            artistName:
+              deezerTrack?.artistName ||
+              deezerTrack?.artist?.name ||
+              songTrack?.artistName ||
+              songTrack?.artist?.name ||
+              "",
+          };
+        }
+      } catch (error) {
+        console.warn(
+          "[Posts] Song hydration failed; opening saved post data:",
+          error
+        );
+      } finally {
+        setOpeningSong(false);
+      }
+
+      /*
+       * push() creates a fresh SongPage instance, preventing stale route
+       * state or artwork from the previously-opened song from being reused.
+       */
+      navigation.push(
         "SongPage",
         {
           track:
-            songTrack,
+            finalTrack,
+
+          songId:
+            String(songTrackId),
+
+          fromPostId:
+            String(
+              post?.id ||
+              post?.record_id ||
+              ""
+            ),
         }
       );
     };
@@ -392,6 +545,7 @@ export default function Posts({
               <TouchableOpacity
                 activeOpacity={0.86}
                 onPress={openSong}
+                disabled={openingSong}
                 style={[
                   styles.artworkButton,
                   isCompact &&
@@ -479,22 +633,36 @@ export default function Posts({
                 </Text>
 
                 <TouchableOpacity
-                  style={styles.songButton}
+                  style={[
+                    styles.songButton,
+                    openingSong &&
+                      styles.songButtonDisabled,
+                  ]}
                   onPress={openSong}
+                  disabled={openingSong}
                   activeOpacity={0.82}
                 >
-                  <Icon
-                    name="music-note"
-                    size={18}
-                    color="#ffffff"
-                  />
+                  {openingSong ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#ffffff"
+                    />
+                  ) : (
+                    <Icon
+                      name="music-note"
+                      size={18}
+                      color="#ffffff"
+                    />
+                  )}
 
                   <Text
                     style={
                       styles.songButtonText
                     }
                   >
-                    Open Song
+                    {openingSong
+                      ? "Loading Song..."
+                      : "Open Song"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -887,6 +1055,10 @@ const styles =
         "#35afe5",
 
       marginTop: 18,
+    },
+
+    songButtonDisabled: {
+      opacity: 0.66,
     },
 
     songButtonText: {

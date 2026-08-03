@@ -19,14 +19,13 @@ import {
 
 import * as AuthSession from "expo-auth-session";
 
-import { SPOTIFY_CLIENT_ID } from "@env";
-
 import { auth } from "../utils/firebase";
 
 import {
   discovery,
+  getSpotifyAuthRequestConfig,
   REDIRECT_URI,
-  SPOTIFY_SCOPES,
+  SPOTIFY_CLIENT_ID,
 } from "../utils/spotifyAuth";
 
 import {
@@ -80,6 +79,12 @@ export default function Connections({
   const [menuOpen, setMenuOpen] =
     useState(false);
 
+  const spotifyConfigured =
+    Boolean(
+      SPOTIFY_CLIENT_ID &&
+      REDIRECT_URI
+    );
+
   /*
    * Spotify authorization request.
    */
@@ -88,24 +93,7 @@ export default function Connections({
     response,
     promptAsync,
   ] = AuthSession.useAuthRequest(
-    {
-      clientId:
-        SPOTIFY_CLIENT_ID,
-
-      redirectUri:
-        REDIRECT_URI,
-
-      scopes:
-        SPOTIFY_SCOPES,
-
-      responseType:
-        AuthSession.ResponseType.Code,
-
-      usePKCE: true,
-
-      codeChallengeMethod:
-        AuthSession.CodeChallengeMethod.S256,
-    },
+    getSpotifyAuthRequestConfig(),
     discovery
   );
 
@@ -206,8 +194,8 @@ export default function Connections({
 
         setIsSpotifyLinked(
           Boolean(
-            userData?.spotifyIsLinked ||
-              userData?.spotifyAccessToken
+            userData?.spotifyIsLinked ===
+              true
           )
         );
       } catch (error) {
@@ -345,6 +333,23 @@ export default function Connections({
                   refreshToken ||
                   "",
 
+                spotifyTokenType:
+                  tokenResponse?.tokenType ||
+                  "Bearer",
+
+                spotifyTokenExpiresIn:
+                  Number(
+                    tokenResponse?.expiresIn ||
+                    3600
+                  ),
+
+                spotifyTokenIssuedAt:
+                  new Date().toISOString(),
+
+                spotifyScope:
+                  tokenResponse?.scope ||
+                  "",
+
                 spotifyIsLinked:
                   true,
               }
@@ -361,7 +366,7 @@ export default function Connections({
 
           Alert.alert(
             "Spotify connected",
-            "Your Spotify account was connected successfully."
+            "Your Spotify account was connected successfully. The Spotify badge is now unlocked on your profile."
           );
         } catch (error) {
           console.error(
@@ -398,6 +403,15 @@ export default function Connections({
         isSpotifyLinked ||
         linkingSpotify
       ) {
+        return;
+      }
+
+      if (!spotifyConfigured) {
+        Alert.alert(
+          "Spotify is not configured",
+          "Add EXPO_PUBLIC_SPOTIFY_CLIENT_ID and EXPO_PUBLIC_SPOTIFY_REDIRECT_URI, then rebuild the app."
+        );
+
         return;
       }
 
@@ -445,21 +459,10 @@ export default function Connections({
       linkingSpotify,
       promptAsync,
       request,
+      spotifyConfigured,
     ]);
 
-  /*
-   * Temporary action for integrations that are not ready.
-   */
-  const handleUnavailableIntegration =
-    useCallback(
-      (serviceName) => {
-        Alert.alert(
-          `${serviceName} is not available`,
-          `${serviceName} support has not been enabled yet.`
-        );
-      },
-      []
-    );
+
 
   if (loading) {
     return (
@@ -631,8 +634,18 @@ export default function Connections({
                   styles.connectionDescription
                 }
               >
-                Connect Spotify to improve music discovery and recommendations.
+                Connect Spotify to improve music discovery and unlock the Spotify badge on your profile.
               </Text>
+
+              {!spotifyConfigured ? (
+                <Text
+                  style={
+                    styles.configurationWarning
+                  }
+                >
+                  Spotify environment variables are missing. Rebuild after adding them.
+                </Text>
+              ) : null}
             </View>
 
             <TouchableOpacity
@@ -643,7 +656,8 @@ export default function Connections({
                   : styles.connectButton,
                 (
                   linkingSpotify ||
-                  !request
+                  !request ||
+                  !spotifyConfigured
                 ) &&
                   !isSpotifyLinked &&
                   styles.disabledButton,
@@ -656,7 +670,8 @@ export default function Connections({
               disabled={
                 isSpotifyLinked ||
                 linkingSpotify ||
-                !request
+                !request ||
+                !spotifyConfigured
               }
             >
               {linkingSpotify ? (
@@ -672,7 +687,9 @@ export default function Connections({
                 >
                   {isSpotifyLinked
                     ? "Connected"
-                    : "Connect"}
+                    : !spotifyConfigured
+                      ? "Setup Required"
+                      : "Connect"}
                 </Text>
               )}
             </TouchableOpacity>
@@ -717,7 +734,7 @@ export default function Connections({
                   styles.connectionStatus
                 }
               >
-                Not connected
+                Coming soon
               </Text>
 
               <Text
@@ -725,29 +742,25 @@ export default function Connections({
                   styles.connectionDescription
                 }
               >
-                Import listening history and scrobbled music from Last.fm.
+                Last.fm support is coming soon to Treble.
               </Text>
             </View>
 
             <TouchableOpacity
               style={[
                 styles.button,
-                styles.connectButton,
+                styles.comingSoonButton,
                 isCompact &&
                   styles.compactButton,
               ]}
-              onPress={() =>
-                handleUnavailableIntegration(
-                  "Last.fm"
-                )
-              }
+              disabled
             >
               <Text
                 style={
-                  styles.buttonText
+                  styles.comingSoonButtonText
                 }
               >
-                Connect
+                Coming Soon
               </Text>
             </TouchableOpacity>
           </View>
@@ -791,7 +804,7 @@ export default function Connections({
                   styles.connectionStatus
                 }
               >
-                Not connected
+                Coming soon
               </Text>
 
               <Text
@@ -799,29 +812,25 @@ export default function Connections({
                   styles.connectionDescription
                 }
               >
-                Link Apple Music to use your library and listening activity.
+                Apple Music support is coming soon to Treble.
               </Text>
             </View>
 
             <TouchableOpacity
               style={[
                 styles.button,
-                styles.connectButton,
+                styles.comingSoonButton,
                 isCompact &&
                   styles.compactButton,
               ]}
-              onPress={() =>
-                handleUnavailableIntegration(
-                  "Apple Music"
-                )
-              }
+              disabled
             >
               <Text
                 style={
-                  styles.buttonText
+                  styles.comingSoonButtonText
                 }
               >
-                Connect
+                Coming Soon
               </Text>
             </TouchableOpacity>
           </View>
@@ -1140,6 +1149,16 @@ const styles = StyleSheet.create({
     color: "#45d67b",
   },
 
+  configurationWarning: {
+    color: "#ffbf47",
+
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "700",
+
+    marginTop: 7,
+  },
+
   connectionDescription: {
     color:
       "rgba(255,255,255,0.48)",
@@ -1184,6 +1203,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor:
       "rgba(69,214,123,0.55)",
+  },
+
+  comingSoonButton: {
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.12)",
+  },
+
+  comingSoonButtonText: {
+    color:
+      "rgba(255,255,255,0.58)",
+
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   disabledButton: {
