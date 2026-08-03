@@ -19,6 +19,12 @@ import {
 
 import Icon from "react-native-vector-icons/MaterialIcons";
 import colours from "../styles/colours";
+import Sidebar from "../components/Sidebar";
+import BottomNavbar from "../components/BottomNavbar";
+
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+const BOTTOM_NAV_HEIGHT = 72;
 
 const CREDITS = [
   {
@@ -66,10 +72,21 @@ export default function Credits({
   const { width, height } =
     useWindowDimensions();
 
+  const isWeb = Platform.OS === "web";
+  const isDesktopWeb =
+    isWeb && width >= DESKTOP_BREAKPOINT;
+  const isMobileWeb =
+    isWeb && width < DESKTOP_BREAKPOINT;
   const isCompact = width < 768;
   const isMobile =
-    Platform.OS !== "web" ||
-    width < 768;
+    Platform.OS !== "web" || width < 768;
+
+  const [menuOpen, setMenuOpen] =
+    React.useState(false);
+
+  useEffect(() => {
+    setMenuOpen(isDesktopWeb);
+  }, [isDesktopWeb]);
 
   /*
    * Mobile uses a shorter one-time entrance and no infinite glow
@@ -174,8 +191,33 @@ export default function Credits({
   ]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.screen}>
+    <View style={styles.appContainer}>
+      <View
+        style={[
+          styles.sideMenu,
+          isDesktopWeb && styles.desktopSideMenu,
+          isMobileWeb && styles.mobileSideMenu,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={isDesktopWeb ? true : menuOpen}
+          setMenuOpen={
+            isDesktopWeb ? () => {} : setMenuOpen
+          }
+          isDesktop={isDesktopWeb}
+        />
+      </View>
+
+      <View
+        style={[
+          styles.pageContent,
+          isDesktopWeb && styles.desktopPageContent,
+          isMobileWeb && styles.mobilePageContent,
+        ]}
+      >
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.screen}>
         <View
           style={[
             styles.backgroundOrbOne,
@@ -191,20 +233,6 @@ export default function Credits({
               styles.backgroundOrbTwoCompact,
           ]}
         />
-
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() =>
-            navigation.goBack()
-          }
-          activeOpacity={0.8}
-        >
-          <Icon
-            name="arrow-back"
-            size={23}
-            color="#ffffff"
-          />
-        </TouchableOpacity>
 
         <ScrollView
           style={[
@@ -226,6 +254,25 @@ export default function Credits({
           removeClippedSubviews={false}
           scrollEventThrottle={32}
         >
+          <View
+            style={[
+              styles.topBar,
+              !isDesktopWeb && styles.mobileTopBar,
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.8}
+            >
+              <Icon
+                name="arrow-back"
+                size={23}
+                color="#ffffff"
+              />
+            </TouchableOpacity>
+          </View>
+
           <Animated.View
             style={[
               styles.creditsCard,
@@ -388,12 +435,85 @@ export default function Credits({
             </Text>
           </Animated.View>
         </ScrollView>
+          </View>
+        </SafeAreaView>
       </View>
-    </SafeAreaView>
+
+      <View
+        style={[
+          styles.bottomNavBar,
+          isDesktopWeb && styles.desktopBottomNavBar,
+        ]}
+      >
+        <BottomNavbar />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  appContainer: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: colours.darkblue,
+  },
+
+  sideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 0,
+    bottom: 0,
+    zIndex: 100,
+    elevation: 20,
+  },
+
+  desktopSideMenu: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: DESKTOP_SIDEBAR_WIDTH,
+    height: "100vh",
+    overflow: "hidden",
+  },
+
+  mobileSideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 0,
+    bottom: 0,
+  },
+
+  pageContent: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+
+  desktopPageContent: {
+    position: "absolute",
+    top: 0,
+    left: DESKTOP_SIDEBAR_WIDTH,
+    right: 0,
+    bottom: BOTTOM_NAV_HEIGHT,
+    overflow: "hidden",
+  },
+
+  mobilePageContent: {
+    paddingBottom: BOTTOM_NAV_HEIGHT,
+  },
+
+  bottomNavBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 90,
+  },
+
+  desktopBottomNavBar: {
+    left: DESKTOP_SIDEBAR_WIDTH,
+  },
   safeArea: {
     flex: 1,
 
@@ -492,17 +612,19 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
 
+  topBar: {
+    width: "100%",
+    maxWidth: 820,
+    alignSelf: "center",
+    marginBottom: 12,
+  },
+
+  mobileTopBar: {
+    alignItems: "flex-end",
+    paddingRight: 2,
+  },
+
   backButton: {
-    position: "absolute",
-
-    top:
-      Platform.OS === "web"
-        ? 24
-        : 14,
-
-    left: 20,
-    zIndex: 5,
-
     width: 44,
     height: 44,
 
@@ -527,7 +649,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
 
     paddingHorizontal: 28,
-    paddingVertical: 80,
+    paddingTop: 26,
     paddingBottom: 110,
   },
 
@@ -535,7 +657,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     alignItems: "stretch",
 
-    paddingTop: 78,
+    paddingTop: 74,
     paddingHorizontal: 14,
     paddingBottom: 150,
   },

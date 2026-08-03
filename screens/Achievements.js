@@ -1,5 +1,6 @@
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -30,6 +31,12 @@ import {
 
 import { auth } from "../utils/firebase";
 import colours from "../styles/colours";
+import Sidebar from "../components/Sidebar";
+import BottomNavbar from "../components/BottomNavbar";
+
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+const BOTTOM_NAV_HEIGHT = 72;
 
 const ACHIEVEMENT_BADGE =
   require("../images/achievementBadge.png");
@@ -47,7 +54,19 @@ export default function Achievements({
   const { width } =
     useWindowDimensions();
 
+  const isWeb = Platform.OS === "web";
+  const isDesktopWeb =
+    isWeb && width >= DESKTOP_BREAKPOINT;
+  const isMobileWeb =
+    isWeb && width < DESKTOP_BREAKPOINT;
   const isCompact = width < 720;
+
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  useEffect(() => {
+    setMenuOpen(isDesktopWeb);
+  }, [isDesktopWeb]);
 
   const [stats, setStats] =
     useState(EMPTY_ACHIEVEMENT_STATS);
@@ -161,8 +180,33 @@ export default function Achievements({
       : 0;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.screen}>
+    <View style={styles.appContainer}>
+      <View
+        style={[
+          styles.sideMenu,
+          isDesktopWeb && styles.desktopSideMenu,
+          isMobileWeb && styles.mobileSideMenu,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={isDesktopWeb ? true : menuOpen}
+          setMenuOpen={
+            isDesktopWeb ? () => {} : setMenuOpen
+          }
+          isDesktop={isDesktopWeb}
+        />
+      </View>
+
+      <View
+        style={[
+          styles.pageContent,
+          isDesktopWeb && styles.desktopPageContent,
+          isMobileWeb && styles.mobilePageContent,
+        ]}
+      >
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.screen}>
         <ScrollView
           style={[
             styles.scrollView,
@@ -181,7 +225,12 @@ export default function Achievements({
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.headerRow}>
+          <View
+            style={[
+              styles.headerRow,
+              !isDesktopWeb && styles.mobileHeaderRow,
+            ]}
+          >
             <TouchableOpacity
               style={styles.backButton}
               onPress={() =>
@@ -537,12 +586,85 @@ export default function Achievements({
             </Text>
           </View>
         </ScrollView>
+          </View>
+        </SafeAreaView>
       </View>
-    </SafeAreaView>
+
+      <View
+        style={[
+          styles.bottomNavBar,
+          isDesktopWeb && styles.desktopBottomNavBar,
+        ]}
+      >
+        <BottomNavbar />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  appContainer: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: colours.darkblue,
+  },
+
+  sideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 0,
+    bottom: 0,
+    zIndex: 100,
+    elevation: 20,
+  },
+
+  desktopSideMenu: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: DESKTOP_SIDEBAR_WIDTH,
+    height: "100vh",
+    overflow: "hidden",
+  },
+
+  mobileSideMenu: {
+    position: "absolute",
+    top: 40,
+    left: 0,
+    bottom: 0,
+  },
+
+  pageContent: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+
+  desktopPageContent: {
+    position: "absolute",
+    top: 0,
+    left: DESKTOP_SIDEBAR_WIDTH,
+    right: 0,
+    bottom: BOTTOM_NAV_HEIGHT,
+    overflow: "hidden",
+  },
+
+  mobilePageContent: {
+    paddingBottom: BOTTOM_NAV_HEIGHT,
+  },
+
+  bottomNavBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 90,
+  },
+
+  desktopBottomNavBar: {
+    left: DESKTOP_SIDEBAR_WIDTH,
+  },
   safeArea: {
     flex: 1,
 
@@ -614,6 +736,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
 
     marginBottom: 28,
+  },
+
+  mobileHeaderRow: {
+    paddingLeft: 56,
   },
 
   backButton: {
