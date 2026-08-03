@@ -1,0 +1,5 @@
+[[redirects]]
+from = "https://treblemusic.netlify.app/*"
+to = "https://treblemusic.app/:splat"
+status = 301
+force = true
