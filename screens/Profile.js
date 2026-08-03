@@ -42,6 +42,7 @@ import {
 
 import {
   deleteReview,
+  getFeedPosts,
   getFollowers,
   getFollowing,
   getReviewSong,
@@ -297,6 +298,9 @@ export default function Profile({
   const [likedSongs, setLikedSongs] =
     useState([]);
 
+  const [createdPosts, setCreatedPosts] =
+    useState([]);
+
   const [favorites, setFavorites] =
     useState([]);
 
@@ -489,6 +493,246 @@ export default function Profile({
           "",
       };
     }, []);
+
+  const loadCreatedPosts =
+    useCallback(async () => {
+      const currentUser =
+        auth.currentUser;
+
+      if (!currentUser?.uid) {
+        setCreatedPosts([]);
+        return;
+      }
+
+      try {
+        const response =
+          await getFeedPosts(
+            currentUser.uid,
+            {
+              limit: 40,
+              offset: 0,
+            }
+          );
+
+        if (!response?.ok) {
+          setCreatedPosts([]);
+          return;
+        }
+
+        const data =
+          await response.json();
+
+        const ownPosts =
+          (
+            Array.isArray(data?.posts)
+              ? data.posts
+              : []
+          )
+            .filter(
+              (post) =>
+                String(
+                  post?.authorId ||
+                  post?.item_info?.authorId ||
+                  ""
+                ) ===
+                String(
+                  currentUser.uid
+                )
+            )
+            .sort(
+              (first, second) =>
+                new Date(
+                  second?.createdAt || 0
+                ) -
+                new Date(
+                  first?.createdAt || 0
+                )
+            );
+
+        setCreatedPosts(ownPosts);
+      } catch (error) {
+        console.error(
+          "[Profile] Created posts error:",
+          error
+        );
+
+        setCreatedPosts([]);
+      }
+    }, []);
+
+  const openCreatedPost =
+    useCallback(
+      (post) => {
+        const track =
+          post?.item_info ||
+          post;
+
+        if (!track?.id) {
+          return;
+        }
+
+        navigation.navigate(
+          "SongPage",
+          {
+            track,
+          }
+        );
+      },
+      [navigation]
+    );
+
+  const renderCreatedPostsSection =
+    useCallback(
+      () => (
+        <View style={styles.cardSection}>
+          <View style={styles.sectionHeader}>
+            <View
+              style={
+                styles.sectionHeadingGroup
+              }
+            >
+              <Text style={styles.sectionTitle}>
+                Posts
+              </Text>
+
+              <Text
+                style={
+                  styles.sectionDescription
+                }
+              >
+                Songs you shared with your followers
+              </Text>
+            </View>
+
+            <Text style={styles.sectionCount}>
+              {createdPosts.length}
+            </Text>
+          </View>
+
+          {createdPosts.length === 0 ? (
+            <View
+              style={
+                styles.sectionEmptyState
+              }
+            >
+              <Text
+                style={
+                  styles.sectionPlaceholder
+                }
+              >
+                No posts yet.
+              </Text>
+            </View>
+          ) : (
+            <DraggableProfileRow
+              useNativeScroll={!isDesktopWeb}
+              contentStyle={
+                styles.horizontalLikedList
+              }
+            >
+              {createdPosts.map((post) => {
+                const track =
+                  post?.item_info ||
+                  post;
+
+                const imageUri =
+                  track?.image ||
+                  track?.coverArt ||
+                  "";
+
+                return (
+                  <TouchableOpacity
+                    key={String(
+                      post?.record_id ||
+                      post?.id
+                    )}
+                    style={[
+                      styles.likedSongCard,
+                      isCompact &&
+                        styles.compactLikedSongCard,
+                    ]}
+                    activeOpacity={0.82}
+                    onPress={() =>
+                      openCreatedPost(post)
+                    }
+                  >
+                    {imageUri ? (
+                      <Image
+                        source={{
+                          uri: imageUri,
+                        }}
+                        style={
+                          styles.likedSongImage
+                        }
+                      />
+                    ) : (
+                      <View
+                        style={
+                          styles.likedSongPlaceholder
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.likedSongPlaceholderText
+                          }
+                        >
+                          ♪
+                        </Text>
+                      </View>
+                    )}
+
+                    <View
+                      style={
+                        styles.likedSongInfo
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.likedSongTitle
+                        }
+                        numberOfLines={1}
+                      >
+                        {track?.title ||
+                          track?.name ||
+                          "Shared Song"}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.likedSongArtist
+                        }
+                        numberOfLines={1}
+                      >
+                        {track?.artistName ||
+                          track?.artist?.name ||
+                          ""}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.postCommentText
+                        }
+                        numberOfLines={2}
+                      >
+                        {track?.comment ||
+                          post?.origin?.description ||
+                          ""}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </DraggableProfileRow>
+          )}
+        </View>
+      ),
+      [
+        createdPosts,
+        isCompact,
+        isDesktopWeb,
+        openCreatedPost,
+      ]
+    );
 
   const loadReviewSections =
     useCallback(async () => {
@@ -856,6 +1100,7 @@ export default function Profile({
           await Promise.allSettled([
             loadReviewSections(),
             loadSocialCounts(),
+            loadCreatedPosts(),
           ]);
 
         sectionResults.forEach(
@@ -2021,7 +2266,9 @@ export default function Profile({
             ) : null}
           </LinearGradient>
 
-          {/* REVIEW SECTIONS */}
+          {/* PROFILE CONTENT SECTIONS */}
+          {renderCreatedPostsSection()}
+
           {renderReviewSection({
             title: "Top Reviews",
             description:
@@ -2853,6 +3100,16 @@ desktopBottomNavBar: {
 
     backgroundColor:
       "rgba(255,255,255,0.035)",
+  },
+
+  postCommentText: {
+    color:
+      "rgba(255,255,255,0.54)",
+
+    fontSize: 11,
+    lineHeight: 15,
+
+    marginTop: 5,
   },
 
   sectionPlaceholder: {

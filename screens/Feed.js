@@ -1222,12 +1222,50 @@ export default function Feed({
           ),
         ]);
 
-        const mixedItems =
-          diversifyFeedItems([
-            ...createdPostItems,
+        const currentUserId =
+          String(
+            auth.currentUser?.uid ||
+            ""
+          );
+
+        const ownCreatedPosts =
+          createdPostItems
+            .filter(
+              (item) =>
+                String(
+                  item?.authorId ||
+                  item?.item_info?.authorId ||
+                  ""
+                ) === currentUserId
+            )
+            .sort(
+              (first, second) =>
+                new Date(
+                  second?.createdAt || 0
+                ) -
+                new Date(
+                  first?.createdAt || 0
+                )
+            );
+
+        const otherCreatedPosts =
+          createdPostItems.filter(
+            (item) =>
+              String(
+                item?.authorId ||
+                item?.item_info?.authorId ||
+                ""
+              ) !== currentUserId
+          );
+
+        const mixedItems = [
+          ...ownCreatedPosts,
+          ...diversifyFeedItems([
+            ...otherCreatedPosts,
             ...timelineItems,
             ...recommendationItems,
-          ]);
+          ]),
+        ];
 
         if (mixedItems.length > 0) {
           setCombinedFeed(
@@ -3201,6 +3239,27 @@ export default function Feed({
           isMobileWeb && styles.mobileWebContent,
         ]}
       >
+        {refreshing && !isDesktopWeb ? (
+          <View
+            style={
+              styles.mobileRefreshIndicator
+            }
+            pointerEvents="none"
+          >
+            <ActivityIndicator
+              size="small"
+              color="#ffffff"
+            />
+
+            <Text
+              style={
+                styles.mobileRefreshIndicatorText
+              }
+            >
+              Refreshing your feed...
+            </Text>
+          </View>
+        ) : null}
         {isLoading ? (
 
           <View style={styles.loadingContainer}>
@@ -3254,7 +3313,12 @@ export default function Feed({
                 onRefresh={handleRefresh}
                 tintColor="#ffffff"
                 colors={["#ffffff"]}
-                progressBackgroundColor={colours.foreground}
+                progressBackgroundColor={
+                  colours.foreground
+                }
+                progressViewOffset={
+                  isCompact ? 88 : 24
+                }
               />
             }
 
@@ -3491,6 +3555,45 @@ desktopBottomNavBar: {
     flex: 1,
     minHeight: 0,
     backgroundColor: colours.background,
+  },
+
+  mobileRefreshIndicator: {
+    position: "absolute",
+    top: 10,
+    left: "50%",
+
+    zIndex: 50,
+    elevation: 50,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    gap: 8,
+
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+
+    borderRadius: 18,
+
+    backgroundColor:
+      "rgba(28,28,31,0.96)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.10)",
+
+    transform: [
+      {
+        translateX: -82,
+      },
+    ],
+  },
+
+  mobileRefreshIndicatorText: {
+    color: "#ffffff",
+
+    fontSize: 12,
+    fontWeight: "800",
   },
 
   webContainer: {

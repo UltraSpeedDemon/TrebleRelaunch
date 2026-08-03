@@ -30,6 +30,7 @@ import { auth } from "../utils/firebase";
 import {
   deleteReview,
   followUser,
+  getFeedPosts,
   getFollowers,
   getFollowRequests,
   getReviewSong,
@@ -353,6 +354,11 @@ export default function UserProfiles({
   ] = useState([]);
 
   const [
+    createdPosts,
+    setCreatedPosts,
+  ] = useState([]);
+
+  const [
     favorites,
     setFavorites,
   ] = useState([]);
@@ -646,6 +652,236 @@ export default function UserProfiles({
           "",
       };
     }, []);
+
+  const loadCreatedPosts =
+    useCallback(async () => {
+      if (!userId) {
+        setCreatedPosts([]);
+        return;
+      }
+
+      try {
+        const response =
+          await getFeedPosts(
+            userId,
+            {
+              limit: 40,
+              offset: 0,
+            }
+          );
+
+        if (!response?.ok) {
+          setCreatedPosts([]);
+          return;
+        }
+
+        const data =
+          await response.json();
+
+        const theirPosts =
+          (
+            Array.isArray(data?.posts)
+              ? data.posts
+              : []
+          )
+            .filter(
+              (post) =>
+                String(
+                  post?.authorId ||
+                  post?.item_info?.authorId ||
+                  ""
+                ) ===
+                String(userId)
+            )
+            .sort(
+              (first, second) =>
+                new Date(
+                  second?.createdAt || 0
+                ) -
+                new Date(
+                  first?.createdAt || 0
+                )
+            );
+
+        setCreatedPosts(theirPosts);
+      } catch (error) {
+        console.error(
+          "[UserProfiles] Created posts error:",
+          error
+        );
+
+        setCreatedPosts([]);
+      }
+    }, [userId]);
+
+  const openCreatedPost =
+    useCallback(
+      (post) => {
+        const track =
+          post?.item_info ||
+          post;
+
+        if (!track?.id) {
+          return;
+        }
+
+        navigateToSongPage(track);
+      },
+      [navigateToSongPage]
+    );
+
+  const renderCreatedPostsSection =
+    useCallback(
+      () => (
+        <View style={styles.cardSection}>
+          <View style={styles.sectionHeader}>
+            <View
+              style={
+                styles.sectionHeadingGroup
+              }
+            >
+              <Text style={styles.sectionTitle}>
+                Posts
+              </Text>
+
+              <Text
+                style={
+                  styles.sectionDescription
+                }
+              >
+                Songs they shared
+              </Text>
+            </View>
+
+            <Text style={styles.sectionCount}>
+              {createdPosts.length}
+            </Text>
+          </View>
+
+          {createdPosts.length === 0 ? (
+            <View
+              style={
+                styles.sectionEmptyBox
+              }
+            >
+              <Text
+                style={
+                  styles.sectionPlaceholder
+                }
+              >
+                No posts yet.
+              </Text>
+            </View>
+          ) : (
+            <DraggableProfileRow
+              useNativeScroll={!isDesktopWeb}
+              contentStyle={
+                styles.horizontalLikedList
+              }
+            >
+              {createdPosts.map((post) => {
+                const track =
+                  post?.item_info ||
+                  post;
+
+                const imageUri =
+                  track?.image ||
+                  track?.coverArt ||
+                  "";
+
+                return (
+                  <TouchableOpacity
+                    key={String(
+                      post?.record_id ||
+                      post?.id
+                    )}
+                    style={[
+                      styles.likedSongCard,
+                      isCompact &&
+                        styles.compactLikedSongCard,
+                    ]}
+                    activeOpacity={0.82}
+                    onPress={() =>
+                      openCreatedPost(post)
+                    }
+                  >
+                    {imageUri ? (
+                      <Image
+                        source={{
+                          uri: imageUri,
+                        }}
+                        style={
+                          styles.likedSongImage
+                        }
+                      />
+                    ) : (
+                      <View
+                        style={
+                          styles.likedSongPlaceholder
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.likedSongPlaceholderText
+                          }
+                        >
+                          ♪
+                        </Text>
+                      </View>
+                    )}
+
+                    <View
+                      style={
+                        styles.likedSongInfo
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.likedSongTitle
+                        }
+                        numberOfLines={1}
+                      >
+                        {track?.title ||
+                          track?.name ||
+                          "Shared Song"}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.likedSongArtist
+                        }
+                        numberOfLines={1}
+                      >
+                        {track?.artistName ||
+                          track?.artist?.name ||
+                          ""}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.postCommentText
+                        }
+                        numberOfLines={2}
+                      >
+                        {track?.comment ||
+                          post?.origin?.description ||
+                          ""}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </DraggableProfileRow>
+          )}
+        </View>
+      ),
+      [
+        createdPosts,
+        isCompact,
+        isDesktopWeb,
+        openCreatedPost,
+      ]
+    );
 
   const loadAllReviewsSections =
     useCallback(async () => {
@@ -1123,10 +1359,14 @@ console.log(
           );
 
           if (canView) {
-            await loadAllReviewsSections();
+            await Promise.all([
+              loadAllReviewsSections(),
+              loadCreatedPosts(),
+            ]);
           } else {
             setTopReviews([]);
             setLikedSongs([]);
+            setCreatedPosts([]);
             setFavorites([]);
             setMostUpvoted([]);
             setActivity([]);
@@ -2696,6 +2936,8 @@ const finalButtonLabel =
             </View>
           ) : (
             <>
+              {renderCreatedPostsSection()}
+
               {renderReviewSection(
                 "Top Reviews",
                 topReviews,
@@ -3735,6 +3977,16 @@ const styles =
 
       backgroundColor:
         "rgba(255,255,255,0.025)",
+    },
+
+    postCommentText: {
+      color:
+        "rgba(255,255,255,0.54)",
+
+      fontSize: 11,
+      lineHeight: 15,
+
+      marginTop: 5,
     },
 
     sectionPlaceholder: {
