@@ -19,6 +19,7 @@ import {
 } from "react-native-screens";
 
 import * as SplashScreen from "expo-splash-screen";
+import * as WebBrowser from "expo-web-browser";
 import { useFonts } from "expo-font";
 import Toast from "react-native-toast-message";
 
@@ -67,6 +68,14 @@ import {
  * Enable it once here so inactive native screens can be detached.
  */
 enableScreens(true);
+
+/*
+ * Completes OAuth popup sessions on web.
+ *
+ * When Spotify redirects back to Treble, this closes the popup and sends
+ * the authorization result to the original Connections screen.
+ */
+WebBrowser.maybeCompleteAuthSession();
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   /*
