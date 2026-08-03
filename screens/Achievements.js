@@ -742,14 +742,19 @@ const styles = StyleSheet.create({
   },
 
   mobileHeaderRow: {
+    position: "relative",
     flexDirection: "column",
     alignItems: "stretch",
   },
 
   mobileBackButton: {
-    alignSelf: "flex-start",
+    position: "absolute",
+    top: -82,
+    left: 80,
+    zIndex: 90,
+    elevation: 15,
     marginRight: 0,
-    marginBottom: 16,
+    marginBottom: 0,
   },
 
   backButton: {

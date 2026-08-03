@@ -261,7 +261,10 @@ export default function Credits({
             ]}
           >
             <TouchableOpacity
-              style={styles.backButton}
+              style={[
+                styles.backButton,
+                !isDesktopWeb && styles.mobileBackButton,
+              ]}
               onPress={() => navigation.goBack()}
               activeOpacity={0.8}
             >
@@ -620,8 +623,18 @@ const styles = StyleSheet.create({
   },
 
   mobileTopBar: {
-    alignItems: "flex-start",
-    paddingLeft: 2,
+    position: "relative",
+    height: 0,
+    marginBottom: 0,
+    paddingLeft: 0,
+  },
+
+  mobileBackButton: {
+    position: "absolute",
+    top: -72,
+    left: 80,
+    zIndex: 90,
+    elevation: 15,
   },
 
   backButton: {
