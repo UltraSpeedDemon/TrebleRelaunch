@@ -199,10 +199,12 @@ export default function Connections({
         );
 
         setIsSpotifyLinked(
-          Boolean(
-            userData?.spotifyIsLinked ===
-              true
-          )
+          userData?.spotifyIsLinked ===
+            true ||
+          userData?.spotifyIsLinked ===
+            "true" ||
+          userData?.spotifyIsLinked ===
+            1
         );
       } catch (error) {
         console.error(
@@ -403,7 +405,8 @@ export default function Connections({
     useCallback(async () => {
       if (
         isSpotifyLinked ||
-        linkingSpotify
+        linkingSpotify ||
+        unlinkingSpotify
       ) {
         return;
       }
@@ -459,6 +462,7 @@ export default function Connections({
     }, [
       isSpotifyLinked,
       linkingSpotify,
+      unlinkingSpotify,
       promptAsync,
       request,
       spotifyConfigured,
@@ -493,6 +497,13 @@ export default function Connections({
 
         setIsSpotifyLinked(false);
 
+        /*
+         * Read the user back from the backend to confirm Firestore was
+         * updated. Profile.js and UserProfiles.js use spotifyIsLinked,
+         * so setting it to false removes the Spotify badge.
+         */
+        await fetchUserData();
+
         Alert.alert(
           "Spotify unlinked",
           "Spotify was removed from your Treble account. The Spotify badge has also been removed."
@@ -512,6 +523,7 @@ export default function Connections({
         setUnlinkingSpotify(false);
       }
     }, [
+      fetchUserData,
       parseResponse,
       unlinkingSpotify,
     ]);
@@ -523,9 +535,33 @@ export default function Connections({
         return;
       }
 
+      const confirmationMessage =
+        "This removes the Spotify connection and Spotify badge from your Treble profile.";
+
+      /*
+       * React Native Web's Alert implementation does not consistently
+       * run custom button callbacks. Use the browser confirmation dialog
+       * on web so pressing Unlink always calls the backend.
+       */
+      if (
+        Platform.OS === "web" &&
+        typeof window !== "undefined"
+      ) {
+        const confirmed =
+          window.confirm(
+            `Unlink Spotify?\n\n${confirmationMessage}`
+          );
+
+        if (confirmed) {
+          performSpotifyUnlink();
+        }
+
+        return;
+      }
+
       Alert.alert(
         "Unlink Spotify?",
-        "This removes the Spotify connection and Spotify badge from your Treble profile.",
+        confirmationMessage,
         [
           {
             text: "Cancel",

@@ -3,8 +3,8 @@ import * as AuthSession from "expo-auth-session";
 /*
  * Public Spotify Client ID.
  *
- * The Client ID is safe to expose in the Expo web bundle.
- * Never add the Spotify Client Secret to an EXPO_PUBLIC variable.
+ * A Client ID may be included in an Expo web/mobile bundle.
+ * Never place the Spotify Client Secret in the app.
  */
 export const SPOTIFY_CLIENT_ID =
   String(
@@ -14,7 +14,7 @@ export const SPOTIFY_CLIENT_ID =
   ).trim();
 
 /*
- * Must exactly match the URI registered in the Spotify dashboard.
+ * This must exactly match the Redirect URI registered in Spotify.
  */
 export const REDIRECT_URI =
   String(
@@ -23,14 +23,6 @@ export const REDIRECT_URI =
       "https://treblemusic.netlify.app"
   ).trim();
 
-/*
- * These scopes support:
- * - Reading the connected Spotify account
- * - Loading top tracks
- * - Reading private and collaborative playlists
- *
- * Add write/playback scopes later only when those features are built.
- */
 const DEFAULT_SPOTIFY_SCOPE =
   [
     "user-read-email",
@@ -52,9 +44,6 @@ export const SPOTIFY_SCOPES =
     )
     .filter(Boolean);
 
-/*
- * Spotify OAuth endpoints used by expo-auth-session.
- */
 export const discovery = {
   authorizationEndpoint:
     "https://accounts.spotify.com/authorize",
@@ -63,9 +52,6 @@ export const discovery = {
     "https://accounts.spotify.com/api/token",
 };
 
-/*
- * Validate configuration before beginning authorization.
- */
 export function validateSpotifyConfiguration() {
   if (!SPOTIFY_CLIENT_ID) {
     throw new Error(
@@ -83,10 +69,11 @@ export function validateSpotifyConfiguration() {
 }
 
 /*
- * Creates the Spotify PKCE request configuration.
+ * Spotify's show_dialog=true forces Spotify to display authorization
+ * again instead of immediately reusing the previous approval.
  *
- * Connections.js can pass this object into:
- * AuthSession.useAuthRequest(...)
+ * This is important after unlinking because it gives the user a fresh
+ * Spotify connection screen and the opportunity to use another account.
  */
 export function getSpotifyAuthRequestConfig() {
   validateSpotifyConfiguration();
@@ -108,24 +95,26 @@ export function getSpotifyAuthRequestConfig() {
 
     codeChallengeMethod:
       AuthSession.CodeChallengeMethod.S256,
+
+    extraParams: {
+      show_dialog: "true",
+    },
   };
 }
 
 /*
- * Do not log access or refresh tokens.
- *
- * Your Connections page should save them through your backend/updateUser
- * call rather than keeping them globally in this module.
+ * Tokens are persisted through Treble's authenticated backend endpoints.
+ * Never print access or refresh tokens.
  */
 export const setAccessToken = () => {
   console.warn(
-    "[Spotify] setAccessToken is deprecated. Save tokens through the authenticated user update flow."
+    "[Spotify] setAccessToken is deprecated. Save tokens through the authenticated backend."
   );
 };
 
 export const setRefreshToken = () => {
   console.warn(
-    "[Spotify] setRefreshToken is deprecated. Save tokens through the authenticated user update flow."
+    "[Spotify] setRefreshToken is deprecated. Save tokens through the authenticated backend."
   );
 };
 
