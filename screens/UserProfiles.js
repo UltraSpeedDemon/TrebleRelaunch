@@ -20,6 +20,8 @@ import {
   View,
 } from "react-native";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import {
   useFocusEffect,
   useRoute,
@@ -64,6 +66,14 @@ const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
 const BOTTOM_NAV_HEIGHT = 72;
 const MAX_CONTENT_WIDTH = 1080;
+
+const USER_PROFILE_CACHE_PREFIX =
+  "treble:user-profile:v2";
+
+const userProfileCacheKey = (userId) =>
+  `${USER_PROFILE_CACHE_PREFIX}:${String(
+    userId || ""
+  )}`;
 
 const ADMIN_BADGE_EMAILS = new Set([
   "mcplayzethan@gmail.com",
@@ -383,6 +393,12 @@ export default function UserProfiles({
     loading,
     setLoading,
   ] = useState(true);
+
+  const profileLoadRequest =
+    React.useRef(0);
+
+  const profileHasPainted =
+    React.useRef(false);
 
   const [
     refreshing,
@@ -1250,6 +1266,198 @@ console.log(
       userId,
     ]);
 
+  const applyCachedProfile =
+    useCallback((cached) => {
+      if (!cached || typeof cached !== "object") {
+        return false;
+      }
+
+      setUsername(
+        String(
+          cached.username ||
+          "Treble User"
+        )
+      );
+
+      setAvatar(
+        cached.avatar || null
+      );
+
+      setFollowersCount(
+        Number(
+          cached.followersCount || 0
+        )
+      );
+
+      setFollowingCount(
+        Number(
+          cached.followingCount || 0
+        )
+      );
+
+      setIsPublic(
+        cached.isPublic !== false
+      );
+
+      setIsSpotifyLinked(
+        cached.isSpotifyLinked === true
+      );
+
+      setIsAdmin(
+        cached.isAdmin === true
+      );
+
+      setHasAchievementBadge(
+        cached.hasAchievementBadge ===
+          true
+      );
+
+      setCanViewFullContent(
+        cached.canViewFullContent !==
+          false
+      );
+
+      if (Array.isArray(cached.topReviews)) {
+        setTopReviews(cached.topReviews);
+      }
+
+      if (Array.isArray(cached.likedSongs)) {
+        setLikedSongs(cached.likedSongs);
+      }
+
+      if (Array.isArray(cached.createdPosts)) {
+        setCreatedPosts(
+          cached.createdPosts
+        );
+      }
+
+      if (Array.isArray(cached.favorites)) {
+        setFavorites(cached.favorites);
+      }
+
+      if (Array.isArray(cached.mostUpvoted)) {
+        setMostUpvoted(
+          cached.mostUpvoted
+        );
+      }
+
+      if (Array.isArray(cached.activity)) {
+        setActivity(cached.activity);
+      }
+
+      setTotalReviews(
+        Number(
+          cached.totalReviews || 0
+        )
+      );
+
+      profileHasPainted.current = true;
+      setLoading(false);
+
+      if (cached.avatar) {
+        Image.prefetch(
+          cached.avatar
+        ).catch(() => {});
+      }
+
+      return true;
+    }, []);
+
+  const restoreProfileCache =
+    useCallback(async () => {
+      if (!userId) {
+        return false;
+      }
+
+      try {
+        const raw =
+          await AsyncStorage.getItem(
+            userProfileCacheKey(
+              userId
+            )
+          );
+
+        if (!raw) {
+          return false;
+        }
+
+        return applyCachedProfile(
+          JSON.parse(raw)
+        );
+      } catch (error) {
+        console.warn(
+          "[UserProfiles] Cache restore failed:",
+          error
+        );
+
+        return false;
+      }
+    }, [
+      applyCachedProfile,
+      userId,
+    ]);
+
+  const saveProfileCache =
+    useCallback(
+      async (overrides = {}) => {
+        if (!userId) {
+          return;
+        }
+
+        try {
+          await AsyncStorage.setItem(
+            userProfileCacheKey(
+              userId
+            ),
+            JSON.stringify({
+              username,
+              avatar,
+              followersCount,
+              followingCount,
+              isPublic,
+              isSpotifyLinked,
+              isAdmin,
+              hasAchievementBadge,
+              canViewFullContent,
+              topReviews,
+              likedSongs,
+              createdPosts,
+              favorites,
+              mostUpvoted,
+              activity,
+              totalReviews,
+              savedAt: Date.now(),
+              ...overrides,
+            })
+          );
+        } catch (error) {
+          console.warn(
+            "[UserProfiles] Cache save failed:",
+            error
+          );
+        }
+      },
+      [
+        activity,
+        avatar,
+        canViewFullContent,
+        createdPosts,
+        favorites,
+        followersCount,
+        followingCount,
+        hasAchievementBadge,
+        isAdmin,
+        isPublic,
+        isSpotifyLinked,
+        likedSongs,
+        mostUpvoted,
+        topReviews,
+        totalReviews,
+        userId,
+        username,
+      ]
+    );
+
   const fetchUserData =
     useCallback(
       async (
@@ -1261,29 +1469,42 @@ console.log(
           );
 
           setLoading(false);
-
           return;
         }
+
+        const requestId =
+          ++profileLoadRequest.current;
 
         try {
           if (isRefresh) {
             setRefreshing(true);
-          } else {
+          } else if (
+            !profileHasPainted.current
+          ) {
             setLoading(true);
           }
 
           setErrorMessage("");
 
+          /*
+           * Fetch the small profile payload first. This paints the avatar,
+           * username, counts and buttons before reviews/music sections.
+           */
           const response =
-            await getUser(
-              userId
-            );
+            await getUser(userId);
 
           const data =
             await parseResponse(
               response,
               "Unable to load this profile."
             );
+
+          if (
+            requestId !==
+            profileLoadRequest.current
+          ) {
+            return;
+          }
 
           const finalUsername =
             String(
@@ -1315,106 +1536,187 @@ console.log(
 
           const finalIsPublic =
             publicValue === true ||
-            publicValue ===
-              "true" ||
+            publicValue === "true" ||
             publicValue === 1 ||
-            publicValue ===
-              undefined;
+            publicValue === undefined;
 
-          setUsername(
-            finalUsername
-          );
-
-          setAvatar(
-            finalAvatar
-          );
-
-          setFollowersCount(
-            Number(
-              data?.followersCount
-            ) || 0
-          );
-
-          setFollowingCount(
-            Number(
-              data?.followingCount
-            ) || 0
-          );
-
-          setIsPublic(
-            finalIsPublic
-          );
-
-          setIsSpotifyLinked(
-            data?.spotifyIsLinked ===
-              true ||
+          const finalSpotifyLinked =
+            data?.spotifyIsLinked === true ||
             data?.spotifyIsLinked ===
               "true" ||
-            data?.spotifyIsLinked ===
-              1
-          );
+            data?.spotifyIsLinked === 1;
 
-          setIsAdmin(
+          const finalIsAdmin =
             hasAdminBadge({
               email:
                 data?.email ||
                 data?.userEmail,
               isAdmin:
                 data?.isAdmin,
+            });
+
+          const nextFollowersCount =
+            Number(
+              data?.followersCount || 0
+            );
+
+          const nextFollowingCount =
+            Number(
+              data?.followingCount || 0
+            );
+
+          setUsername(finalUsername);
+          setAvatar(finalAvatar);
+          setFollowersCount(
+            nextFollowersCount
+          );
+          setFollowingCount(
+            nextFollowingCount
+          );
+          setIsPublic(finalIsPublic);
+          setIsSpotifyLinked(
+            finalSpotifyLinked
+          );
+          setIsAdmin(finalIsAdmin);
+
+          if (finalAvatar) {
+            Image.prefetch(
+              finalAvatar
+            ).catch(() => {});
+          }
+
+          /*
+           * Stop blocking the whole page here. Everything below updates
+           * individual sections in the background.
+           */
+          profileHasPainted.current = true;
+          setLoading(false);
+
+          await AsyncStorage.setItem(
+            userProfileCacheKey(userId),
+            JSON.stringify({
+              username:
+                finalUsername,
+              avatar:
+                finalAvatar,
+              followersCount:
+                nextFollowersCount,
+              followingCount:
+                nextFollowingCount,
+              isPublic:
+                finalIsPublic,
+              isSpotifyLinked:
+                finalSpotifyLinked,
+              isAdmin:
+                finalIsAdmin,
+              hasAchievementBadge,
+              canViewFullContent:
+                finalIsPublic || isSelf,
+              topReviews,
+              likedSongs,
+              createdPosts,
+              favorites,
+              mostUpvoted,
+              activity,
+              totalReviews,
+              savedAt:
+                Date.now(),
             })
           );
 
-          try {
-            const achievementResponse =
-              await getAchievements(
-                userId
-              );
+          /*
+           * Reuse one target-followers request instead of requesting it
+           * once for the button and again for the follower list.
+           */
+          const [
+            targetFollowersResult,
+            myFollowersResult,
+            requestResult,
+            achievementResult,
+          ] = await Promise.allSettled([
+            fetchTheirFollowers(),
+            fetchMyFollowers(),
+            checkFollowRequest(),
+            getAchievements(userId),
+          ]);
 
-            const achievementData =
-              achievementResponse?.ok
-                ? await achievementResponse.json()
-                : {};
-
-            setHasAchievementBadge(
-              hasEarnedAchievement(
-                achievementData?.stats
-              )
-            );
-          } catch (achievementError) {
-            console.warn(
-              "[UserProfiles] Achievement badge could not load:",
-              achievementError
-            );
+          if (
+            requestId !==
+            profileLoadRequest.current
+          ) {
+            return;
           }
 
-          const [
-            following,
-          ] = await Promise.all([
-            checkIfFollowing(
-              userId
-            ),
+          const targetFollowers =
+            targetFollowersResult.status ===
+            "fulfilled"
+              ? targetFollowersResult.value
+              : [];
 
-            fetchTheirFollowers(),
-
-            fetchMyFollowers(),
-
-            checkFollowRequest(),
-          ]);
+          const following =
+            targetFollowers.some(
+              (follower) =>
+                String(
+                  follower?.userId ||
+                  follower?.uid ||
+                  follower?.id ||
+                  follower?.followerId ||
+                  follower?.follower_id ||
+                  ""
+                ) === currentUserId
+            );
 
           const canView =
             finalIsPublic ||
             isSelf ||
             following;
 
-          setCanViewFullContent(
-            canView
-          );
+          setCanViewFullContent(canView);
+
+          if (
+            achievementResult.status ===
+              "fulfilled" &&
+            achievementResult.value?.ok
+          ) {
+            const achievementData =
+              await achievementResult
+                .value.json();
+
+            setHasAchievementBadge(
+              hasEarnedAchievement(
+                achievementData?.stats
+              )
+            );
+          }
 
           if (canView) {
-            await Promise.all([
+            /*
+             * Do not await these before showing the profile. Each section
+             * fills in as soon as its own request completes.
+             */
+            Promise.allSettled([
               loadAllReviewsSections(),
               loadCreatedPosts(),
-            ]);
+            ]).then(() => {
+              saveProfileCache({
+                username:
+                  finalUsername,
+                avatar:
+                  finalAvatar,
+                followersCount:
+                  nextFollowersCount,
+                followingCount:
+                  nextFollowingCount,
+                isPublic:
+                  finalIsPublic,
+                isSpotifyLinked:
+                  finalSpotifyLinked,
+                isAdmin:
+                  finalIsAdmin,
+                canViewFullContent:
+                  canView,
+              });
+            });
           } else {
             setTopReviews([]);
             setLikedSongs([]);
@@ -1430,31 +1732,72 @@ console.log(
             error
           );
 
-          setErrorMessage(
-            error?.message ||
-            "Unable to load this profile."
-          );
+          if (
+            !profileHasPainted.current
+          ) {
+            setErrorMessage(
+              error?.message ||
+              "Unable to load this profile."
+            );
+          }
         } finally {
-          setLoading(false);
-          setRefreshing(false);
+          if (
+            requestId ===
+            profileLoadRequest.current
+          ) {
+            setLoading(false);
+            setRefreshing(false);
+          }
         }
       },
       [
-      checkFollowRequest,
-      checkIfFollowing,
-      fetchMyFollowers,
-      fetchTheirFollowers,
-      isSelf,
-      loadAllReviewsSections,
-      parseResponse,
-      userId,
-    ]
+        activity,
+        canViewFullContent,
+        checkFollowRequest,
+        createdPosts,
+        currentUserId,
+        favorites,
+        fetchMyFollowers,
+        fetchTheirFollowers,
+        hasAchievementBadge,
+        isSelf,
+        likedSongs,
+        loadAllReviewsSections,
+        loadCreatedPosts,
+        mostUpvoted,
+        parseResponse,
+        saveProfileCache,
+        topReviews,
+        totalReviews,
+        userId,
+      ]
     );
 
   useFocusEffect(
     useCallback(() => {
-      fetchUserData(false);
-    }, [fetchUserData])
+      let active = true;
+
+      const start = async () => {
+        if (
+          !profileHasPainted.current
+        ) {
+          await restoreProfileCache();
+        }
+
+        if (active) {
+          fetchUserData(false);
+        }
+      };
+
+      start();
+
+      return () => {
+        active = false;
+      };
+    }, [
+      fetchUserData,
+      restoreProfileCache,
+    ])
   );
 
   const iAmFollowing =
