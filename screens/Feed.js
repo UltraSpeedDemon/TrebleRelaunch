@@ -53,7 +53,7 @@ import {
   getFollowRequests,
 } from "../providers/rest";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 16;
 const DOUBLE_TAP_DELAY = 300;
 
 /*
@@ -61,7 +61,7 @@ const DOUBLE_TAP_DELAY = 300;
  * two minutes. It does not refresh immediately on first render.
  */
 const FEED_AUTO_REFRESH_MS =
-  60 * 1000;
+  90 * 1000;
 
 const FEED_CACHE_KEY = "treble_feed_cache_v3";
 /*
@@ -77,7 +77,10 @@ const DESKTOP_SIDEBAR_WIDTH = 280;
 const PLACEHOLDER_IMAGE = "https://via.placeholder.com/500";
 const PLACEHOLDER_AVATAR = "https://via.placeholder.com/100";
 
-export default function Feed({ navigation }) {
+export default function Feed({
+  navigation,
+  route,
+}) {
   const { width } = useWindowDimensions();
 
   const isWeb = Platform.OS === "web";
@@ -140,6 +143,12 @@ export default function Feed({ navigation }) {
   const initialRequestInFlight = useRef(false);
   const loadMoreRequestInFlight = useRef(false);
   const paginationCursorRef = useRef(0);
+
+  const feedMixGenerationRef =
+    useRef(0);
+
+  const lastInsertedPostIdRef =
+    useRef(null);
 
   /*
    * The first Feed focus should restore the existing feed.
@@ -228,15 +237,29 @@ export default function Feed({ navigation }) {
   }, []);
 
   const getImageUrl = useCallback((item) => {
-    const itemInfo = getItemInfo(item);
+    const itemInfo =
+      getItemInfo(item);
 
-    return (
+    const candidate =
       itemInfo?.image ||
       itemInfo?.coverArt ||
+      itemInfo?.albumCover ||
       itemInfo?.album?.cover_medium ||
       itemInfo?.album?.cover_big ||
-      PLACEHOLDER_IMAGE
-    );
+      item?.albumCover ||
+      PLACEHOLDER_IMAGE;
+
+    if (
+      candidate &&
+      typeof candidate === "object" &&
+      typeof candidate.uri === "string"
+    ) {
+      return candidate.uri;
+    }
+
+    return typeof candidate === "string"
+      ? candidate
+      : PLACEHOLDER_IMAGE;
   }, [getItemInfo]);
 
   const getDisplayName = useCallback((item) => {
@@ -822,46 +845,199 @@ export default function Feed({ navigation }) {
     []
   );
 
-  const mergeFeedItems = useCallback(
-    (timelineItems, recommendationItems) => {
-      const result = [];
-      const usedIds = new Set();
+  const getFeedMixCategory =
+    useCallback((item) => {
+      const originType =
+        String(
+          item?.origin?.type ||
+          item?.item_info?.origin?.type ||
+          item?.source ||
+          item?.item_info?.source ||
+          item?.activityType ||
+          item?.type ||
+          "music"
+        ).toLowerCase();
 
-      const addItem = (item) => {
+      if (
+        originType.includes("post") ||
+        originType.includes("created")
+      ) {
+        return "post";
+      }
+
+      if (
+        originType.includes("friend") ||
+        originType.includes("share")
+      ) {
+        return "friend";
+      }
+
+      if (
+        originType.includes("like") ||
+        originType.includes("favourite") ||
+        originType.includes("favorite")
+      ) {
+        return "liked";
+      }
+
+      if (
+        originType.includes("genre")
+      ) {
+        return "genre";
+      }
+
+      if (
+        originType.includes("review")
+      ) {
+        return "review";
+      }
+
+      if (
+        originType.includes("recommend")
+      ) {
+        return "recommendation";
+      }
+
+      return "music";
+    }, []);
+
+  const shuffleFeedItems =
+    useCallback((items) => {
+      const result =
+        [...items];
+
+      for (
+        let index =
+          result.length - 1;
+        index > 0;
+        index -= 1
+      ) {
+        const swapIndex =
+          Math.floor(
+            Math.random() *
+            (index + 1)
+          );
+
+        [
+          result[index],
+          result[swapIndex],
+        ] = [
+          result[swapIndex],
+          result[index],
+        ];
+      }
+
+      return result;
+    }, []);
+
+  const diversifyFeedItems =
+    useCallback((items) => {
+      const uniqueItems = [];
+      const usedIds =
+        new Set();
+
+      items.forEach((item) => {
         const itemId =
-          getRecordId(item) ||
-          getItemId(item) ||
-          JSON.stringify(item);
+          String(
+            getRecordId(item) ||
+            getItemId(item) ||
+            ""
+          );
 
-        if (usedIds.has(itemId)) {
+        if (
+          !itemId ||
+          usedIds.has(itemId)
+        ) {
           return;
         }
 
         usedIds.add(itemId);
-        result.push(item);
-      };
+        uniqueItems.push(item);
+      });
 
-      const maximumLength = Math.max(
-        timelineItems.length,
-        recommendationItems.length
-      );
+      const buckets =
+        new Map();
 
-      for (let index = 0; index < maximumLength; index += 1) {
-        if (timelineItems[index]) {
-          addItem(timelineItems[index]);
+      shuffleFeedItems(
+        uniqueItems
+      ).forEach((item) => {
+        const category =
+          getFeedMixCategory(item);
+
+        if (!buckets.has(category)) {
+          buckets.set(category, []);
         }
 
-        if (recommendationItems[index]) {
-          addItem(recommendationItems[index]);
+        buckets
+          .get(category)
+          .push(item);
+      });
+
+      const result = [];
+      let previousCategory = "";
+
+      while (
+        [...buckets.values()].some(
+          (bucket) =>
+            bucket.length > 0
+        )
+      ) {
+        const candidates =
+          [...buckets.entries()]
+            .filter(
+              ([, bucket]) =>
+                bucket.length > 0
+            )
+            .sort(
+              (first, second) =>
+                second[1].length -
+                first[1].length
+            );
+
+        const choice =
+          candidates.find(
+            ([category]) =>
+              category !==
+              previousCategory
+          ) ||
+          candidates[0];
+
+        if (!choice) {
+          break;
         }
+
+        const [
+          category,
+          bucket,
+        ] = choice;
+
+        result.push(
+          bucket.shift()
+        );
+
+        previousCategory =
+          category;
       }
 
       return result;
-    },
-    [
+    }, [
+      getFeedMixCategory,
       getItemId,
       getRecordId,
-    ]
+      shuffleFeedItems,
+    ]);
+
+  const mergeFeedItems = useCallback(
+    (
+      timelineItems,
+      recommendationItems
+    ) => {
+      return diversifyFeedItems([
+        ...timelineItems,
+        ...recommendationItems,
+      ]);
+    },
+    [diversifyFeedItems]
   );
 
   const saveFeedCache = useCallback(
@@ -974,33 +1150,56 @@ export default function Feed({ navigation }) {
          * Calling /users/recommendations here as well doubled
          * backend work and made the first page wait twice.
          */
-        const timelineItems =
-          await fetchTimelineItems(
+        const [
+          timelineItems,
+          recommendationItems,
+        ] = await Promise.all([
+          fetchTimelineItems(
             0,
             refresh
+          ),
+          fetchRecommendationItems(
+            0,
+            refresh
+          ),
+        ]);
+
+        const mixedItems =
+          mergeFeedItems(
+            timelineItems,
+            recommendationItems
           );
 
-        if (timelineItems.length > 0) {
+        if (mixedItems.length > 0) {
           setCombinedFeed(
-            timelineItems
+            mixedItems
           );
 
           setTimelineOffset(
             timelineItems.length
           );
 
-          paginationCursorRef.current =
-            timelineItems.length;
+          setRecommendationsOffset(
+            recommendationItems.length
+          );
 
-          setRecommendationsOffset(0);
+          paginationCursorRef.current =
+            Math.max(
+              timelineItems.length,
+              recommendationItems.length,
+              PAGE_SIZE
+            );
+
+          feedMixGenerationRef.current +=
+            1;
 
           setHasMore(
-            timelineItems.length >=
+            mixedItems.length >=
             PAGE_SIZE
           );
 
           await saveFeedCache(
-            timelineItems
+            mixedItems
           );
         } else if (
           latestFeedRef.current.length > 0
@@ -1032,158 +1231,161 @@ export default function Feed({ navigation }) {
       }
     },
     [
+      fetchRecommendationItems,
       fetchTimelineItems,
+      mergeFeedItems,
       saveFeedCache,
     ]
   );
 
 
-  const loadMoreFeed = useCallback(async () => {
-    if (
-      loadMoreRequestInFlight.current ||
-      loadingMore ||
-      isLoading
-    ) {
-      return;
-    }
-
-    loadMoreRequestInFlight.current =
-      true;
-
-    setLoadingMore(true);
-    setHasMore(true);
-
-    try {
-      const existingIds =
-        new Set(
-          latestFeedRef.current
-            .map(
-              (item) =>
-                String(
-                  getItemId(item) ||
-                  ""
-                )
-            )
-            .filter(Boolean)
-        );
-
-      const uniqueNewItems = [];
-
-      /*
-       * Try multiple recommendation windows before giving up.
-       * This prevents one duplicate-heavy page from ending the feed.
-       */
-      for (
-        let attempt = 0;
-        attempt < 4;
-        attempt += 1
-      ) {
-        const requestOffset =
-          paginationCursorRef.current;
-
-        const timelineItems =
-          await fetchTimelineItems(
-            requestOffset,
-            attempt > 1
-          );
-
-        paginationCursorRef.current +=
-          Math.max(
-            timelineItems.length,
-            PAGE_SIZE
-          );
-
-        for (
-          const item of
-            timelineItems
-        ) {
-          const itemId =
-            String(
-              getItemId(item) ||
-              ""
-            );
-
-          if (
-            !itemId ||
-            existingIds.has(
-              itemId
-            )
-          ) {
-            continue;
-          }
-
-          existingIds.add(itemId);
-          uniqueNewItems.push(item);
-        }
-
-        if (
-          uniqueNewItems.length >=
-          PAGE_SIZE
-        ) {
-          break;
-        }
-      }
-
+  const loadMoreFeed =
+    useCallback(async () => {
       if (
-        uniqueNewItems.length === 0
+        loadMoreRequestInFlight.current ||
+        loadingMore ||
+        isLoading
       ) {
-        /*
-         * Keep infinite scrolling available. Manual refresh can also
-         * generate a completely new mix.
-         */
-        setHasMore(true);
         return;
       }
 
-      let updatedFeed = [];
-
-      setCombinedFeed(
-        (currentItems) => {
-          updatedFeed = [
-            ...currentItems,
-            ...uniqueNewItems,
-          ];
-
-          return updatedFeed;
-        }
-      );
-
-      setTimelineOffset(
-        paginationCursorRef.current
-      );
-
-      setHasMore(true);
-
-      if (
-        updatedFeed.length > 0
-      ) {
-        await saveFeedCache(
-          updatedFeed
-        );
-      }
-    } catch (error) {
-      console.error(
-        "[Feed] Load-more error:",
-        error
-      );
-
-      /*
-       * A temporary request error must not permanently end the feed.
-       */
-      setHasMore(true);
-    } finally {
       loadMoreRequestInFlight.current =
-        false;
+        true;
 
-      setLoadingMore(false);
-    }
-  }, [
-    fetchTimelineItems,
-    getItemId,
-    isLoading,
-    loadingMore,
-    saveFeedCache,
-  ]);
+      setLoadingMore(true);
+      setHasMore(true);
+
+      try {
+        const existingIds =
+          new Set(
+            latestFeedRef.current
+              .map((item) =>
+                String(
+                  getRecordId(item) ||
+                  getItemId(item) ||
+                  ""
+                )
+              )
+              .filter(Boolean)
+          );
+
+        const requestOffset =
+          paginationCursorRef.current;
+
+        const [
+          timelineItems,
+          recommendationItems,
+        ] = await Promise.all([
+          fetchTimelineItems(
+            requestOffset,
+            false
+          ),
+          fetchRecommendationItems(
+            requestOffset,
+            false
+          ),
+        ]);
+
+        paginationCursorRef.current +=
+          PAGE_SIZE;
+
+        const mixedCandidates =
+          mergeFeedItems(
+            timelineItems,
+            recommendationItems
+          );
+
+        const uniqueNewItems =
+          mixedCandidates.filter(
+            (item) => {
+              const itemId =
+                String(
+                  getRecordId(item) ||
+                  getItemId(item) ||
+                  ""
+                );
+
+              if (
+                !itemId ||
+                existingIds.has(itemId)
+              ) {
+                return false;
+              }
+
+              existingIds.add(itemId);
+              return true;
+            }
+          );
+
+        if (
+          uniqueNewItems.length === 0
+        ) {
+          /*
+           * Jump forward and try a refreshed window next time instead of
+           * repeatedly requesting the same duplicate-heavy page.
+           */
+          paginationCursorRef.current +=
+            PAGE_SIZE;
+
+          setHasMore(true);
+          return;
+        }
+
+        let updatedFeed = [];
+
+        setCombinedFeed(
+          (currentItems) => {
+            updatedFeed = [
+              ...currentItems,
+              ...uniqueNewItems,
+            ];
+
+            return updatedFeed;
+          }
+        );
+
+        setTimelineOffset(
+          requestOffset +
+          timelineItems.length
+        );
+
+        setRecommendationsOffset(
+          requestOffset +
+          recommendationItems.length
+        );
+
+        setHasMore(true);
+
+        if (
+          updatedFeed.length > 0
+        ) {
+          await saveFeedCache(
+            updatedFeed
+          );
+        }
+      } catch (error) {
+        console.error(
+          "[Feed] Load-more error:",
+          error
+        );
+
+        setHasMore(true);
+      } finally {
+        loadMoreRequestInFlight.current =
+          false;
+
+        setLoadingMore(false);
+      }
+    }, [
+      fetchRecommendationItems,
+      fetchTimelineItems,
+      getItemId,
+      getRecordId,
+      isLoading,
+      loadingMore,
+      mergeFeedItems,
+      saveFeedCache,
+    ]);
 
 
   const handleRefresh = useCallback(async () => {
@@ -1298,15 +1500,13 @@ export default function Feed({ navigation }) {
       }
 
       /*
-       * Do not silently replace an already-visible feed.
-       * Fetch a new one only when no cached feed exists.
+       * Render cached cards immediately for speed, then always request a
+       * fresh randomized mix in the background when the app/feed reloads.
        */
-      if (!restoredFeed) {
-        await fetchInitialFeed(
-          false,
-          true
-        );
-      }
+      await fetchInitialFeed(
+        true,
+        !restoredFeed
+      );
     };
 
     startFeed();
@@ -1317,6 +1517,179 @@ export default function Feed({ navigation }) {
   }, [
     fetchInitialFeed,
     restoreFeedCache,
+  ]);
+
+  useEffect(() => {
+    const newPost =
+      route?.params?.newPost;
+
+    if (!newPost?.id) {
+      return;
+    }
+
+    const postId =
+      String(newPost.id);
+
+    if (
+      lastInsertedPostIdRef.current ===
+      postId
+    ) {
+      return;
+    }
+
+    lastInsertedPostIdRef.current =
+      postId;
+
+    const currentUser =
+      auth.currentUser;
+
+    const feedPost = {
+      ...newPost,
+
+      id: postId,
+      record_id:
+        `created-post-${postId}`,
+
+      type: "track",
+      source: "created-post",
+
+      origin: {
+        type: "post",
+        title: "Your new post",
+        description:
+          "You just shared this song.",
+      },
+
+      createdAt:
+        new Date().toISOString(),
+
+      item_info: {
+        ...newPost,
+
+        id:
+          String(
+            newPost.listenableId ||
+            newPost.listenable_id ||
+            newPost.songId ||
+            newPost.id
+          ),
+
+        listenableId:
+          String(
+            newPost.listenableId ||
+            newPost.listenable_id ||
+            newPost.songId ||
+            newPost.id
+          ),
+
+        listenable_id:
+          String(
+            newPost.listenableId ||
+            newPost.listenable_id ||
+            newPost.songId ||
+            newPost.id
+          ),
+
+        type: "track",
+
+        title:
+          newPost.title ||
+          newPost.name ||
+          "Shared song",
+
+        name:
+          newPost.name ||
+          newPost.title ||
+          "Shared song",
+
+        artist:
+          typeof newPost.artist ===
+          "string"
+            ? {
+                name:
+                  newPost.artist,
+              }
+            : newPost.artist ||
+              {
+                name:
+                  newPost.artistName ||
+                  "",
+              },
+
+        artistName:
+          typeof newPost.artist ===
+          "string"
+            ? newPost.artist
+            : newPost.artistName ||
+              newPost.artist?.name ||
+              "",
+
+        image:
+          newPost.image ||
+          newPost.coverArt ||
+          newPost.albumCover?.uri ||
+          "",
+
+        coverArt:
+          newPost.coverArt ||
+          newPost.image ||
+          newPost.albumCover?.uri ||
+          "",
+
+        comment:
+          newPost.comment ||
+          "",
+
+        rating:
+          Number(
+            newPost.rating || 0
+          ),
+
+        username:
+          newPost.username ||
+          currentUser?.displayName ||
+          "You",
+      },
+    };
+
+    let updatedFeed = [];
+
+    setCombinedFeed(
+      (currentItems) => {
+        updatedFeed = [
+          feedPost,
+          ...currentItems.filter(
+            (item) =>
+              String(
+                getRecordId(item) ||
+                ""
+              ) !==
+              feedPost.record_id
+          ),
+        ];
+
+        return updatedFeed;
+      }
+    );
+
+    setTimeout(() => {
+      if (
+        updatedFeed.length > 0
+      ) {
+        saveFeedCache(
+          updatedFeed
+        );
+      }
+    }, 0);
+
+    navigation.setParams?.({
+      newPost: undefined,
+    });
+  }, [
+    getRecordId,
+    navigation,
+    route?.params?.newPost,
+    saveFeedCache,
   ]);
 
   useEffect(() => {
@@ -2926,12 +3299,12 @@ export default function Feed({ navigation }) {
             }
 
             onEndReached={loadMoreFeed}
-            onEndReachedThreshold={0.6}
+            onEndReachedThreshold={0.85}
 
-            initialNumToRender={4}
-            maxToRenderPerBatch={4}
-            updateCellsBatchingPeriod={50}
-            windowSize={7}
+            initialNumToRender={6}
+            maxToRenderPerBatch={8}
+            updateCellsBatchingPeriod={32}
+            windowSize={9}
 
             showsVerticalScrollIndicator={false}
 
@@ -2946,9 +3319,7 @@ export default function Feed({ navigation }) {
             keyboardDismissMode="on-drag"
             nestedScrollEnabled={true}
             scrollEnabled={true}
-            removeClippedSubviews={
-              Platform.OS !== "web"
-            }
+            removeClippedSubviews={false}
           />
         )}
       </View>
