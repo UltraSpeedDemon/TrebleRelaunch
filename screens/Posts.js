@@ -448,12 +448,10 @@ export default function Posts({
       >
         <Icon
           name="arrow-back"
-          size={23}
+          size={26}
           color="#ffffff"
         />
       </TouchableOpacity>
-
-
 
       <View
         style={[
@@ -483,7 +481,6 @@ export default function Posts({
                 styles.topBarMobile,
             ]}
           >
-
             <View>
               <Text style={styles.eyebrow}>
                 TREBLE POST
@@ -589,7 +586,6 @@ export default function Posts({
                     </Text>
                   </View>
                 )}
-
               </TouchableOpacity>
 
               <View
@@ -695,35 +691,38 @@ export default function Posts({
 
 const styles =
   StyleSheet.create({
+    /*
+     * Matches the mobile Sidebar hamburger:
+     * same 48px circle, background, no outline, and aligned beside it.
+     */
+    rootBackButton: {
+      position: "absolute",
+      top: 40,
+      left: 80,
 
-  rootBackButton: {
-    position: "absolute",
-    top: Platform.OS === "web" ? 20 : -22,
-    left: 88,
-    zIndex: 100,
-    elevation: 20,
+      zIndex: 101,
+      elevation: 31,
 
-    width: 44,
-    height: 44,
+      width: 48,
+      height: 48,
 
-    borderRadius: 22,
+      borderRadius: 24,
 
-    alignItems: "center",
-    justifyContent: "center",
+      alignItems: "center",
+      justifyContent: "center",
 
-    backgroundColor:
-      "rgba(255,255,255,0.10)",
+      backgroundColor:
+        "rgba(255,255,255,0.08)",
 
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.14)",
-  },
+      borderWidth: 0,
+    },
 
-  desktopRootBackButton: {
-    top: 20,
-    left: DESKTOP_SIDEBAR_WIDTH + 20,
-  },
-
+    desktopRootBackButton: {
+      top: 20,
+      left:
+        DESKTOP_SIDEBAR_WIDTH +
+        20,
+    },
 
     container: {
       flex: 1,
@@ -815,10 +814,6 @@ const styles =
     },
 
     scrollContentMobile: {
-      /*
-       * Leave enough room for the existing mobile hamburger button.
-       * The back button starts below it instead of occupying the same area.
-       */
       paddingTop: 112,
       paddingHorizontal: 14,
     },
@@ -840,10 +835,6 @@ const styles =
     },
 
     topBarMobile: {
-      /*
-       * Mobile hamburger stays at the top-left.
-       * This row sits underneath it and cannot overlap.
-       */
       minHeight: 46,
     },
 
