@@ -2137,39 +2137,49 @@ const styles = StyleSheet.create({
   },
 
   mobilePageHeader: {
-    height: 105,
+    /*
+     * Keep the search bar and notification button on the exact
+     * same horizontal row as the Sidebar hamburger.
+     */
+    height: 82,
 
-    paddingTop: 20,
-    paddingBottom: 10,
+    paddingTop: 18,
+    paddingBottom: 18,
 
     /*
-     * Reserve a dedicated area for the mobile Sidebar
-     * hamburger so it cannot sit over the search field.
+     * The hamburger starts at left: 16 and is 46px wide.
+     * Leave a small gap before the search bar begins.
      */
-    paddingLeft: 92,
+    paddingLeft: 80,
     paddingRight: 14,
   },
 
   searchContainer: {
     flex: 1,
     minWidth: 0,
+
+    height: 46,
+
+    justifyContent: "center",
   },
 
   notificationsButton: {
     position: "relative",
 
-    width: 48,
-    height: 48,
+    width: 46,
+    height: 46,
+
+    flexShrink: 0,
 
     alignItems: "center",
     justifyContent: "center",
 
     marginLeft: 12,
 
-    borderRadius: 24,
+    borderRadius: 23,
 
     backgroundColor:
-      "rgba(255,255,255,0.06)",
+      "rgba(255,255,255,0.07)",
   },
 
   notificationIcon: {
@@ -2293,7 +2303,7 @@ const styles = StyleSheet.create({
   mobilePageContent: {
     position: "absolute",
 
-    top: 105,
+    top: 82,
     left: 0,
     right: 0,
 

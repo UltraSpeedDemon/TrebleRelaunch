@@ -3683,7 +3683,50 @@ export default function Feed({
                   New Mix
                 </Text>
               </TouchableOpacity>
-            ) : null}
+            ) : (
+              <TouchableOpacity
+                style={
+                  styles.mobileNotificationsButton
+                }
+                onPress={() =>
+                  navigation.navigate(
+                    "Notifications"
+                  )
+                }
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  notificationsCount > 0
+                    ? `${notificationsCount} unread notifications`
+                    : "Notifications"
+                }
+                hitSlop={8}
+              >
+                <Icon
+                  name="notifications-none"
+                  size={25}
+                  color="#ffffff"
+                />
+
+                {notificationsCount > 0 ? (
+                  <View
+                    style={
+                      styles.mobileNotificationBadge
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.mobileNotificationBadgeText
+                      }
+                    >
+                      {notificationsCount > 99
+                        ? "99+"
+                        : notificationsCount}
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.feedFilterBar}>
@@ -3773,6 +3816,8 @@ export default function Feed({
       filteredFeed.length,
       handleRefresh,
       isDesktopWeb,
+      navigation,
+      notificationsCount,
       refreshing,
     ]);
 
@@ -4788,6 +4833,61 @@ desktopBottomNavBar: {
     lineHeight: 20,
 
     marginTop: 5,
+  },
+
+  /*
+   * Mobile notification button matches the Explore page:
+   * same size, shape, right-side header position and live badge.
+   */
+  mobileNotificationsButton: {
+    position: "relative",
+    width: 46,
+    height: 46,
+
+    flexShrink: 0,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 15,
+
+    backgroundColor:
+      "rgba(255,255,255,0.055)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.09)",
+  },
+
+  mobileNotificationBadge: {
+    position: "absolute",
+
+    top: -5,
+    right: -5,
+
+    minWidth: 21,
+    height: 21,
+
+    paddingHorizontal: 5,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 11,
+
+    backgroundColor: "#ff405f",
+
+    borderWidth: 2,
+    borderColor:
+      colours.background ||
+      "#101010",
+  },
+
+  mobileNotificationBadgeText: {
+    color: "#ffffff",
+
+    fontSize: 9,
+    fontWeight: "900",
   },
 
   refreshFeedButton: {
