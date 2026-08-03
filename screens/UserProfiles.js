@@ -1579,7 +1579,7 @@ const finalButtonLabel =
         visible: true,
         title: "Treble Achiever",
         description:
-          "This user has completed at least one difficult Treble achievement.",
+          "Awarded for completing all 6 Treble achievements.",
         image: ACHIEVEMENT_BADGE,
       });
     }, []);

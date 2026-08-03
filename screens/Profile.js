@@ -1186,7 +1186,7 @@ export default function Profile({
         visible: true,
         title: "Treble Achiever",
         description:
-          "This user has completed at least one difficult Treble achievement.",
+          "Awarded for completing all 6 Treble achievements.",
         image: require("../images/achievementBadge.png"),
       });
     }, []);

@@ -255,7 +255,13 @@ export default function Achievements({
                 <Text
                   style={styles.summaryLabel}
                 >
-                  achievements unlocked
+                  achievements completed
+                </Text>
+
+                <Text
+                  style={styles.summaryRewardText}
+                >
+                  Collect all 6 to earn this profile badge
                 </Text>
               </View>
 
@@ -283,7 +289,7 @@ export default function Achievements({
 
             <View style={styles.summaryFooter}>
               <Text style={styles.summaryHint}>
-                Keep listening, reviewing and connecting to unlock more.
+                Complete all 6 achievements to earn the Treble trophy badge.
               </Text>
 
               <TouchableOpacity
@@ -400,20 +406,19 @@ export default function Achievements({
                               .badgeIconUnlocked,
                         ]}
                       >
-                        {unlocked ? (
-                          <Image
-                            source={ACHIEVEMENT_BADGE}
-                            style={
-                              styles.earnedBadgeImage
-                            }
-                          />
-                        ) : (
-                          <Icon
-                            name="emoji-events"
-                            size={29}
-                            color={colours.lightblue}
-                          />
-                        )}
+                        <Icon
+                          name={
+                            unlocked
+                              ? "emoji-events"
+                              : "emoji-events"
+                          }
+                          size={29}
+                          color={
+                            unlocked
+                              ? "#ffd768"
+                              : colours.lightblue
+                          }
+                        />
                       </View>
 
                       <View
@@ -716,27 +721,22 @@ const styles = StyleSheet.create({
   },
 
   summaryIcon: {
-    width: 62,
-    height: 62,
-
-    borderRadius: 20,
+    width: 70,
+    height: 70,
 
     alignItems: "center",
     justifyContent: "center",
 
-    backgroundColor:
-      colours.secondaryblue,
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.22)",
+    backgroundColor: "transparent",
+    borderWidth: 0,
 
     marginRight: 16,
   },
 
   summaryBadgeImage: {
-    width: 54,
-    height: 54,
+    width: 68,
+    height: 68,
+
     resizeMode: "contain",
   },
 
@@ -770,6 +770,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
 
     marginTop: 1,
+  },
+
+  summaryRewardText: {
+    color: "#ffd768",
+
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "800",
+
+    marginTop: 5,
   },
 
   completionBubble: {
@@ -1036,11 +1046,6 @@ const styles = StyleSheet.create({
       "rgba(255,255,255,0.08)",
   },
 
-  earnedBadgeImage: {
-    width: 62,
-    height: 62,
-    resizeMode: "contain",
-  },
 
   badgeIconUnlocked: {
     backgroundColor:

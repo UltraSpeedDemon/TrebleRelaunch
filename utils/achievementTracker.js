@@ -87,11 +87,19 @@ export function hasEarnedAchievement(stats) {
     ...(stats || {}),
   };
 
-  return ACHIEVEMENT_DEFINITIONS.some(
+  return ACHIEVEMENT_DEFINITIONS.every(
     (achievement) =>
       Number(safeStats[achievement.statKey] || 0) >=
       achievement.goal
   );
+}
+
+/**
+ * The profile trophy is the final collection reward.
+ * It unlocks only when all six achievements are complete.
+ */
+export function hasCollectedAllAchievements(stats) {
+  return hasEarnedAchievement(stats);
 }
 
 export function getEarnedAchievementCount(stats) {
