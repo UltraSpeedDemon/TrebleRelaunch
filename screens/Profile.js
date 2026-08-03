@@ -2878,6 +2878,7 @@ desktopBottomNavBar: {
 
     fontSize: 25,
     lineHeight: 30,
+    marginBottom: 3,
 
     textAlign: "center",
   },
