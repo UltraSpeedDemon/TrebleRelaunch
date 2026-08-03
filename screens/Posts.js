@@ -21,7 +21,7 @@ import colours from "../styles/colours";
 
 const DESKTOP_BREAKPOINT = 768;
 const DESKTOP_SIDEBAR_WIDTH = 280;
-const MAX_CONTENT_WIDTH = 760;
+const MAX_CONTENT_WIDTH = 920;
 const BOTTOM_NAV_HEIGHT = 72;
 
 export default function Posts({
@@ -40,6 +40,9 @@ export default function Posts({
 
   const isCompact =
     width < 600;
+
+  const isMobile =
+    width < DESKTOP_BREAKPOINT;
 
   const post =
     route?.params?.post || {};
@@ -155,14 +158,25 @@ export default function Posts({
       >
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={
-            styles.scrollContent
-          }
+          contentContainerStyle={[
+            styles.scrollContent,
+            isDesktopWeb
+              ? styles.scrollContentDesktop
+              : styles.scrollContentMobile,
+          ]}
           showsVerticalScrollIndicator={
             false
           }
         >
-          <View style={styles.topBar}>
+          <View
+            style={[
+              styles.topBar,
+              isDesktopWeb &&
+                styles.topBarDesktop,
+              isMobile &&
+                styles.topBarMobile,
+            ]}
+          >
             <TouchableOpacity
               style={styles.backButton}
               onPress={() =>
@@ -188,7 +202,15 @@ export default function Posts({
             </View>
           </View>
 
-          <View style={styles.postCard}>
+          <View
+            style={[
+              styles.postCard,
+              isDesktopWeb &&
+                styles.postCardDesktop,
+              isCompact &&
+                styles.postCardCompact,
+            ]}
+          >
             <View style={styles.authorRow}>
               <View style={styles.postPill}>
                 <Icon
@@ -236,34 +258,64 @@ export default function Posts({
                   styles.songCommentLayoutCompact,
               ]}
             >
-              {image ? (
-                <Image
-                  source={{
-                    uri: image,
-                  }}
-                  style={[
-                    styles.artwork,
-                    isCompact &&
-                      styles.artworkCompact,
-                  ]}
-                />
-              ) : (
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={openSong}
+                style={[
+                  styles.artworkButton,
+                  isCompact &&
+                    styles.artworkButtonCompact,
+                ]}
+              >
+                {image ? (
+                  <Image
+                    source={{
+                      uri: image,
+                    }}
+                    style={[
+                      styles.artwork,
+                      isCompact &&
+                        styles.artworkCompact,
+                    ]}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.artworkPlaceholder,
+                      isCompact &&
+                        styles.artworkCompact,
+                    ]}
+                  >
+                    <Text
+                      style={
+                        styles.artworkPlaceholderText
+                      }
+                    >
+                      ♪
+                    </Text>
+                  </View>
+                )}
+
                 <View
-                  style={[
-                    styles.artworkPlaceholder,
-                    isCompact &&
-                      styles.artworkCompact,
-                  ]}
+                  style={
+                    styles.artworkOpenOverlay
+                  }
                 >
+                  <Icon
+                    name="open-in-new"
+                    size={16}
+                    color="#ffffff"
+                  />
+
                   <Text
                     style={
-                      styles.artworkPlaceholderText
+                      styles.artworkOpenText
                     }
                   >
-                    ♪
+                    Open song
                   </Text>
                 </View>
-              )}
+              </TouchableOpacity>
 
               <View
                 style={
@@ -382,6 +434,8 @@ const styles =
     desktopPage: {
       marginLeft:
         DESKTOP_SIDEBAR_WIDTH,
+
+      alignItems: "center",
     },
 
     scrollView: {
@@ -396,17 +450,47 @@ const styles =
 
       alignSelf: "center",
 
-      paddingHorizontal: 16,
-      paddingTop: 34,
+      paddingHorizontal: 18,
       paddingBottom:
         BOTTOM_NAV_HEIGHT + 42,
     },
 
+    scrollContentDesktop: {
+      paddingTop: 48,
+      paddingHorizontal: 28,
+    },
+
+    scrollContentMobile: {
+      /*
+       * Leave enough room for the existing mobile hamburger button.
+       * The back button starts below it instead of occupying the same area.
+       */
+      paddingTop: 112,
+      paddingHorizontal: 14,
+    },
+
     topBar: {
+      width: "100%",
+
       flexDirection: "row",
       alignItems: "center",
 
-      marginBottom: 22,
+      marginBottom: 20,
+    },
+
+    topBarDesktop: {
+      maxWidth:
+        MAX_CONTENT_WIDTH,
+
+      alignSelf: "center",
+    },
+
+    topBarMobile: {
+      /*
+       * Mobile hamburger stays at the top-left.
+       * This row sits underneath it and cannot overlap.
+       */
+      minHeight: 46,
     },
 
     backButton: {
@@ -442,9 +526,9 @@ const styles =
     postCard: {
       width: "100%",
 
-      padding: 18,
+      padding: 22,
 
-      borderRadius: 22,
+      borderRadius: 24,
 
       backgroundColor:
         "rgba(27,27,30,0.99)",
@@ -462,6 +546,18 @@ const styles =
       shadowRadius: 18,
 
       elevation: 7,
+    },
+
+    postCardDesktop: {
+      maxWidth: 880,
+      alignSelf: "center",
+
+      padding: 26,
+    },
+
+    postCardCompact: {
+      padding: 15,
+      borderRadius: 19,
     },
 
     authorRow: {
@@ -526,36 +622,85 @@ const styles =
       flexDirection: "column",
     },
 
+    artworkButton: {
+      position: "relative",
+
+      width: 190,
+      height: 190,
+
+      marginRight: 24,
+
+      borderRadius: 20,
+
+      overflow: "hidden",
+    },
+
+    artworkButtonCompact: {
+      width: "100%",
+      height: 300,
+
+      marginRight: 0,
+      marginBottom: 20,
+    },
+
     artwork: {
-      width: 150,
-      height: 150,
+      width: "100%",
+      height: "100%",
 
-      borderRadius: 17,
-
-      marginRight: 18,
+      borderRadius: 20,
     },
 
     artworkCompact: {
       width: "100%",
-      height: 280,
+      height: "100%",
 
       marginRight: 0,
-      marginBottom: 18,
+      marginBottom: 0,
     },
 
     artworkPlaceholder: {
-      width: 150,
-      height: 150,
+      width: "100%",
+      height: "100%",
 
       alignItems: "center",
       justifyContent: "center",
 
-      borderRadius: 17,
-
-      marginRight: 18,
+      borderRadius: 20,
 
       backgroundColor:
         "rgba(255,255,255,0.06)",
+    },
+
+    artworkOpenOverlay: {
+      position: "absolute",
+
+      left: 10,
+      right: 10,
+      bottom: 10,
+
+      minHeight: 34,
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+
+      gap: 6,
+
+      borderRadius: 17,
+
+      backgroundColor:
+        "rgba(10,10,12,0.78)",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.13)",
+    },
+
+    artworkOpenText: {
+      color: "#ffffff",
+
+      fontSize: 11,
+      fontWeight: "900",
     },
 
     artworkPlaceholderText: {
@@ -568,13 +713,15 @@ const styles =
     postContent: {
       flex: 1,
       minWidth: 0,
+
+      justifyContent: "center",
     },
 
     songTitle: {
       color: "#ffffff",
 
-      fontSize: 22,
-      lineHeight: 27,
+      fontSize: 27,
+      lineHeight: 33,
       fontWeight: "900",
     },
 
@@ -582,9 +729,9 @@ const styles =
       color:
         "rgba(255,255,255,0.55)",
 
-      fontSize: 14,
+      fontSize: 15,
 
-      marginTop: 3,
+      marginTop: 4,
     },
 
     stars: {
@@ -612,11 +759,11 @@ const styles =
 
       gap: 7,
 
-      minHeight: 40,
+      minHeight: 44,
 
-      paddingHorizontal: 14,
+      paddingHorizontal: 17,
 
-      borderRadius: 20,
+      borderRadius: 22,
 
       backgroundColor:
         colours.lightblue ||
