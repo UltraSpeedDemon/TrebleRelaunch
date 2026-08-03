@@ -1573,7 +1573,7 @@ const styles =
     titleContainer: {
       width: "100%",
 
-      marginBottom: 18,
+      marginBottom: 5,
     },
 
     pageTitle: {
