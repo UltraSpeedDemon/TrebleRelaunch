@@ -711,27 +711,108 @@ export default function SongPage({ route, navigation }) {
 
       try {
         /*
-         * Open exactly one destination.
+         * Mobile web / installed PWA:
          *
-         * Previously, iOS could launch Spotify and still reject the
-         * Promise, causing the catch block to open Safari underneath it.
-         * Returning from Spotify then revealed a blank Safari screen.
-         *
-         * Checking the Spotify scheme first prevents that double-open.
+         * iOS opens Spotify but can leave a blank Safari hand-off page
+         * behind. Save the exact Treble song URL before launching Spotify,
+         * then restore it when the browser becomes visible again.
          */
-        if (Platform.OS !== "web") {
-          const spotifyInstalled =
-            await Linking.canOpenURL(
-              "spotify:"
-            );
+        if (
+          Platform.OS === "web" &&
+          typeof window !== "undefined"
+        ) {
+          const trebleSongUrl =
+            window.location.href;
 
-          if (spotifyInstalled) {
-            await Linking.openURL(
-              spotifyAppUrl
-            );
+          let restored = false;
 
-            return;
-          }
+          const restoreTrebleSong =
+            () => {
+              if (restored) {
+                return;
+              }
+
+              restored = true;
+
+              window.removeEventListener(
+                "pageshow",
+                restoreTrebleSong
+              );
+
+              document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange
+              );
+
+              /*
+               * Replace the blank Spotify hand-off page with the exact
+               * Treble route that was open before Spotify launched.
+               */
+              if (
+                window.location.href !==
+                trebleSongUrl
+              ) {
+                window.location.replace(
+                  trebleSongUrl
+                );
+              }
+            };
+
+          const handleVisibilityChange =
+            () => {
+              if (
+                document.visibilityState ===
+                "visible"
+              ) {
+                restoreTrebleSong();
+              }
+            };
+
+          window.addEventListener(
+            "pageshow",
+            restoreTrebleSong
+          );
+
+          document.addEventListener(
+            "visibilitychange",
+            handleVisibilityChange
+          );
+
+          /*
+           * Use Spotify's registered app scheme on mobile web.
+           * This avoids opening Spotify's website in a Safari tab.
+           */
+          window.location.href =
+            spotifyAppUrl;
+
+          /*
+           * Fallback for browsers that never emit a visibility event.
+           * The timer resumes after returning from Spotify.
+           */
+          window.setTimeout(
+            restoreTrebleSong,
+            1800
+          );
+
+          return;
+        }
+
+        /*
+         * Native app:
+         * Open Spotify directly. The mounted SongPage remains in Treble's
+         * navigation stack and is shown again when the user returns.
+         */
+        const spotifyInstalled =
+          await Linking.canOpenURL(
+            "spotify:"
+          );
+
+        if (spotifyInstalled) {
+          await Linking.openURL(
+            spotifyAppUrl
+          );
+
+          return;
         }
 
         await Linking.openURL(
