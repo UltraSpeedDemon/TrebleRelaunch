@@ -354,166 +354,265 @@ export default function App() {
         <Stack.Screen
           name="Home"
           component={Home}
+          options={{
+            title: "Welcome to Treble",
+          }}
         />
 
         <Stack.Screen
           name="Login"
           component={Login}
+          options={{
+            title: "Sign In",
+          }}
         />
 
         <Stack.Screen
           name="Connections"
           component={Connections}
+          options={{
+            title: "Connected Accounts",
+          }}
         />
 
         <Stack.Screen
           name="Feed"
           component={Feed}
+          options={{
+            title: "Home Feed",
+          }}
         />
 
         <Stack.Screen
           name="ForgotPassword"
           component={ForgotPassword}
+          options={{
+            title: "Reset Password",
+          }}
         />
 
         <Stack.Screen
           name="Register"
           component={Register}
+          options={{
+            title: "Create Account",
+          }}
         />
 
         <Stack.Screen
           name="Error"
           component={Error}
+          options={{
+            title: "Something Went Wrong",
+          }}
         />
 
         <Stack.Screen
           name="Profile"
           component={Profile}
+          options={{
+            title: "My Profile",
+          }}
         />
 
         <Stack.Screen
           name="EditProfile"
           component={EditProfile}
+          options={{
+            title: "Edit Profile",
+          }}
         />
 
         <Stack.Screen
           name="Settings"
           component={Settings}
+          options={{
+            title: "Settings",
+          }}
         />
 
         <Stack.Screen
           name="Groups"
           component={Groups}
+          options={{
+            title: "Community",
+          }}
         />
 
         <Stack.Screen
           name="Messages"
           component={Messages}
+          options={{
+            title: "Messages",
+          }}
         />
 
         <Stack.Screen
           name="Notifications"
           component={Notifications}
+          options={{
+            title: "Notifications",
+          }}
         />
 
         <Stack.Screen
           name="Favourites"
           component={Favourites}
+          options={{
+            title: "Favourites",
+          }}
         />
 
         <Stack.Screen
           name="FriendsList"
           component={FriendsList}
+          options={{
+            title: "Friends",
+          }}
         />
 
         <Stack.Screen
           name="Explore"
           component={Explore}
+          options={{
+            title: "Explore Music",
+          }}
         />
 
         <Stack.Screen
           name="CreatePost"
           component={CreatePost}
+          options={{
+            title: "Create a Post",
+          }}
         />
 
         <Stack.Screen
           name="Posts"
           component={Posts}
+          options={{
+            title: "Post",
+          }}
         />
 
         <Stack.Screen
           name="Search"
           component={Search}
+          options={{
+            title: "Search Results",
+          }}
         />
 
         <Stack.Screen
           name="RecentlyViewed"
           component={RecentlyViewed}
+          options={{
+            title: "Recently Viewed",
+          }}
         />
 
         <Stack.Screen
           name="FollowersList"
           component={FollowersList}
+          options={{
+            title: "Followers",
+          }}
         />
 
         <Stack.Screen
           name="FollowingList"
           component={FollowingList}
+          options={{
+            title: "Following",
+          }}
         />
 
         <Stack.Screen
           name="UserProfiles"
           component={UserProfiles}
+          options={{
+            title: "User Profile",
+          }}
         />
 
         <Stack.Screen
           name="SongPage"
           component={SongPage}
+          options={{
+            title: "Song Details",
+          }}
         />
 
         <Stack.Screen
           name="AlbumPage"
           component={AlbumPage}
+          options={{
+            title: "Album Details",
+          }}
         />
 
         <Stack.Screen
           name="ArtistPage"
           component={ArtistPage}
+          options={{
+            title: "Artist Details",
+          }}
         />
 
         <Stack.Screen
           name="MusicSwiper"
           component={MusicSwiper}
+          options={{
+            title: "Music Discovery",
+          }}
         />
 
         <Stack.Screen
           name="SongCardSwipe"
           component={SongCardSwipe}
+          options={{
+            title: "Discover Songs",
+          }}
         />
 
         <Stack.Screen
           name="MusicSwiperTest"
           component={MusicSwiperTest}
+          options={{
+            title: "Music Discovery",
+          }}
         />
 
         <Stack.Screen
           name="UpdateReview"
           component={UpdateReviewPage}
+          options={{
+            title: "Update Review",
+          }}
         />
 
         <Stack.Screen
           name="ArtistListenables"
           component={ArtistListenables}
+          options={{
+            title: "Artist Music",
+          }}
         />
 
         <Stack.Screen
           name="Achievements"
           component={Achievements}
+          options={{
+            title: "Achievements",
+          }}
         />
 
         <Stack.Screen
           name="Credits"
           component={Credits}
+          options={{
+            title: "Credits",
+          }}
         />
       </Stack.Navigator>
 
