@@ -1116,7 +1116,7 @@ const styles =
 
   rootBackButton: {
     position: "absolute",
-    top: Platform.OS === "web" ? 20 : -16,
+    top: Platform.OS === "web" ? 20 : -18,
     left: 88,
     zIndex: 100,
     elevation: 20,

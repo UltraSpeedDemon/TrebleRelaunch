@@ -340,6 +340,16 @@ export default function Favourites({
     ]
   );
 
+  const totalLikedSongs = useMemo(
+    () =>
+      normalizedLikedItems.filter(
+        (item) =>
+          item?.type !== "artist" &&
+          item?.type !== "album"
+      ).length,
+    [normalizedLikedItems]
+  );
+
   const filteredLikedItems = useMemo(() => {
     const query = searchText
       .trim()
@@ -684,6 +694,10 @@ export default function Favourites({
             <Text style={styles.subText}>
               Songs, albums, and artists you have liked.
             </Text>
+
+            <Text style={styles.likedSongCount}>
+              {totalLikedSongs} {totalLikedSongs === 1 ? "liked song" : "liked songs"}
+            </Text>
           </View>
 
           {!isDesktopWeb ? (
@@ -1017,6 +1031,17 @@ desktopBottomNavBar: {
     lineHeight: 21,
 
     marginTop: 3,
+  },
+
+  likedSongCount: {
+    color:
+      colours.lightblue,
+
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
+
+    marginTop: 6,
   },
 
   searchIconButton: {
