@@ -697,7 +697,7 @@ const styles =
      */
     rootBackButton: {
       position: "absolute",
-      top: 40,
+      top: Platform.OS === "web" ? 20 : -22,
       left: 80,
 
       zIndex: 101,
