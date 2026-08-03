@@ -233,22 +233,6 @@ export default function Credits({
       >
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.screen}>
-        <View
-          style={[
-            styles.backgroundOrbOne,
-            isCompact &&
-              styles.backgroundOrbOneCompact,
-          ]}
-        />
-
-        <View
-          style={[
-            styles.backgroundOrbTwo,
-            isCompact &&
-              styles.backgroundOrbTwoCompact,
-          ]}
-        />
-
         <ScrollView
           style={[
             styles.scrollView,
@@ -475,7 +459,9 @@ const styles = StyleSheet.create({
   appContainer: {
     flex: 1,
     minHeight: 0,
-    backgroundColor: colours.darkblue,
+    backgroundColor:
+      colours.background ||
+      "#101010",
   },
 
   sideMenu: {
@@ -547,7 +533,9 @@ const styles = StyleSheet.create({
         ? "100dvh"
         : undefined,
 
-    backgroundColor: colours.darkblue,
+    backgroundColor:
+      colours.background ||
+      "#101010",
   },
 
   screen: {
@@ -563,7 +551,9 @@ const styles = StyleSheet.create({
         ? "100dvh"
         : undefined,
 
-    backgroundColor: colours.darkblue,
+    backgroundColor:
+      colours.background ||
+      "#101010",
   },
 
   scrollView: {

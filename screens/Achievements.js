@@ -631,7 +631,9 @@ const styles = StyleSheet.create({
   appContainer: {
     flex: 1,
     minHeight: 0,
-    backgroundColor: colours.darkblue,
+    backgroundColor:
+      colours.background ||
+      "#101010",
   },
 
   sideMenu: {
@@ -703,7 +705,9 @@ const styles = StyleSheet.create({
         ? "100dvh"
         : undefined,
 
-    backgroundColor: colours.darkblue,
+    backgroundColor:
+      colours.background ||
+      "#101010",
   },
 
   screen: {
@@ -719,7 +723,9 @@ const styles = StyleSheet.create({
         ? "100dvh"
         : undefined,
 
-    backgroundColor: colours.darkblue,
+    backgroundColor:
+      colours.background ||
+      "#101010",
   },
 
   scrollView: {
