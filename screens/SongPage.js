@@ -15,6 +15,7 @@ import {
   TouchableWithoutFeedback,
   Animated,
   Keyboard,
+  Linking,
   useWindowDimensions,
 } from "react-native";
 import Toast from 'react-native-toast-message';
@@ -656,6 +657,96 @@ export default function SongPage({ route, navigation }) {
       Alert.alert("Error", "Unable to toggle like status");
     }
   };
+
+  const openFullSongInSpotify =
+    async () => {
+      const title =
+        String(
+          track?.title ||
+          track?.name ||
+          trackName ||
+          ""
+        ).trim();
+
+      const artist =
+        String(
+          track?.artistName ||
+          track?.artist_name ||
+          track?.artist?.name ||
+          (
+            typeof track?.artist ===
+            "string"
+              ? track.artist
+              : ""
+          ) ||
+          artistName ||
+          ""
+        ).trim();
+
+      const searchQuery =
+        [title, artist]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+
+      if (!searchQuery) {
+        Alert.alert(
+          "Spotify unavailable",
+          "This song does not contain enough information to search Spotify."
+        );
+
+        return;
+      }
+
+      const encodedQuery =
+        encodeURIComponent(
+          searchQuery
+        );
+
+      const spotifyAppUrl =
+        `spotify:search:${encodedQuery}`;
+
+      const spotifyWebUrl =
+        `https://open.spotify.com/search/${encodedQuery}`;
+
+      try {
+        /*
+         * On phones, try the installed Spotify app first.
+         * If Spotify is not installed or the deep link fails,
+         * open the same search on Spotify's website.
+         */
+        if (
+          Platform.OS !== "web"
+        ) {
+          try {
+            await Linking.openURL(
+              spotifyAppUrl
+            );
+
+            return;
+          } catch (appError) {
+            console.warn(
+              "[SongPage] Spotify app could not open; using web:",
+              appError
+            );
+          }
+        }
+
+        await Linking.openURL(
+          spotifyWebUrl
+        );
+      } catch (error) {
+        console.error(
+          "[SongPage] Could not open Spotify:",
+          error
+        );
+
+        Alert.alert(
+          "Unable to open Spotify",
+          "Please try again in a moment."
+        );
+      }
+    };
 
   const openArtistPage = () => {
   const rawArtist =
@@ -1685,6 +1776,59 @@ const handlePlayPreview = async () => {
                   ) : null}
                 </View>
 
+                {/* OPEN FULL SONG IN SPOTIFY */}
+                <TouchableOpacity
+                  style={[
+                    styles.spotifyOpenButton,
+                    isCompact &&
+                      styles.spotifyOpenButtonCompact,
+                  ]}
+                  activeOpacity={0.84}
+                  onPress={(event) => {
+                    event?.stopPropagation?.();
+                    openFullSongInSpotify();
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open full song in Spotify"
+                >
+                  <Image
+                    source={require(
+                      "../images/spotifyLogo.png"
+                    )}
+                    style={
+                      styles.spotifyOpenLogo
+                    }
+                  />
+
+                  <View
+                    style={
+                      styles.spotifyOpenTextWrap
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.spotifyOpenTitle
+                      }
+                    >
+                      Open in Spotify
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.spotifyOpenSubtitle
+                      }
+                    >
+                      Listen to the full song
+                    </Text>
+                  </View>
+
+                  <Icon
+                    name="open-in-new"
+                    size={20}
+                    color="#ffffff"
+                  />
+                </TouchableOpacity>
+
                 {/* REVIEW OPTIONS */}
                 <View
                     style={[
@@ -2344,6 +2488,86 @@ desktopBottomNavBar: {
 
   playButtonLoading: {
     opacity: 0.88,
+  },
+
+  spotifyOpenButton: {
+    width: "100%",
+    maxWidth: 520,
+
+    alignSelf: "center",
+
+    minHeight: 58,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+
+    marginTop: 16,
+    marginBottom: 2,
+
+    borderRadius: 18,
+
+    backgroundColor:
+      "#1DB954",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.14)",
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+
+    elevation: 4,
+  },
+
+  spotifyOpenButtonCompact: {
+    maxWidth: "100%",
+
+    minHeight: 54,
+
+    marginTop: 14,
+
+    borderRadius: 16,
+  },
+
+  spotifyOpenLogo: {
+    width: 32,
+    height: 32,
+
+    resizeMode: "contain",
+
+    marginRight: 12,
+  },
+
+  spotifyOpenTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  spotifyOpenTitle: {
+    color: "#ffffff",
+
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: "900",
+  },
+
+  spotifyOpenSubtitle: {
+    color:
+      "rgba(255,255,255,0.76)",
+
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "600",
+
+    marginTop: 1,
   },
 
   songDetails: {
