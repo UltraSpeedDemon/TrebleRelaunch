@@ -82,6 +82,11 @@ export default function Connections({
     setIsSpotifyLinked,
   ] = useState(false);
 
+  const [
+    spotifyBetaError,
+    setSpotifyBetaError,
+  ] = useState(false);
+
   const [menuOpen, setMenuOpen] =
     useState(false);
 
@@ -198,14 +203,19 @@ export default function Connections({
             "Treble User"
         );
 
-        setIsSpotifyLinked(
+        const linked =
           userData?.spotifyIsLinked ===
             true ||
           userData?.spotifyIsLinked ===
             "true" ||
           userData?.spotifyIsLinked ===
-            1
-        );
+            1;
+
+        setIsSpotifyLinked(linked);
+
+        if (linked) {
+          setSpotifyBetaError(false);
+        }
       } catch (error) {
         console.error(
           "[Connections] Load error:",
@@ -378,11 +388,40 @@ export default function Connections({
             error
           );
 
-          Alert.alert(
-            "Spotify connection failed",
-            error?.message ||
-              "Please try again."
-          );
+          const message =
+            String(
+              error?.message || ""
+            );
+
+          const isDevelopmentAccessError =
+            message.includes("403") ||
+            message
+              .toLowerCase()
+              .includes(
+                "spotify rejected the access token"
+              ) ||
+            message
+              .toLowerCase()
+              .includes(
+                "not authorized"
+              );
+
+          if (
+            isDevelopmentAccessError
+          ) {
+            setSpotifyBetaError(true);
+
+            Alert.alert(
+              "Spotify Beta Access",
+              "Spotify connections are currently limited to approved Treble beta testers. Your Spotify account completed authorization, but Spotify blocked the final connection because this account is not on Treble's Spotify tester list."
+            );
+          } else {
+            Alert.alert(
+              "Spotify connection failed",
+              message ||
+                "Please try again."
+            );
+          }
         } finally {
           setLinkingSpotify(
             false
@@ -430,6 +469,7 @@ export default function Connections({
       }
 
       try {
+        setSpotifyBetaError(false);
         setLinkingSpotify(true);
 
         const result =
@@ -496,6 +536,7 @@ export default function Connections({
         );
 
         setIsSpotifyLinked(false);
+        setSpotifyBetaError(false);
 
         /*
          * Read the user back from the backend to confirm Firestore was
@@ -754,6 +795,46 @@ export default function Connections({
                 Connect Spotify to improve music discovery and unlock the Spotify badge on your profile.
               </Text>
 
+              {!isSpotifyLinked ? (
+                <View
+                  style={[
+                    styles.spotifyBetaNotice,
+                    spotifyBetaError &&
+                      styles.spotifyBetaNoticeError,
+                  ]}
+                >
+                  <View
+                    style={
+                      styles.spotifyBetaHeader
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.spotifyBetaBadge
+                      }
+                    >
+                      BETA
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.spotifyBetaTitle
+                      }
+                    >
+                      Limited Spotify access
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={
+                      styles.spotifyBetaText
+                    }
+                  >
+                    Spotify connections are currently available only to approved Treble beta testers. Other users may complete Spotify authorization, but Spotify can block the final connection until their account is added to the tester list.
+                  </Text>
+                </View>
+              ) : null}
+
               {!spotifyConfigured ? (
                 <Text
                   style={
@@ -813,7 +894,7 @@ export default function Connections({
                     ? "Unlink"
                     : !spotifyConfigured
                       ? "Setup Required"
-                      : "Connect"}
+                      : "Connect Beta"}
                 </Text>
               )}
             </TouchableOpacity>
@@ -1271,6 +1352,70 @@ const styles = StyleSheet.create({
 
   connectedStatus: {
     color: "#45d67b",
+  },
+
+  spotifyBetaNotice: {
+    width: "100%",
+
+    marginTop: 10,
+    padding: 11,
+
+    borderRadius: 12,
+
+    backgroundColor:
+      "rgba(255,191,71,0.08)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,191,71,0.22)",
+  },
+
+  spotifyBetaNoticeError: {
+    backgroundColor:
+      "rgba(255,86,86,0.09)",
+
+    borderColor:
+      "rgba(255,86,86,0.32)",
+  },
+
+  spotifyBetaHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    marginBottom: 6,
+  },
+
+  spotifyBetaBadge: {
+    color: "#101010",
+
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+
+    borderRadius: 7,
+
+    backgroundColor:
+      "#ffbf47",
+
+    marginRight: 8,
+  },
+
+  spotifyBetaTitle: {
+    color: "#ffffff",
+
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  spotifyBetaText: {
+    color:
+      "rgba(255,255,255,0.66)",
+
+    fontSize: 11,
+    lineHeight: 16,
   },
 
   configurationWarning: {
