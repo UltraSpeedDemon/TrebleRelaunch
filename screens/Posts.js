@@ -703,16 +703,16 @@ const styles =
       zIndex: 101,
       elevation: 31,
 
-      width: 48,
-      height: 48,
+      width: 46,
+      height: 46,
 
-      borderRadius: 24,
+      borderRadius: 23,
 
       alignItems: "center",
       justifyContent: "center",
 
       backgroundColor:
-        "rgba(255,255,255,0.08)",
+        "rgba(255,255,255,0.07)",
 
       borderWidth: 0,
     },
