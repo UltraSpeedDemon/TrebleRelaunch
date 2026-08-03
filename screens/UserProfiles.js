@@ -24,6 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import {
   useFocusEffect,
+  useIsFocused,
   useRoute,
 } from "@react-navigation/native";
 
@@ -244,6 +245,9 @@ export default function UserProfiles({
 }) {
   const route = useRoute();
 
+  const isFocused =
+    useIsFocused();
+
   const { width } =
     useWindowDimensions();
 
@@ -411,6 +415,14 @@ export default function UserProfiles({
 
   const profileHasPainted =
     React.useRef(false);
+
+  /*
+   * Only run one profile refresh while this user profile is open.
+   * The loading callbacks change as row data changes, so without this guard
+   * useFocusEffect repeatedly starts every loader again.
+   */
+  const loadedUserThisFocus =
+    React.useRef("");
 
   const [
     refreshing,
@@ -783,20 +795,6 @@ export default function UserProfiles({
             </View>
 
             <View style={styles.sectionHeaderRight}>
-              {sectionLoading.posts &&
-              createdPosts.length > 0 ? (
-                <View style={styles.sectionRefreshing}>
-                  <ActivityIndicator
-                    size="small"
-                    color={colours.lightblue || "#35afe5"}
-                  />
-
-                  <Text style={styles.sectionRefreshingText}>
-                    Refreshing
-                  </Text>
-                </View>
-              ) : null}
-
               <Text style={styles.sectionCount}>
                 {createdPosts.length}
               </Text>
@@ -1864,9 +1862,46 @@ console.log(
       ]
     );
 
+  useEffect(() => {
+    if (!isFocused) {
+      /*
+       * Permit one new refresh when this profile page is opened again.
+       */
+      loadedUserThisFocus.current =
+        "";
+    }
+  }, [isFocused]);
+
+  useEffect(() => {
+    /*
+     * A different selected user requires one new profile load.
+     */
+    loadedUserThisFocus.current =
+      "";
+
+    profileHasPainted.current =
+      false;
+  }, [userId]);
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
+
+      const focusKey =
+        String(userId || "");
+
+      if (
+        !focusKey ||
+        loadedUserThisFocus.current ===
+          focusKey
+      ) {
+        return () => {
+          active = false;
+        };
+      }
+
+      loadedUserThisFocus.current =
+        focusKey;
 
       const start = async () => {
         if (
@@ -1876,7 +1911,7 @@ console.log(
         }
 
         if (active) {
-          fetchUserData(false);
+          await fetchUserData(false);
         }
       };
 
@@ -1888,6 +1923,7 @@ console.log(
     }, [
       fetchUserData,
       restoreProfileCache,
+      userId,
     ])
   );
 

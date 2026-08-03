@@ -302,6 +302,12 @@ export default function Profile({
   const profileRequestId =
     useRef(0);
 
+  /*
+   * Prevent profile state/cache updates from restarting every section loader.
+   */
+  const loadedProfileThisFocus =
+    useRef(false);
+
   const [avatar, setAvatar] =
     useState(null);
 
@@ -647,20 +653,6 @@ export default function Profile({
             </View>
 
             <View style={styles.sectionHeaderRight}>
-              {sectionLoading.posts &&
-              createdPosts.length > 0 ? (
-                <View style={styles.sectionRefreshing}>
-                  <ActivityIndicator
-                    size="small"
-                    color={colours.lightblue}
-                  />
-
-                  <Text style={styles.sectionRefreshingText}>
-                    Refreshing
-                  </Text>
-                </View>
-              ) : null}
-
               <Text style={styles.sectionCount}>
                 {createdPosts.length}
               </Text>
@@ -1618,11 +1610,34 @@ export default function Profile({
   useEffect(() => {
     let active = true;
 
-    const start = async () => {
-      if (!isFocused) {
-        return;
-      }
+    if (!isFocused) {
+      /*
+       * Allow one fresh profile request next time this screen is opened.
+       */
+      loadedProfileThisFocus.current =
+        false;
 
+      return () => {
+        active = false;
+      };
+    }
+
+    /*
+     * loadProfile changes identity as profile rows update. Do not treat that
+     * as a reason to reload Posts, Reviews, Likes, or Activity again.
+     */
+    if (
+      loadedProfileThisFocus.current
+    ) {
+      return () => {
+        active = false;
+      };
+    }
+
+    loadedProfileThisFocus.current =
+      true;
+
+    const start = async () => {
       if (
         !profileHasPainted.current
       ) {
@@ -1630,7 +1645,7 @@ export default function Profile({
       }
 
       if (active) {
-        loadProfile();
+        await loadProfile();
       }
     };
 
