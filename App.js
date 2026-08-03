@@ -105,6 +105,188 @@ const screenOptions = {
     : {}),
 };
 
+function installMobileWebZoomLock() {
+  if (
+    Platform.OS !== "web" ||
+    typeof window === "undefined" ||
+    typeof document === "undefined"
+  ) {
+    return () => {};
+  }
+
+  /*
+   * Configure the mobile viewport.
+   */
+  let viewport = document.querySelector(
+    'meta[name="viewport"]'
+  );
+
+  if (!viewport) {
+    viewport =
+      document.createElement("meta");
+
+    viewport.setAttribute(
+      "name",
+      "viewport"
+    );
+
+    document.head.appendChild(
+      viewport
+    );
+  }
+
+  viewport.setAttribute(
+    "content",
+    [
+      "width=device-width",
+      "initial-scale=1",
+      "minimum-scale=1",
+      "maximum-scale=1",
+      "user-scalable=no",
+      "viewport-fit=cover",
+    ].join(", ")
+  );
+
+  /*
+   * Safari automatically zooms focused inputs when their font size is
+   * smaller than 16px. This fixes every input from one global location.
+   */
+  const styleId =
+    "treble-mobile-zoom-lock";
+
+  let style =
+    document.getElementById(
+      styleId
+    );
+
+  if (!style) {
+    style =
+      document.createElement("style");
+
+    style.id = styleId;
+
+    style.textContent = `
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #101010;
+      }
+
+      #root {
+        min-height: 100vh;
+        min-height: 100dvh;
+      }
+
+      @media screen and (max-width: 767px) {
+        html,
+        body,
+        #root {
+          touch-action: pan-x pan-y;
+          -webkit-text-size-adjust: 100%;
+          text-size-adjust: 100%;
+        }
+
+        input,
+        textarea,
+        select,
+        [contenteditable="true"] {
+          font-size: 16px !important;
+          touch-action: manipulation;
+        }
+
+        button,
+        a,
+        [role="button"] {
+          touch-action: manipulation;
+        }
+      }
+    `;
+
+    document.head.appendChild(
+      style
+    );
+  }
+
+  const preventZoom = (event) => {
+    event.preventDefault();
+  };
+
+  const preventDoubleClickZoom = (
+    event
+  ) => {
+    if (
+      window.matchMedia(
+        "(max-width: 767px)"
+      ).matches
+    ) {
+      event.preventDefault();
+    }
+  };
+
+  /*
+   * gesturestart/gesturechange are needed for iPhone and iPad Safari.
+   */
+  document.addEventListener(
+    "gesturestart",
+    preventZoom,
+    {
+      passive: false,
+    }
+  );
+
+  document.addEventListener(
+    "gesturechange",
+    preventZoom,
+    {
+      passive: false,
+    }
+  );
+
+  document.addEventListener(
+    "gestureend",
+    preventZoom,
+    {
+      passive: false,
+    }
+  );
+
+  document.addEventListener(
+    "dblclick",
+    preventDoubleClickZoom,
+    {
+      passive: false,
+    }
+  );
+
+  return () => {
+    document.removeEventListener(
+      "gesturestart",
+      preventZoom
+    );
+
+    document.removeEventListener(
+      "gesturechange",
+      preventZoom
+    );
+
+    document.removeEventListener(
+      "gestureend",
+      preventZoom
+    );
+
+    document.removeEventListener(
+      "dblclick",
+      preventDoubleClickZoom
+    );
+  };
+}
+
 export default function App() {
   const [fontsLoaded] = useFonts({
     Pacifico: require(
@@ -123,6 +305,10 @@ export default function App() {
       "./assets/fonts/LilitaOne-Regular.ttf"
     ),
   });
+
+  useEffect(() => {
+    return installMobileWebZoomLock();
+  }, []);
 
   useEffect(() => {
     if (!fontsLoaded) {
