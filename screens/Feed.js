@@ -102,6 +102,7 @@ export default function Feed({
 
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
@@ -160,6 +161,8 @@ export default function Feed({
   const feedWasBlurred = useRef(false);
   const latestFeedRef = useRef([]);
   const tapTimerRef = useRef(null);
+  const feedScrollOffsetRef = useRef(0);
+  const pullStartYRef = useRef(null);
   const viewedRecommendationIds = useRef(new Set());
   const slideAnim = useRef(new Animated.Value(0)).current;
 
@@ -1222,50 +1225,12 @@ export default function Feed({
           ),
         ]);
 
-        const currentUserId =
-          String(
-            auth.currentUser?.uid ||
-            ""
-          );
-
-        const ownCreatedPosts =
-          createdPostItems
-            .filter(
-              (item) =>
-                String(
-                  item?.authorId ||
-                  item?.item_info?.authorId ||
-                  ""
-                ) === currentUserId
-            )
-            .sort(
-              (first, second) =>
-                new Date(
-                  second?.createdAt || 0
-                ) -
-                new Date(
-                  first?.createdAt || 0
-                )
-            );
-
-        const otherCreatedPosts =
-          createdPostItems.filter(
-            (item) =>
-              String(
-                item?.authorId ||
-                item?.item_info?.authorId ||
-                ""
-              ) !== currentUserId
-          );
-
-        const mixedItems = [
-          ...ownCreatedPosts,
-          ...diversifyFeedItems([
-            ...otherCreatedPosts,
+        const mixedItems =
+          diversifyFeedItems([
+            ...createdPostItems,
             ...timelineItems,
             ...recommendationItems,
-          ]),
-        ];
+          ]);
 
         if (mixedItems.length > 0) {
           setCombinedFeed(
@@ -2456,8 +2421,251 @@ export default function Feed({
     ]
   );
 
+  const isCreatePostItem =
+    useCallback((item) => {
+      const source =
+        String(
+          item?.source ||
+          item?.item_info?.source ||
+          item?.origin?.type ||
+          item?.item_info?.origin?.type ||
+          ""
+        ).toLowerCase();
+
+      return (
+        source.includes("created-post") ||
+        source === "post" ||
+        String(item?.record_id || "")
+          .startsWith("feed-post-")
+      );
+    }, []);
+
+  const openPostPage =
+    useCallback(
+      (post) => {
+        navigation.navigate(
+          "Posts",
+          {
+            post,
+          }
+        );
+      },
+      [navigation]
+    );
+
+  const renderCreatePostCard =
+    useCallback(
+      (item) => {
+        const itemInfo =
+          getItemInfo(item);
+
+        const imageUrl =
+          getImageUrl(item);
+
+        const title =
+          getDisplayName(item);
+
+        const artist =
+          getArtistName(item);
+
+        const comment =
+          itemInfo?.comment ||
+          item?.origin?.description ||
+          "";
+
+        const rating =
+          Math.max(
+            0,
+            Math.min(
+              5,
+              Number(
+                itemInfo?.rating ||
+                item?.rating ||
+                0
+              )
+            )
+          );
+
+        const username =
+          itemInfo?.username ||
+          item?.username ||
+          "Treble User";
+
+        return (
+          <TouchableOpacity
+            style={[
+              styles.createPostFeedCard,
+              isCompact &&
+                styles.createPostFeedCardCompact,
+            ]}
+            activeOpacity={0.84}
+            onPress={() =>
+              openPostPage(item)
+            }
+          >
+            <View
+              style={
+                styles.createPostBadgeRow
+              }
+            >
+              <View
+                style={
+                  styles.createPostBadge
+                }
+              >
+                <Icon
+                  name="edit"
+                  size={14}
+                  color="#ffffff"
+                />
+
+                <Text
+                  style={
+                    styles.createPostBadgeText
+                  }
+                >
+                  POST
+                </Text>
+              </View>
+
+              <Text
+                style={
+                  styles.createPostAuthor
+                }
+                numberOfLines={1}
+              >
+                {username}
+              </Text>
+
+              <Text
+                style={
+                  styles.createPostTime
+                }
+              >
+                {getTimeAgo(
+                  item?.createdAt
+                )}
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.createPostBody
+              }
+            >
+              <Image
+                source={{
+                  uri: imageUrl,
+                }}
+                style={
+                  styles.createPostArtwork
+                }
+              />
+
+              <View
+                style={
+                  styles.createPostDetails
+                }
+              >
+                <Text
+                  style={
+                    styles.createPostSongTitle
+                  }
+                  numberOfLines={1}
+                >
+                  {title}
+                </Text>
+
+                <Text
+                  style={
+                    styles.createPostArtist
+                  }
+                  numberOfLines={1}
+                >
+                  {artist}
+                </Text>
+
+                <Text
+                  style={
+                    styles.createPostComment
+                  }
+                  numberOfLines={3}
+                >
+                  {comment}
+                </Text>
+
+                <View
+                  style={
+                    styles.createPostFooter
+                  }
+                >
+                  <View
+                    style={
+                      styles.createPostStars
+                    }
+                  >
+                    {[1, 2, 3, 4, 5].map(
+                      (value) => (
+                        <Icon
+                          key={value}
+                          name={
+                            value <= rating
+                              ? "star"
+                              : "star-border"
+                          }
+                          size={16}
+                          color={
+                            value <= rating
+                              ? "#ffb400"
+                              : "rgba(255,255,255,0.34)"
+                          }
+                        />
+                      )
+                    )}
+                  </View>
+
+                  <View
+                    style={
+                      styles.createPostOpenHint
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.createPostOpenText
+                      }
+                    >
+                      View post
+                    </Text>
+
+                    <Icon
+                      name="chevron-right"
+                      size={18}
+                      color="rgba(255,255,255,0.64)"
+                    />
+                  </View>
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+      },
+      [
+        getArtistName,
+        getDisplayName,
+        getImageUrl,
+        getItemInfo,
+        getTimeAgo,
+        isCompact,
+        openPostPage,
+      ]
+    );
+
   const renderFeedItem = useCallback(
     ({ item }) => {
+      if (isCreatePostItem(item)) {
+        return renderCreatePostCard(item);
+      }
+
       const context =
         getRecommendationContext(item);
 
@@ -3155,6 +3363,95 @@ export default function Feed({
       refreshing,
     ]);
 
+  const handleFeedScroll =
+    useCallback((event) => {
+      const offset =
+        Number(
+          event?.nativeEvent
+            ?.contentOffset?.y ||
+          0
+        );
+
+      feedScrollOffsetRef.current =
+        Math.max(0, offset);
+
+      if (offset > 0) {
+        setPullDistance(0);
+      }
+    }, []);
+
+  const handlePullStart =
+    useCallback((event) => {
+      if (
+        feedScrollOffsetRef.current >
+        0
+      ) {
+        pullStartYRef.current = null;
+        return;
+      }
+
+      pullStartYRef.current =
+        event?.nativeEvent
+          ?.pageY ??
+        event?.nativeEvent
+          ?.touches?.[0]
+          ?.pageY ??
+        null;
+    }, []);
+
+  const handlePullMove =
+    useCallback((event) => {
+      if (
+        pullStartYRef.current ===
+          null ||
+        feedScrollOffsetRef.current >
+          0 ||
+        refreshing
+      ) {
+        return;
+      }
+
+      const currentY =
+        event?.nativeEvent
+          ?.pageY ??
+        event?.nativeEvent
+          ?.touches?.[0]
+          ?.pageY ??
+        pullStartYRef.current;
+
+      const distance =
+        Math.max(
+          0,
+          Math.min(
+            110,
+            (
+              currentY -
+              pullStartYRef.current
+            ) * 0.55
+          )
+        );
+
+      setPullDistance(distance);
+    }, [refreshing]);
+
+  const handlePullEnd =
+    useCallback(() => {
+      const shouldRefresh =
+        pullDistance >= 64 &&
+        !refreshing;
+
+      pullStartYRef.current = null;
+      setPullDistance(0);
+
+      if (shouldRefresh) {
+        handleRefresh();
+      }
+    }, [
+      handleRefresh,
+      pullDistance,
+      refreshing,
+    ]);
+
   return (
     <View
       style={[
@@ -3239,27 +3536,58 @@ export default function Feed({
           isMobileWeb && styles.mobileWebContent,
         ]}
       >
-        {refreshing && !isDesktopWeb ? (
+        {pullDistance > 0 ||
+        refreshing ? (
           <View
-            style={
-              styles.mobileRefreshIndicator
-            }
+            style={[
+              styles.pullRefreshContainer,
+              {
+                height:
+                  refreshing
+                    ? 58
+                    : pullDistance,
+                opacity:
+                  refreshing
+                    ? 1
+                    : Math.min(
+                        1,
+                        pullDistance / 48
+                      ),
+              },
+            ]}
             pointerEvents="none"
           >
-            <ActivityIndicator
-              size="small"
-              color="#ffffff"
-            />
+            <View
+              style={[
+                styles.pullRefreshWheel,
+                pullDistance >= 64 &&
+                  styles.pullRefreshWheelReady,
+              ]}
+            >
+              <ActivityIndicator
+                size="small"
+                color="#ffffff"
+                animating={
+                  refreshing ||
+                  pullDistance >= 64
+                }
+              />
+            </View>
 
             <Text
               style={
-                styles.mobileRefreshIndicatorText
+                styles.pullRefreshText
               }
             >
-              Refreshing your feed...
+              {refreshing
+                ? "Refreshing..."
+                : pullDistance >= 64
+                  ? "Release to refresh"
+                  : "Pull to refresh"}
             </Text>
           </View>
         ) : null}
+
         {isLoading ? (
 
           <View style={styles.loadingContainer}>
@@ -3291,6 +3619,25 @@ export default function Feed({
               styles.feedList,
               isWeb && styles.webFeedList,
             ]}
+            onScroll={
+              handleFeedScroll
+            }
+            scrollEventThrottle={16}
+            onTouchStart={
+              handlePullStart
+            }
+            onTouchMove={
+              handlePullMove
+            }
+            onTouchEnd={
+              handlePullEnd
+            }
+            onTouchCancel={
+              handlePullEnd
+            }
+            bounces={true}
+            alwaysBounceVertical={true}
+            overScrollMode="always"
 
             contentContainerStyle={[
               styles.feedContent,
@@ -3317,7 +3664,7 @@ export default function Feed({
                   colours.foreground
                 }
                 progressViewOffset={
-                  isCompact ? 88 : 24
+                  isCompact ? 86 : 24
                 }
               />
             }
@@ -3555,45 +3902,6 @@ desktopBottomNavBar: {
     flex: 1,
     minHeight: 0,
     backgroundColor: colours.background,
-  },
-
-  mobileRefreshIndicator: {
-    position: "absolute",
-    top: 10,
-    left: "50%",
-
-    zIndex: 50,
-    elevation: 50,
-
-    flexDirection: "row",
-    alignItems: "center",
-
-    gap: 8,
-
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-
-    borderRadius: 18,
-
-    backgroundColor:
-      "rgba(28,28,31,0.96)",
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.10)",
-
-    transform: [
-      {
-        translateX: -82,
-      },
-    ],
-  },
-
-  mobileRefreshIndicatorText: {
-    color: "#ffffff",
-
-    fontSize: 12,
-    fontWeight: "800",
   },
 
   webContainer: {
@@ -4153,6 +4461,210 @@ desktopBottomNavBar: {
     textAlign: "center",
 
     marginTop: 7,
+  },
+
+  pullRefreshContainer: {
+    width: "100%",
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    gap: 5,
+
+    overflow: "hidden",
+  },
+
+  pullRefreshWheel: {
+    width: 30,
+    height: 30,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 15,
+
+    backgroundColor:
+      "rgba(255,255,255,0.08)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,255,255,0.10)",
+  },
+
+  pullRefreshWheelReady: {
+    backgroundColor:
+      "rgba(53,175,229,0.22)",
+
+    borderColor:
+      "rgba(53,175,229,0.42)",
+  },
+
+  pullRefreshText: {
+    color:
+      "rgba(255,255,255,0.68)",
+
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  createPostFeedCard: {
+    width: "100%",
+
+    padding: 14,
+    marginBottom: 14,
+
+    borderRadius: 18,
+
+    backgroundColor:
+      "rgba(27,27,30,0.99)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,180,0,0.24)",
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+
+    elevation: 4,
+  },
+
+  createPostFeedCardCompact: {
+    padding: 12,
+    borderRadius: 16,
+  },
+
+  createPostBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    marginBottom: 11,
+  },
+
+  createPostBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    gap: 5,
+
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+
+    borderRadius: 10,
+
+    backgroundColor:
+      "rgba(255,180,0,0.16)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,180,0,0.30)",
+  },
+
+  createPostBadgeText: {
+    color: "#ffffff",
+
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.6,
+  },
+
+  createPostAuthor: {
+    flex: 1,
+
+    color: "#ffffff",
+
+    fontSize: 12,
+    fontWeight: "800",
+
+    marginLeft: 9,
+  },
+
+  createPostTime: {
+    color:
+      "rgba(255,255,255,0.44)",
+
+    fontSize: 10,
+  },
+
+  createPostBody: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+
+  createPostArtwork: {
+    width: 92,
+    height: 92,
+
+    borderRadius: 13,
+
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
+
+    marginRight: 13,
+  },
+
+  createPostDetails: {
+    flex: 1,
+    minWidth: 0,
+
+    justifyContent: "center",
+  },
+
+  createPostSongTitle: {
+    color: "#ffffff",
+
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: "900",
+  },
+
+  createPostArtist: {
+    color:
+      "rgba(255,255,255,0.56)",
+
+    fontSize: 12,
+
+    marginTop: 2,
+  },
+
+  createPostComment: {
+    color:
+      "rgba(255,255,255,0.84)",
+
+    fontSize: 12,
+    lineHeight: 17,
+
+    marginTop: 8,
+  },
+
+  createPostFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+
+    marginTop: 8,
+  },
+
+  createPostStars: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  createPostOpenHint: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  createPostOpenText: {
+    color:
+      "rgba(255,255,255,0.56)",
+
+    fontSize: 10,
+    fontWeight: "700",
   },
 
   card: {

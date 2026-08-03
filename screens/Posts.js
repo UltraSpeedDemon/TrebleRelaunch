@@ -1,434 +1,641 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useMemo,
+} from "react";
+
 import {
-  View,
-  Text,
   Image,
+  Platform,
+  ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
-  TextInput,
-  FlatList,
-  KeyboardAvoidingView,
+  useWindowDimensions,
+  View,
 } from "react-native";
-import { auth } from "../utils/firebase";
+
+import Icon from "react-native-vector-icons/MaterialIcons";
+
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import colours from "../styles/colours";
-import { getUser } from "../providers/rest"; // New REST helper for Orient user data
 
-export default function Posts({ route, navigation }) {
-  const { post, setPosts, posts } = route.params;
+const DESKTOP_BREAKPOINT = 768;
+const DESKTOP_SIDEBAR_WIDTH = 280;
+const MAX_CONTENT_WIDTH = 760;
+const BOTTOM_NAV_HEIGHT = 72;
 
-  const [comment, setComment] = useState("");
-  const [commentRating, setCommentRating] = useState(0);
-  const [comments, setComments] = useState([
-    { id: "1", username: "User1", text: "This song is so catchy!", upvotes: 3, upvoted: false, rating: 5, heartCount: 2, cryCount: 1 },
-    { id: "2", username: "User2", text: "I love the beat on this track.", upvotes: 5, upvoted: true, rating: 4, heartCount: 3, cryCount: 0 },
-    { id: "3", username: "User3", text: "Not really my vibe, but the artist did a great job!", upvotes: 2, upvoted: false, rating: 3, heartCount: 1, cryCount: 2 },
-  ]);
-  const [liked, setLiked] = useState(false);
-  const [savedToLibrary, setSavedToLibrary] = useState(false);
-  const [username, setUsername] = useState(null);
+export default function Posts({
+  route,
+  navigation,
+}) {
+  const { width } =
+    useWindowDimensions();
 
+  const isWeb =
+    Platform.OS === "web";
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const currentUser = auth.currentUser;
-        if (!currentUser) {
-          navigation.navigate("Home");
-          return;
-        }
-        console.log("[DEBUG] Fetching user data from Orient for UID:", currentUser.uid);
-        const response = await getUser(currentUser.uid);
-        if (!response.ok) {
-          throw new Error("Failed to fetch user data from backend.");
-        }
-        const userData = await response.json();
-        console.log("[DEBUG] Received user data from OrientDB:", userData);
-        // Use the username from Orient or fall back to the currentUser displayName
-        setUsername(userData.username || currentUser.displayName);
-      } catch (error) {
-        console.error("Error fetching user data:", error);
+  const isDesktopWeb =
+    isWeb &&
+    width >= DESKTOP_BREAKPOINT;
+
+  const isCompact =
+    width < 600;
+
+  const post =
+    route?.params?.post || {};
+
+  const track =
+    post?.item_info ||
+    post;
+
+  const image =
+    track?.image ||
+    track?.coverArt ||
+    track?.albumCover?.uri ||
+    "";
+
+  const title =
+    track?.title ||
+    track?.name ||
+    "Shared Song";
+
+  const artist =
+    track?.artistName ||
+    track?.artist?.name ||
+    (
+      typeof track?.artist ===
+      "string"
+        ? track.artist
+        : ""
+    );
+
+  const username =
+    track?.username ||
+    post?.username ||
+    "Treble User";
+
+  const comment =
+    track?.comment ||
+    post?.origin?.description ||
+    "";
+
+  const rating =
+    Math.max(
+      0,
+      Math.min(
+        5,
+        Number(
+          track?.rating ||
+          post?.rating ||
+          0
+        )
+      )
+    );
+
+  const createdLabel =
+    useMemo(() => {
+      const value =
+        post?.createdAt;
+
+      if (!value) {
+        return "";
       }
+
+      const parsed =
+        new Date(value);
+
+      if (
+        Number.isNaN(
+          parsed.getTime()
+        )
+      ) {
+        return "";
+      }
+
+      return parsed.toLocaleString();
+    }, [post?.createdAt]);
+
+  const openSong =
+    () => {
+      if (!track?.id) {
+        return;
+      }
+
+      navigation.navigate(
+        "SongPage",
+        {
+          track,
+        }
+      );
     };
-
-    fetchUserData();
-  }, [navigation]);
-
-  const getSortedComments = () => {
-    return [...comments].sort((a, b) => b.upvotes - a.upvotes);
-  };
-
-  const handleLikeSong = () => {
-    setLiked(!liked);
-  };
-
-  const handleSaveToLibrary = () => {
-    setSavedToLibrary(!savedToLibrary);
-  };
-
-  const handleAddComment = () => {
-    if (comment.trim() === "") return;
-    const newComment = {
-      id: Date.now().toString(),
-      username: username || "Anonymous",
-      text: comment.trim(),
-      upvotes: 0,
-      upvoted: false,
-      rating: commentRating,
-      heartCount: 0,
-      cryCount: 0,
-    };
-    setComments((prevComments) => [...prevComments, newComment]);
-    setComment("");
-    setCommentRating(0);
-  };
-
-  const handleUpvote = (id) => {
-    setComments((prevComments) =>
-      prevComments.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              upvotes: c.upvoted ? c.upvotes - 1 : c.upvotes + 1,
-              upvoted: !c.upvoted,
-            }
-          : c
-      )
-    );
-  };
-
-  const handleEmojiClick = (emojiType, id) => {
-    setComments((prevComments) =>
-      prevComments.map((c) =>
-        c.id === id ? { ...c, [`${emojiType}Count`]: c[`${emojiType}Count`] + 1 } : c
-      )
-    );
-  };
-
-  const handleShare = () => {
-    console.log("Shared the song!");
-  };
 
   return (
     <View style={styles.container}>
-      {/* Sidebar */}
-      <View style={styles.sideMenu}>
-        <Sidebar menuOpen={false} setMenuOpen={() => {}} />
+      <View
+        style={[
+          styles.sideMenu,
+          isDesktopWeb &&
+            styles.desktopSideMenu,
+        ]}
+        pointerEvents="box-none"
+      >
+        <Sidebar
+          menuOpen={isDesktopWeb}
+          setMenuOpen={() => {}}
+          isDesktop={isDesktopWeb}
+        />
       </View>
 
-      {/* Main Content */}
-      <FlatList
-        data={getSortedComments()}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={
-          <View style={styles.card}>
-            {/* Post Image */}
-            <Image source={{ uri: post.album.images[0].url }} style={styles.image} />
-
-            {/* Post Details */}
-            <Text style={styles.title}>{post.name}</Text>
-            <Text style={styles.artist}>Artist: {post.artists[0].name}</Text>
-
-            {/* Like, Save, and Share Buttons */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity onPress={handleLikeSong} style={styles.actionButton}>
-                <Image
-                  source={
-                    liked
-                      ? require("../images/whiteFullHeart.png")
-                      : require("../images/whiteOpenHeart.png")
-                  }
-                  style={styles.actionIcon}
-                />
-                <Text style={styles.actionText}>{liked ? "Liked" : "Like"}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleSaveToLibrary} style={styles.actionButton}>
-                <Image
-                  source={
-                    savedToLibrary
-                      ? require("../images/musicLibraryClosed.png")
-                      : require("../images/musicLibraryOpen.png")
-                  }
-                  style={styles.actionIcon}
-                />
-                <Text style={styles.actionText}>
-                  {savedToLibrary ? "Saved" : "Save"}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleShare} style={styles.actionButton}>
-                <Image
-                  source={require("../images/shareIcon.png")}
-                  style={styles.actionIcon}
-                />
-                <Text style={styles.actionText}>Share</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Add Comment Input */}
-            <KeyboardAvoidingView behavior="padding" style={styles.commentInputContainer}>
-              {/* Star Rating Above Input */}
-              <View style={styles.starRatingContainer}>
-                {[...Array(5)].map((_, index) => (
-                  <TouchableOpacity key={index} onPress={() => setCommentRating(index + 1)}>
-                    <Image
-                      source={
-                        index < commentRating
-                          ? require("../images/starFullIcon.png")
-                          : require("../images/starEmptyIcon.png")
-                      }
-                      style={styles.starIcon}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Add a comment..."
-                placeholderTextColor="#aaa"
-                value={comment}
-                onChangeText={setComment}
+      <View
+        style={[
+          styles.page,
+          isDesktopWeb &&
+            styles.desktopPage,
+        ]}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={
+            styles.scrollContent
+          }
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
+          <View style={styles.topBar}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() =>
+                navigation.goBack()
+              }
+              activeOpacity={0.8}
+            >
+              <Icon
+                name="arrow-back"
+                size={22}
+                color="#ffffff"
               />
-              <TouchableOpacity style={styles.commentButton} onPress={handleAddComment}>
-                <Text style={styles.commentButtonText}>Post</Text>
-              </TouchableOpacity>
-            </KeyboardAvoidingView>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.commentCard}>
-            <Image source={require("../images/avatarIcon.png")} style={styles.avatar} />
-            <View style={styles.commentContent}>
-              <View style={styles.commentHeader}>
-                <Text style={styles.username}>{item.username}</Text>
-                <View style={styles.emojisContainer}>
-                  <TouchableOpacity onPress={() => handleEmojiClick("heart", item.id)}>
-                    <Text style={styles.emojiCount}>{item.heartCount} ❤️</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleEmojiClick("cry", item.id)}>
-                    <Text style={styles.emojiCount}>{item.cryCount} 😢</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <Text style={styles.commentText}>{item.text}</Text>
-              <View style={styles.commentRating}>
-                {[...Array(5)].map((_, index) => (
-                  <Image
-                    key={index}
-                    source={
-                      index < item.rating
-                        ? require("../images/starFullIcon.png")
-                        : require("../images/starEmptyIcon.png")
-                    }
-                    style={styles.commentStar}
-                  />
-                ))}
-              </View>
-            </View>
-            <TouchableOpacity onPress={() => handleUpvote(item.id)} style={styles.upvoteButton}>
-              <Image
-                source={
-                  item.upvoted
-                    ? require("../images/upvoteIconBlack.png")
-                    : require("../images/upvoteIconWhite.png")
-                }
-                style={styles.upvoteIcon}
-              />
-              <Text style={styles.upvoteCount}>{item.upvotes}</Text>
             </TouchableOpacity>
-          </View>
-        )}
-        contentContainerStyle={styles.commentsContainer}
-        showsVerticalScrollIndicator={false}
-      />
 
-      {/* Bottom Navigation Bar */}
-      <View style={styles.bottomNavBar}>
-        <BottomNavbar />
+            <View>
+              <Text style={styles.eyebrow}>
+                TREBLE POST
+              </Text>
+
+              <Text style={styles.pageTitle}>
+                Post
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.postCard}>
+            <View style={styles.authorRow}>
+              <View style={styles.postPill}>
+                <Icon
+                  name="edit"
+                  size={14}
+                  color="#ffffff"
+                />
+
+                <Text
+                  style={
+                    styles.postPillText
+                  }
+                >
+                  POST
+                </Text>
+              </View>
+
+              <View
+                style={
+                  styles.authorTextWrap
+                }
+              >
+                <Text
+                  style={styles.authorName}
+                >
+                  {username}
+                </Text>
+
+                {createdLabel ? (
+                  <Text
+                    style={
+                      styles.createdDate
+                    }
+                  >
+                    {createdLabel}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.songCommentLayout,
+                isCompact &&
+                  styles.songCommentLayoutCompact,
+              ]}
+            >
+              {image ? (
+                <Image
+                  source={{
+                    uri: image,
+                  }}
+                  style={[
+                    styles.artwork,
+                    isCompact &&
+                      styles.artworkCompact,
+                  ]}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.artworkPlaceholder,
+                    isCompact &&
+                      styles.artworkCompact,
+                  ]}
+                >
+                  <Text
+                    style={
+                      styles.artworkPlaceholderText
+                    }
+                  >
+                    ♪
+                  </Text>
+                </View>
+              )}
+
+              <View
+                style={
+                  styles.postContent
+                }
+              >
+                <Text
+                  style={styles.songTitle}
+                >
+                  {title}
+                </Text>
+
+                <Text
+                  style={styles.artistName}
+                >
+                  {artist}
+                </Text>
+
+                <View
+                  style={styles.stars}
+                >
+                  {[1, 2, 3, 4, 5].map(
+                    (value) => (
+                      <Icon
+                        key={value}
+                        name={
+                          value <= rating
+                            ? "star"
+                            : "star-border"
+                        }
+                        size={23}
+                        color={
+                          value <= rating
+                            ? "#ffb400"
+                            : "rgba(255,255,255,0.28)"
+                        }
+                      />
+                    )
+                  )}
+                </View>
+
+                <Text
+                  style={
+                    styles.commentText
+                  }
+                >
+                  {comment ||
+                    "No comment was added to this post."}
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.songButton}
+                  onPress={openSong}
+                  activeOpacity={0.82}
+                >
+                  <Icon
+                    name="music-note"
+                    size={18}
+                    color="#ffffff"
+                  />
+
+                  <Text
+                    style={
+                      styles.songButtonText
+                    }
+                  >
+                    Open Song
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
       </View>
+
+      {!isDesktopWeb ? (
+        <View
+          style={
+            styles.bottomNavBar
+          }
+        >
+          <BottomNavbar />
+        </View>
+      ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colours.bluegrey,
-  },
-  sideMenu: {
-    position: "absolute",
-    top: 40,
-    right: 525,
-    bottom: 0,
-    shadowColor: "#000",
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 10,
-  },
-  card: {
-    backgroundColor: colours.darkblue,
-    padding: 20,
-    borderRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-    marginTop: 110,
-    marginHorizontal: 5,
-    marginBottom: 20,
-  },
-  image: {
-    width: "70%",
-    height: 200,
-    left: 45,
-    borderRadius: 10,
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  artist: {
-    fontSize: 18,
-    color: "#bbb",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 10,
-  },
-  actionButton: {
-    alignItems: "center",
-  },
-  actionIcon: {
-    width: 30,
-    height: 30,
-  },
-  actionText: {
-    fontSize: 14,
-    color: "#fff",
-    marginTop: 5,
-  },
-  commentInputContainer: {
-    flexDirection: "column",
-    marginTop: 20,
-    marginHorizontal: 20,
-  },
-  starRatingContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 10,
-  },
-  starIcon: {
-    width: 25,
-    height: 25,
-    marginHorizontal: 5,
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 10,
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  commentButton: {
-    backgroundColor: colours.lightblue,
-    borderRadius: 10,
-    padding: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  commentButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  commentCard: {
-    flexDirection: "row",
-    backgroundColor: colours.darkblue,
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
-    alignItems: "center",
-    position: "relative",
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  commentContent: {
-    flex: 1,
-  },
-  commentHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  emojisContainer: {
-    flexDirection: "row",
-    marginLeft: 10,
-    right: 40,
-    bottom: 4,
-  },
-  emojiCount: {
-    fontSize: 14,
-    color: "#fff",
-    marginLeft: 10,
-  },
-  commentText: {
-    fontSize: 14,
-    color: "#fff",
-    marginBottom: 10,
-  },
-  commentRating: {
-    flexDirection: "row",
-  },
-  commentStar: {
-    width: 16,
-    height: 16,
-    marginRight: 2,
-  },
-  upvoteButton: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  upvoteIcon: {
-    width: 20,
-    height: 20,
-    marginRight: 5,
-  },
-  upvoteCount: {
-    fontSize: 14,
-    color: "#fff",
-  },
-  commentsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  bottomNavBar: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    flexDirection: "row",
-  },
-  username: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: colours.lightblue,
-    marginRight: 10,
-  },
-});
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        colours.background ||
+        "#101010",
+    },
+
+    sideMenu: {
+      position: "absolute",
+      zIndex: 20,
+    },
+
+    desktopSideMenu: {
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width:
+        DESKTOP_SIDEBAR_WIDTH,
+    },
+
+    page: {
+      flex: 1,
+      width: "100%",
+    },
+
+    desktopPage: {
+      marginLeft:
+        DESKTOP_SIDEBAR_WIDTH,
+    },
+
+    scrollView: {
+      flex: 1,
+      width: "100%",
+    },
+
+    scrollContent: {
+      width: "100%",
+      maxWidth:
+        MAX_CONTENT_WIDTH,
+
+      alignSelf: "center",
+
+      paddingHorizontal: 16,
+      paddingTop: 34,
+      paddingBottom:
+        BOTTOM_NAV_HEIGHT + 42,
+    },
+
+    topBar: {
+      flexDirection: "row",
+      alignItems: "center",
+
+      marginBottom: 22,
+    },
+
+    backButton: {
+      width: 42,
+      height: 42,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderRadius: 21,
+
+      backgroundColor:
+        "rgba(255,255,255,0.07)",
+
+      marginRight: 13,
+    },
+
+    eyebrow: {
+      color: "#ffb400",
+
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.1,
+    },
+
+    pageTitle: {
+      color: "#ffffff",
+
+      fontSize: 26,
+      fontWeight: "900",
+    },
+
+    postCard: {
+      width: "100%",
+
+      padding: 18,
+
+      borderRadius: 22,
+
+      backgroundColor:
+        "rgba(27,27,30,0.99)",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,180,0,0.24)",
+
+      shadowColor: "#000000",
+      shadowOffset: {
+        width: 0,
+        height: 8,
+      },
+      shadowOpacity: 0.3,
+      shadowRadius: 18,
+
+      elevation: 7,
+    },
+
+    authorRow: {
+      flexDirection: "row",
+      alignItems: "center",
+
+      marginBottom: 18,
+    },
+
+    postPill: {
+      flexDirection: "row",
+      alignItems: "center",
+
+      gap: 5,
+
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+
+      borderRadius: 11,
+
+      backgroundColor:
+        "rgba(255,180,0,0.16)",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,180,0,0.30)",
+    },
+
+    postPillText: {
+      color: "#ffffff",
+
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    authorTextWrap: {
+      marginLeft: 10,
+    },
+
+    authorName: {
+      color: "#ffffff",
+
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    createdDate: {
+      color:
+        "rgba(255,255,255,0.43)",
+
+      fontSize: 10,
+
+      marginTop: 2,
+    },
+
+    songCommentLayout: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+    },
+
+    songCommentLayoutCompact: {
+      flexDirection: "column",
+    },
+
+    artwork: {
+      width: 150,
+      height: 150,
+
+      borderRadius: 17,
+
+      marginRight: 18,
+    },
+
+    artworkCompact: {
+      width: "100%",
+      height: 280,
+
+      marginRight: 0,
+      marginBottom: 18,
+    },
+
+    artworkPlaceholder: {
+      width: 150,
+      height: 150,
+
+      alignItems: "center",
+      justifyContent: "center",
+
+      borderRadius: 17,
+
+      marginRight: 18,
+
+      backgroundColor:
+        "rgba(255,255,255,0.06)",
+    },
+
+    artworkPlaceholderText: {
+      color:
+        "rgba(255,255,255,0.45)",
+
+      fontSize: 50,
+    },
+
+    postContent: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    songTitle: {
+      color: "#ffffff",
+
+      fontSize: 22,
+      lineHeight: 27,
+      fontWeight: "900",
+    },
+
+    artistName: {
+      color:
+        "rgba(255,255,255,0.55)",
+
+      fontSize: 14,
+
+      marginTop: 3,
+    },
+
+    stars: {
+      flexDirection: "row",
+      alignItems: "center",
+
+      marginTop: 12,
+    },
+
+    commentText: {
+      color:
+        "rgba(255,255,255,0.88)",
+
+      fontSize: 15,
+      lineHeight: 22,
+
+      marginTop: 14,
+    },
+
+    songButton: {
+      alignSelf: "flex-start",
+
+      flexDirection: "row",
+      alignItems: "center",
+
+      gap: 7,
+
+      minHeight: 40,
+
+      paddingHorizontal: 14,
+
+      borderRadius: 20,
+
+      backgroundColor:
+        colours.lightblue ||
+        "#35afe5",
+
+      marginTop: 18,
+    },
+
+    songButtonText: {
+      color: "#ffffff",
+
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    bottomNavBar: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+  });

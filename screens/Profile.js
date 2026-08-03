@@ -612,7 +612,8 @@ export default function Profile({
           {createdPosts.length === 0 ? (
             <View
               style={
-                styles.sectionEmptyState
+                styles.sectionEmptyState ||
+                styles.sectionEmptyBox
               }
             >
               <Text
@@ -624,10 +625,9 @@ export default function Profile({
               </Text>
             </View>
           ) : (
-            <DraggableProfileRow
-              useNativeScroll={!isDesktopWeb}
-              contentStyle={
-                styles.horizontalLikedList
+            <View
+              style={
+                styles.profilePostsList
               }
             >
               {createdPosts.map((post) => {
@@ -640,20 +640,36 @@ export default function Profile({
                   track?.coverArt ||
                   "";
 
+                const rating =
+                  Math.max(
+                    0,
+                    Math.min(
+                      5,
+                      Number(
+                        track?.rating ||
+                        post?.rating ||
+                        0
+                      )
+                    )
+                  );
+
                 return (
                   <TouchableOpacity
                     key={String(
                       post?.record_id ||
                       post?.id
                     )}
-                    style={[
-                      styles.likedSongCard,
-                      isCompact &&
-                        styles.compactLikedSongCard,
-                    ]}
-                    activeOpacity={0.82}
+                    style={
+                      styles.profilePostCard
+                    }
+                    activeOpacity={0.84}
                     onPress={() =>
-                      openCreatedPost(post)
+                      navigation.navigate(
+                        "Posts",
+                        {
+                          post,
+                        }
+                      )
                     }
                   >
                     {imageUri ? (
@@ -662,18 +678,18 @@ export default function Profile({
                           uri: imageUri,
                         }}
                         style={
-                          styles.likedSongImage
+                          styles.profilePostImage
                         }
                       />
                     ) : (
                       <View
                         style={
-                          styles.likedSongPlaceholder
+                          styles.profilePostImagePlaceholder
                         }
                       >
                         <Text
                           style={
-                            styles.likedSongPlaceholderText
+                            styles.profilePostImagePlaceholderText
                           }
                         >
                           ♪
@@ -683,12 +699,53 @@ export default function Profile({
 
                     <View
                       style={
-                        styles.likedSongInfo
+                        styles.profilePostContent
                       }
                     >
+                      <View
+                        style={
+                          styles.profilePostHeader
+                        }
+                      >
+                        <View
+                          style={
+                            styles.profilePostLabel
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.profilePostLabelText
+                            }
+                          >
+                            POST
+                          </Text>
+                        </View>
+
+                        <View
+                          style={
+                            styles.profilePostStars
+                          }
+                        >
+                          {[1, 2, 3, 4, 5].map(
+                            (value) => (
+                              <Text
+                                key={value}
+                                style={
+                                  value <= rating
+                                    ? styles.profilePostStarFilled
+                                    : styles.profilePostStarEmpty
+                                }
+                              >
+                                ★
+                              </Text>
+                            )
+                          )}
+                        </View>
+                      </View>
+
                       <Text
                         style={
-                          styles.likedSongTitle
+                          styles.profilePostTitle
                         }
                         numberOfLines={1}
                       >
@@ -699,7 +756,7 @@ export default function Profile({
 
                       <Text
                         style={
-                          styles.likedSongArtist
+                          styles.profilePostArtist
                         }
                         numberOfLines={1}
                       >
@@ -710,7 +767,7 @@ export default function Profile({
 
                       <Text
                         style={
-                          styles.postCommentText
+                          styles.profilePostComment
                         }
                         numberOfLines={2}
                       >
@@ -719,18 +776,24 @@ export default function Profile({
                           ""}
                       </Text>
                     </View>
+
+                    <Text
+                      style={
+                        styles.profilePostChevron
+                      }
+                    >
+                      ›
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
-            </DraggableProfileRow>
+            </View>
           )}
         </View>
       ),
       [
         createdPosts,
-        isCompact,
-        isDesktopWeb,
-        openCreatedPost,
+        navigation,
       ]
     );
 
@@ -3100,6 +3163,141 @@ desktopBottomNavBar: {
 
     backgroundColor:
       "rgba(255,255,255,0.035)",
+  },
+
+  profilePostsList: {
+    width: "100%",
+    gap: 10,
+  },
+
+  profilePostCard: {
+    width: "100%",
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    padding: 11,
+
+    borderRadius: 15,
+
+    backgroundColor:
+      "rgba(30,30,33,0.98)",
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(255,180,0,0.20)",
+  },
+
+  profilePostImage: {
+    width: 72,
+    height: 72,
+
+    borderRadius: 11,
+
+    marginRight: 12,
+  },
+
+  profilePostImagePlaceholder: {
+    width: 72,
+    height: 72,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 11,
+
+    marginRight: 12,
+
+    backgroundColor:
+      "rgba(255,255,255,0.06)",
+  },
+
+  profilePostImagePlaceholderText: {
+    color:
+      "rgba(255,255,255,0.48)",
+
+    fontSize: 28,
+  },
+
+  profilePostContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  profilePostHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  profilePostLabel: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+
+    borderRadius: 8,
+
+    backgroundColor:
+      "rgba(255,180,0,0.16)",
+  },
+
+  profilePostLabelText: {
+    color: "#ffffff",
+
+    fontSize: 9,
+    fontWeight: "900",
+  },
+
+  profilePostStars: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  profilePostStarFilled: {
+    color: "#ffb400",
+    fontSize: 12,
+  },
+
+  profilePostStarEmpty: {
+    color:
+      "rgba(255,255,255,0.24)",
+    fontSize: 12,
+  },
+
+  profilePostTitle: {
+    color: "#ffffff",
+
+    fontSize: 14,
+    fontWeight: "900",
+
+    marginTop: 6,
+  },
+
+  profilePostArtist: {
+    color:
+      "rgba(255,255,255,0.52)",
+
+    fontSize: 11,
+
+    marginTop: 1,
+  },
+
+  profilePostComment: {
+    color:
+      "rgba(255,255,255,0.76)",
+
+    fontSize: 11,
+    lineHeight: 15,
+
+    marginTop: 5,
+  },
+
+  profilePostChevron: {
+    color:
+      "rgba(255,255,255,0.46)",
+
+    fontSize: 28,
+
+    marginLeft: 8,
   },
 
   postCommentText: {
