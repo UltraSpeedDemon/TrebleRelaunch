@@ -102,22 +102,25 @@ export default function Credits({
   ).current;
 
   useEffect(() => {
+    if (isMobile) {
+      fade.setValue(1);
+      rise.setValue(0);
+      logoScale.setValue(1);
+      glow.setValue(0.18);
+
+      return undefined;
+    }
+
     const entrance = Animated.parallel([
       Animated.timing(fade, {
         toValue: 1,
-        duration:
-          isMobile
-            ? 220
-            : 520,
+        duration: 520,
         useNativeDriver: true,
       }),
 
       Animated.timing(rise, {
         toValue: 0,
-        duration:
-          isMobile
-            ? 260
-            : 650,
+        duration: 650,
         easing: Easing.out(
           Easing.cubic
         ),
@@ -126,10 +129,7 @@ export default function Credits({
 
       Animated.timing(logoScale, {
         toValue: 1,
-        duration:
-          isMobile
-            ? 220
-            : 480,
+        duration: 480,
         easing: Easing.out(
           Easing.cubic
         ),
@@ -154,12 +154,7 @@ export default function Credits({
     );
 
     entrance.start();
-
-    if (shouldAnimateGlow) {
-      glowLoop.start();
-    } else {
-      glow.setValue(0.18);
-    }
+    glowLoop.start();
 
     return () => {
       entrance.stop();
@@ -176,7 +171,6 @@ export default function Credits({
     isMobile,
     logoScale,
     rise,
-    shouldAnimateGlow,
   ]);
 
   return (
@@ -229,9 +223,7 @@ export default function Credits({
           bounces={false}
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
-          removeClippedSubviews={
-            Platform.OS !== "web"
-          }
+          removeClippedSubviews={false}
           scrollEventThrottle={32}
         >
           <Animated.View
@@ -239,7 +231,7 @@ export default function Credits({
               styles.creditsCard,
               isCompact &&
                 styles.creditsCardCompact,
-              {
+              !isMobile && {
                 opacity: fade,
                 transform: [
                   {
@@ -437,6 +429,7 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
     width: "100%",
+    minWidth: 0,
   },
 
   webScrollView: {
@@ -540,6 +533,7 @@ const styles = StyleSheet.create({
 
   scrollContentCompact: {
     justifyContent: "flex-start",
+    alignItems: "stretch",
 
     paddingTop: 78,
     paddingHorizontal: 14,
@@ -567,9 +561,14 @@ const styles = StyleSheet.create({
   },
 
   creditsCardCompact: {
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
+
     paddingHorizontal: 16,
     paddingTop: 28,
     paddingBottom: 36,
+
     borderRadius: 20,
   },
 
@@ -673,6 +672,8 @@ const styles = StyleSheet.create({
 
   creditRow: {
     width: "100%",
+    alignSelf: "stretch",
+    flexShrink: 0,
 
     paddingHorizontal: 20,
     paddingVertical: 21,
