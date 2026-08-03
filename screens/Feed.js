@@ -1066,11 +1066,178 @@ export default function Feed({
           const data =
             await response.json();
 
-          return Array.isArray(
-            data?.posts
-          )
-            ? data.posts
-            : [];
+          const rawPosts =
+            Array.isArray(
+              data?.posts
+            )
+              ? data.posts
+              : [];
+
+          return rawPosts
+            .map((post) => {
+              const itemInfo =
+                post?.item_info ||
+                post ||
+                {};
+
+              const postId =
+                String(
+                  post?.id ||
+                  post?.postId ||
+                  post?.record_id ||
+                  ""
+                );
+
+              const songId =
+                String(
+                  itemInfo?.listenableId ||
+                  itemInfo?.listenable_id ||
+                  itemInfo?.songId ||
+                  post?.listenableId ||
+                  post?.listenable_id ||
+                  post?.songId ||
+                  ""
+                );
+
+              if (!postId) {
+                return null;
+              }
+
+              return {
+                ...post,
+
+                id:
+                  postId,
+
+                record_id:
+                  String(
+                    post?.record_id ||
+                    `feed-post-${postId}`
+                  ),
+
+                type: "track",
+                source:
+                  "created-post",
+
+                origin: {
+                  ...(post?.origin || {}),
+                  type: "post",
+                  title:
+                    post?.origin?.title ||
+                    "Created a post",
+                  description:
+                    itemInfo?.comment ||
+                    post?.comment ||
+                    post?.origin?.description ||
+                    "",
+                },
+
+                item_info: {
+                  ...itemInfo,
+
+                  id:
+                    songId,
+                  listenableId:
+                    songId,
+                  listenable_id:
+                    songId,
+                  songId,
+
+                  type: "track",
+                  source:
+                    "created-post",
+
+                  title:
+                    itemInfo?.title ||
+                    itemInfo?.name ||
+                    post?.title ||
+                    post?.name ||
+                    "Shared Song",
+
+                  name:
+                    itemInfo?.name ||
+                    itemInfo?.title ||
+                    post?.name ||
+                    post?.title ||
+                    "Shared Song",
+
+                  artist:
+                    typeof itemInfo?.artist ===
+                    "string"
+                      ? {
+                          name:
+                            itemInfo.artist,
+                        }
+                      : itemInfo?.artist || {
+                          name:
+                            itemInfo?.artistName ||
+                            post?.artistName ||
+                            "",
+                        },
+
+                  artistName:
+                    itemInfo?.artistName ||
+                    itemInfo?.artist?.name ||
+                    post?.artistName ||
+                    "",
+
+                  image:
+                    itemInfo?.image ||
+                    itemInfo?.coverArt ||
+                    post?.image ||
+                    post?.coverArt ||
+                    "",
+
+                  coverArt:
+                    itemInfo?.coverArt ||
+                    itemInfo?.image ||
+                    post?.coverArt ||
+                    post?.image ||
+                    "",
+
+                  comment:
+                    itemInfo?.comment ||
+                    post?.comment ||
+                    post?.origin?.description ||
+                    "",
+
+                  rating:
+                    Number(
+                      itemInfo?.rating ||
+                      post?.rating ||
+                      0
+                    ),
+
+                  username:
+                    itemInfo?.username ||
+                    post?.username ||
+                    "Treble User",
+
+                  authorId:
+                    itemInfo?.authorId ||
+                    post?.authorId ||
+                    "",
+
+                  preview:
+                    itemInfo?.preview ||
+                    post?.preview ||
+                    "",
+
+                  previewUrl:
+                    itemInfo?.previewUrl ||
+                    itemInfo?.preview ||
+                    post?.preview ||
+                    "",
+
+                  playbackUrl:
+                    itemInfo?.playbackUrl ||
+                    itemInfo?.preview ||
+                    post?.preview ||
+                    "",
+                },
+              };
+            })
+            .filter(Boolean);
         } catch (error) {
           console.error(
             "[Feed] Created posts error:",
@@ -1225,12 +1392,58 @@ export default function Feed({
           ),
         ]);
 
-        const mixedItems =
-          diversifyFeedItems([
-            ...createdPostItems,
+        const currentUserId =
+          String(
+            auth.currentUser?.uid ||
+            ""
+          );
+
+        const ownCreatedPosts =
+          createdPostItems
+            .filter(
+              (item) =>
+                String(
+                  item?.authorId ||
+                  item?.item_info?.authorId ||
+                  ""
+                ) ===
+                currentUserId
+            )
+            .sort(
+              (first, second) =>
+                new Date(
+                  second?.createdAt ||
+                  0
+                ) -
+                new Date(
+                  first?.createdAt ||
+                  0
+                )
+            );
+
+        const otherCreatedPosts =
+          createdPostItems.filter(
+            (item) =>
+              String(
+                item?.authorId ||
+                item?.item_info?.authorId ||
+                ""
+              ) !==
+              currentUserId
+          );
+
+        /*
+         * The creator always sees their latest posts at the top.
+         * Other people's posts remain mixed with normal feed content.
+         */
+        const mixedItems = [
+          ...ownCreatedPosts,
+          ...diversifyFeedItems([
+            ...otherCreatedPosts,
             ...timelineItems,
             ...recommendationItems,
-          ]);
+          ]),
+        ];
 
         if (mixedItems.length > 0) {
           setCombinedFeed(
@@ -1600,6 +1813,64 @@ export default function Feed({
     const postId =
       String(newPost.id);
 
+    const rawItemInfo =
+      newPost?.item_info ||
+      newPost;
+
+    const newPostSongId =
+      String(
+        rawItemInfo?.listenableId ||
+        rawItemInfo?.listenable_id ||
+        rawItemInfo?.songId ||
+        newPost?.listenableId ||
+        newPost?.listenable_id ||
+        newPost?.songId ||
+        ""
+      );
+
+    const normalizedNewPost = {
+      ...newPost,
+
+      record_id:
+        String(
+          newPost?.record_id ||
+          `feed-post-${postId}`
+        ),
+
+      type: "track",
+      source: "created-post",
+
+      origin: {
+        ...(newPost?.origin || {}),
+        type: "post",
+        title:
+          newPost?.origin?.title ||
+          "Created a post",
+        description:
+          rawItemInfo?.comment ||
+          newPost?.comment ||
+          newPost?.origin?.description ||
+          "",
+      },
+
+      item_info: {
+        ...rawItemInfo,
+
+        id:
+          newPostSongId,
+        listenableId:
+          newPostSongId,
+        listenable_id:
+          newPostSongId,
+        songId:
+          newPostSongId,
+
+        type: "track",
+        source:
+          "created-post",
+      },
+    };
+
     if (
       lastInsertedPostIdRef.current ===
       postId
@@ -1615,7 +1886,7 @@ export default function Feed({
     setCombinedFeed(
       (currentItems) => {
         updatedFeed = [
-          newPost,
+          normalizedNewPost,
           ...currentItems.filter(
             (item) =>
               String(
@@ -1624,8 +1895,8 @@ export default function Feed({
                 ""
               ) !==
               String(
-                newPost.record_id ||
-                newPost.id
+                normalizedNewPost.record_id ||
+                normalizedNewPost.id
               )
           ),
         ];
@@ -2432,11 +2703,36 @@ export default function Feed({
           ""
         ).toLowerCase();
 
+      const hasPostSongId =
+        Boolean(
+          item?.songId ||
+          item?.listenableId ||
+          item?.listenable_id ||
+          item?.item_info?.songId ||
+          item?.item_info?.listenableId ||
+          item?.item_info?.listenable_id
+        );
+
+      const hasPostContent =
+        Boolean(
+          item?.comment ||
+          item?.item_info?.comment
+        );
+
       return (
         source.includes("created-post") ||
         source === "post" ||
+        source.includes("post") ||
         String(item?.record_id || "")
-          .startsWith("feed-post-")
+          .startsWith("feed-post-") ||
+        (
+          hasPostSongId &&
+          hasPostContent &&
+          Boolean(
+            item?.authorId ||
+            item?.item_info?.authorId
+          )
+        )
       );
     }, []);
 

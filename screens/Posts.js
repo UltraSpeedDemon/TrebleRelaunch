@@ -1,5 +1,7 @@
 import React, {
+  useEffect,
   useMemo,
+  useState,
 } from "react";
 
 import {
@@ -44,12 +46,125 @@ export default function Posts({
   const isMobile =
     width < DESKTOP_BREAKPOINT;
 
+  const isMobileWeb =
+    isWeb &&
+    width < DESKTOP_BREAKPOINT;
+
+  const [
+    menuOpen,
+    setMenuOpen,
+  ] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(
+      isDesktopWeb
+    );
+  }, [isDesktopWeb]);
+
   const post =
     route?.params?.post || {};
 
   const track =
     post?.item_info ||
     post;
+
+  const songTrackId =
+    String(
+      track?.listenableId ||
+      track?.listenable_id ||
+      track?.songId ||
+      post?.listenableId ||
+      post?.listenable_id ||
+      post?.songId ||
+      ""
+    );
+
+  const songTrack =
+    useMemo(
+      () => ({
+        ...track,
+
+        /*
+         * SongPage expects the music catalogue ID in `id`.
+         * The top-level post `id` is a Firestore document ID and must
+         * never be passed as the song ID.
+         */
+        id: songTrackId,
+        listenableId:
+          songTrackId,
+        listenable_id:
+          songTrackId,
+        songId:
+          songTrackId,
+
+        type: "track",
+
+        name:
+          track?.name ||
+          track?.title ||
+          "Shared Song",
+
+        title:
+          track?.title ||
+          track?.name ||
+          "Shared Song",
+
+        artist:
+          typeof track?.artist ===
+          "string"
+            ? {
+                name:
+                  track.artist,
+              }
+            : track?.artist || {
+                name:
+                  track?.artistName ||
+                  "",
+              },
+
+        artistName:
+          track?.artistName ||
+          track?.artist?.name ||
+          (
+            typeof track?.artist ===
+            "string"
+              ? track.artist
+              : ""
+          ),
+
+        image:
+          track?.image ||
+          track?.coverArt ||
+          "",
+
+        coverArt:
+          track?.coverArt ||
+          track?.image ||
+          "",
+
+        preview:
+          track?.preview ||
+          track?.previewUrl ||
+          track?.playbackUrl ||
+          "",
+
+        previewUrl:
+          track?.previewUrl ||
+          track?.preview ||
+          track?.playbackUrl ||
+          "",
+
+        playbackUrl:
+          track?.playbackUrl ||
+          track?.preview ||
+          track?.previewUrl ||
+          "",
+      }),
+      [
+        songTrackId,
+        track,
+      ]
+    );
 
   const image =
     track?.image ||
@@ -120,14 +235,20 @@ export default function Posts({
 
   const openSong =
     () => {
-      if (!track?.id) {
+      if (!songTrackId) {
+        console.warn(
+          "[Posts] Cannot open SongPage because the post has no listenable ID.",
+          post
+        );
+
         return;
       }
 
       navigation.navigate(
         "SongPage",
         {
-          track,
+          track:
+            songTrack,
         }
       );
     };
@@ -139,12 +260,22 @@ export default function Posts({
           styles.sideMenu,
           isDesktopWeb &&
             styles.desktopSideMenu,
+          isMobileWeb &&
+            styles.mobileSideMenu,
         ]}
         pointerEvents="box-none"
       >
         <Sidebar
-          menuOpen={isDesktopWeb}
-          setMenuOpen={() => {}}
+          menuOpen={
+            isDesktopWeb
+              ? true
+              : menuOpen
+          }
+          setMenuOpen={
+            isDesktopWeb
+              ? () => {}
+              : setMenuOpen
+          }
           isDesktop={isDesktopWeb}
         />
       </View>
@@ -296,25 +427,6 @@ export default function Posts({
                   </View>
                 )}
 
-                <View
-                  style={
-                    styles.artworkOpenOverlay
-                  }
-                >
-                  <Icon
-                    name="open-in-new"
-                    size={16}
-                    color="#ffffff"
-                  />
-
-                  <Text
-                    style={
-                      styles.artworkOpenText
-                    }
-                  >
-                    Open song
-                  </Text>
-                </View>
               </TouchableOpacity>
 
               <View
@@ -415,15 +527,43 @@ const styles =
 
     sideMenu: {
       position: "absolute",
-      zIndex: 20,
+
+      top: 40,
+      left: 0,
+      bottom: 0,
+
+      zIndex: 100,
+      elevation: 30,
     },
 
     desktopSideMenu: {
+      position: "fixed",
+
       left: 0,
       top: 0,
+      right: undefined,
       bottom: 0,
+
       width:
         DESKTOP_SIDEBAR_WIDTH,
+      height: "100vh",
+
+      zIndex: 100,
+      elevation: 30,
+
+      overflow: "hidden",
+    },
+
+    mobileSideMenu: {
+      position: "absolute",
+
+      top: 40,
+      left: 0,
+      right: undefined,
+      bottom: 0,
+
+      zIndex: 100,
+      elevation: 30,
     },
 
     page: {
@@ -669,38 +809,6 @@ const styles =
 
       backgroundColor:
         "rgba(255,255,255,0.06)",
-    },
-
-    artworkOpenOverlay: {
-      position: "absolute",
-
-      left: 10,
-      right: 10,
-      bottom: 10,
-
-      minHeight: 34,
-
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-
-      gap: 6,
-
-      borderRadius: 17,
-
-      backgroundColor:
-        "rgba(10,10,12,0.78)",
-
-      borderWidth: 1,
-      borderColor:
-        "rgba(255,255,255,0.13)",
-    },
-
-    artworkOpenText: {
-      color: "#ffffff",
-
-      fontSize: 11,
-      fontWeight: "900",
     },
 
     artworkPlaceholderText: {

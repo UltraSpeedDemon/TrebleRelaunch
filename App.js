@@ -438,42 +438,42 @@ export default function App() {
         />
 
         <Stack.Screen
-          name="Recently Viewed"
+          name="RecentlyViewed"
           component={RecentlyViewed}
         />
 
         <Stack.Screen
-          name="Followers List"
+          name="FollowersList"
           component={FollowersList}
         />
 
         <Stack.Screen
-          name="Following List"
+          name="FollowingList"
           component={FollowingList}
         />
 
         <Stack.Screen
-          name="User Profiles"
+          name="UserProfiles"
           component={UserProfiles}
         />
 
         <Stack.Screen
-          name="Song Page"
+          name="SongPage"
           component={SongPage}
         />
 
         <Stack.Screen
-          name="Album Page"
+          name="AlbumPage"
           component={AlbumPage}
         />
 
         <Stack.Screen
-          name="Artist Page"
+          name="ArtistPage"
           component={ArtistPage}
         />
 
         <Stack.Screen
-          name="Music Swiper"
+          name="MusicSwiper"
           component={MusicSwiper}
         />
 
@@ -483,17 +483,17 @@ export default function App() {
         />
 
         <Stack.Screen
-          name="Music Discovery"
+          name="MusicSwiperTest"
           component={MusicSwiperTest}
         />
 
         <Stack.Screen
-          name="Update Review"
+          name="UpdateReview"
           component={UpdateReviewPage}
         />
 
         <Stack.Screen
-          name="Artist Listenables"
+          name="ArtistListenables"
           component={ArtistListenables}
         />
 
