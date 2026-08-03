@@ -17,6 +17,8 @@ import {
   View,
 } from "react-native";
 
+import Icon from "react-native-vector-icons/MaterialIcons";
+
 import * as AuthSession from "expo-auth-session";
 
 import { auth } from "../utils/firebase";
@@ -680,6 +682,28 @@ export default function Connections({
           }
         />
       </View>
+      {(isDesktopWeb || !menuOpen) ? (
+        <TouchableOpacity
+          style={[
+            styles.rootBackButton,
+            isDesktopWeb &&
+              styles.desktopRootBackButton,
+          ]}
+          onPress={() =>
+            navigation.goBack()
+          }
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Icon
+            name="arrow-back"
+            size={26}
+            color="#ffffff"
+          />
+        </TouchableOpacity>
+      ) : null}
+
 
       {/* =====================================================
           PAGE CONTENT
@@ -1059,6 +1083,29 @@ export default function Connections({
 }
 
 const styles = StyleSheet.create({
+  rootBackButton: {
+      position: "absolute",
+      top: Platform.OS === "web" ? 18 : -22,
+      left: 80,
+      zIndex: 101,
+      elevation: 31,
+  
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+  
+      alignItems: "center",
+      justifyContent: "center",
+  
+      backgroundColor: "rgba(255,255,255,0.07)",
+      borderWidth: 0,
+    },
+  
+    desktopRootBackButton: {
+      top: 18,
+      left: DESKTOP_SIDEBAR_WIDTH + 20,
+    },
+
   /* =====================================================
      PAGE
   ===================================================== */

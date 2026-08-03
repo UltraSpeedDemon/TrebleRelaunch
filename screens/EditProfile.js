@@ -902,7 +902,8 @@ export default function EditProfile({
         />
       </View>
 
-      <TouchableOpacity
+      {(isDesktopWeb || !menuOpen) ? (
+<TouchableOpacity
         style={[
           styles.rootBackButton,
           isDesktopWeb &&
@@ -917,10 +918,11 @@ export default function EditProfile({
       >
         <Icon
           name="arrow-back"
-          size={23}
+          size={26}
           color="#ffffff"
         />
       </TouchableOpacity>
+      ) : null}
 
 
 
@@ -1445,29 +1447,24 @@ const styles =
 
   rootBackButton: {
     position: "absolute",
-    top: Platform.OS === "web" ? 20 : -16,
-    left: 88,
-    zIndex: 100,
-    elevation: 20,
+    top: Platform.OS === "web" ? 18 : -22,
+    left: 80,
+    zIndex: 101,
+    elevation: 31,
 
-    width: 44,
-    height: 44,
-
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
 
     alignItems: "center",
     justifyContent: "center",
 
-    backgroundColor:
-      "rgba(255,255,255,0.10)",
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 0,
   },
 
   desktopRootBackButton: {
-    top: 20,
+    top: 18,
     left: DESKTOP_SIDEBAR_WIDTH + 20,
   },
 

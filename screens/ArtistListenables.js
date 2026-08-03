@@ -16,6 +16,8 @@ import {
   View,
 } from "react-native";
 
+import Icon from "react-native-vector-icons/MaterialIcons";
+
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 
@@ -646,32 +648,7 @@ export default function ArtistListenables({
               styles.headingRow
             }
           >
-            <TouchableOpacity
-              style={
-                styles.backButton
-              }
-              onPress={
-                handleGoBack
-              }
-              activeOpacity={0.8}
-              hitSlop={{
-                top: 10,
-                bottom: 10,
-                left: 10,
-                right: 10,
-              }}
-            >
-              <Image
-                source={
-                  BACK_ICON
-                }
-                style={
-                  styles.backIcon
-                }
-              />
-            </TouchableOpacity>
-
-            <View
+<View
               style={
                 styles.headingInformation
               }
@@ -863,6 +840,28 @@ export default function ArtistListenables({
           }
         />
       </View>
+      {(isDesktopWeb || !menuOpen) ? (
+        <TouchableOpacity
+          style={[
+            styles.rootBackButton,
+            isDesktopWeb &&
+              styles.desktopRootBackButton,
+          ]}
+          onPress={() =>
+            navigation.goBack()
+          }
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Icon
+            name="arrow-back"
+            size={26}
+            color="#ffffff"
+          />
+        </TouchableOpacity>
+      ) : null}
+
 
       {/* PAGE */}
       <View
@@ -983,6 +982,29 @@ export default function ArtistListenables({
 
 const styles =
   StyleSheet.create({
+  rootBackButton: {
+      position: "absolute",
+      top: Platform.OS === "web" ? 18 : -22,
+      left: 80,
+      zIndex: 101,
+      elevation: 31,
+  
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+  
+      alignItems: "center",
+      justifyContent: "center",
+  
+      backgroundColor: "rgba(255,255,255,0.07)",
+      borderWidth: 0,
+    },
+  
+    desktopRootBackButton: {
+      top: 18,
+      left: DESKTOP_SIDEBAR_WIDTH + 20,
+    },
+
     container: {
       flex: 1,
       minHeight: 0,
