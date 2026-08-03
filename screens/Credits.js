@@ -620,8 +620,8 @@ const styles = StyleSheet.create({
   },
 
   mobileTopBar: {
-    alignItems: "flex-end",
-    paddingRight: 2,
+    alignItems: "flex-start",
+    paddingLeft: 2,
   },
 
   backButton: {

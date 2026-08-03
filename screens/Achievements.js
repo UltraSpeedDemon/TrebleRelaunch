@@ -747,7 +747,7 @@ const styles = StyleSheet.create({
   },
 
   mobileBackButton: {
-    alignSelf: "flex-end",
+    alignSelf: "flex-start",
     marginRight: 0,
     marginBottom: 16,
   },
