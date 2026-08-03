@@ -242,7 +242,7 @@ export default function Achievements({
                 style={styles.summaryTextWrap}
               >
                 <Text style={styles.summaryEyebrow}>
-                  BADGE COLLECTION
+                  EARN THIS ACHIEVEMENT BADGE
                 </Text>
 
                 <Text
@@ -255,13 +255,13 @@ export default function Achievements({
                 <Text
                   style={styles.summaryLabel}
                 >
-                  achievements completed
+                  Achievements Completed
                 </Text>
 
                 <Text
                   style={styles.summaryRewardText}
                 >
-                  Collect all 6 to earn this profile badge
+                  Complete all 6 to Earn this Profile badge!
                 </Text>
               </View>
 
@@ -289,7 +289,7 @@ export default function Achievements({
 
             <View style={styles.summaryFooter}>
               <Text style={styles.summaryHint}>
-                Complete all 6 achievements to earn the Treble trophy badge.
+                Complete All 6 Achievements to earn the Treble Profile Trophy badge.
               </Text>
 
               <TouchableOpacity
@@ -331,7 +331,7 @@ export default function Achievements({
               </Text>
 
               <Text style={styles.collectionTitle}>
-                Badge Collection
+                Achievement Progression
               </Text>
             </View>
 
