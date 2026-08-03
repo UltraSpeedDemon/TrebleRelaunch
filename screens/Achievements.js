@@ -767,7 +767,7 @@ const styles = StyleSheet.create({
 
   mobileBackButton: {
     position: "absolute",
-    top: -82,
+    top: -84,
     left: 80,
     zIndex: 90,
     elevation: 15,

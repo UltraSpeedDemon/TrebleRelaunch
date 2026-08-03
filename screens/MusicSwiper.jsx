@@ -1128,7 +1128,7 @@ export function MusicSwiper({
         </View>
       </View>
 
-      {isWeb ? (
+      {isWeb && !isCompact ? (
         <View style={styles.keyboardHint}>
           <Text style={styles.keyboardHintText}>
             Drag with your mouse • ← / A skip

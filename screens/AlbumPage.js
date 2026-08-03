@@ -2158,8 +2158,8 @@ const styles = StyleSheet.create({
 
   pageBackButton: {
     position: "absolute",
-    top: Platform.OS === "web" ? 20 : -16,
-    left: 88,
+    top: Platform.OS === "web" ? 20 : -18,
+    left: 80,
     right: undefined,
     zIndex: 90,
     elevation: 15,
