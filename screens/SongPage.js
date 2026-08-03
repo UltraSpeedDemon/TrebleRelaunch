@@ -711,24 +711,26 @@ export default function SongPage({ route, navigation }) {
 
       try {
         /*
-         * On phones, try the installed Spotify app first.
-         * If Spotify is not installed or the deep link fails,
-         * open the same search on Spotify's website.
+         * Open exactly one destination.
+         *
+         * Previously, iOS could launch Spotify and still reject the
+         * Promise, causing the catch block to open Safari underneath it.
+         * Returning from Spotify then revealed a blank Safari screen.
+         *
+         * Checking the Spotify scheme first prevents that double-open.
          */
-        if (
-          Platform.OS !== "web"
-        ) {
-          try {
+        if (Platform.OS !== "web") {
+          const spotifyInstalled =
+            await Linking.canOpenURL(
+              "spotify:"
+            );
+
+          if (spotifyInstalled) {
             await Linking.openURL(
               spotifyAppUrl
             );
 
             return;
-          } catch (appError) {
-            console.warn(
-              "[SongPage] Spotify app could not open; using web:",
-              appError
-            );
           }
         }
 
