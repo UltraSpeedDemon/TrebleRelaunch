@@ -198,6 +198,19 @@ export default function Achievements({
         />
       </View>
 
+      <TouchableOpacity
+        style={[
+          styles.rootBackButton,
+          isDesktopWeb && styles.desktopRootBackButton,
+        ]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Icon name="arrow-back" size={23} color="#ffffff" />
+      </TouchableOpacity>
+
       <View
         style={[
           styles.pageContent,
@@ -231,22 +244,6 @@ export default function Achievements({
               !isDesktopWeb && styles.mobileHeaderRow,
             ]}
           >
-            <TouchableOpacity
-              style={[
-                styles.backButton,
-                !isDesktopWeb && styles.mobileBackButton,
-              ]}
-              onPress={() =>
-                navigation.goBack()
-              }
-              activeOpacity={0.8}
-            >
-              <Icon
-                name="arrow-back"
-                size={23}
-                color="#ffffff"
-              />
-            </TouchableOpacity>
 
             <View
               style={styles.headerTextWrap}
@@ -606,6 +603,27 @@ export default function Achievements({
 }
 
 const styles = StyleSheet.create({
+  rootBackButton: {
+    position: "absolute",
+    top: Platform.OS === "web" ? 20 : -16,
+    left: 88,
+    zIndex: 100,
+    elevation: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+
+  desktopRootBackButton: {
+    top: 20,
+    left: DESKTOP_SIDEBAR_WIDTH + 20,
+  },
+
   appContainer: {
     flex: 1,
     minHeight: 0,
