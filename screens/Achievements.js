@@ -232,7 +232,10 @@ export default function Achievements({
             ]}
           >
             <TouchableOpacity
-              style={styles.backButton}
+              style={[
+                styles.backButton,
+                !isDesktopWeb && styles.mobileBackButton,
+              ]}
               onPress={() =>
                 navigation.goBack()
               }
@@ -727,7 +730,7 @@ const styles = StyleSheet.create({
 
   scrollContentCompact: {
     paddingHorizontal: 16,
-    paddingTop: 82,
+    paddingTop: 74,
     paddingBottom: 150,
   },
 
@@ -739,7 +742,14 @@ const styles = StyleSheet.create({
   },
 
   mobileHeaderRow: {
-    paddingLeft: 56,
+    flexDirection: "column",
+    alignItems: "stretch",
+  },
+
+  mobileBackButton: {
+    alignSelf: "flex-end",
+    marginRight: 0,
+    marginBottom: 16,
   },
 
   backButton: {

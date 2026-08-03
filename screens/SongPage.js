@@ -1569,6 +1569,26 @@ const handlePlayPreview = async () => {
         />
       </View>
 
+
+      {/* Back button stays opposite the mobile hamburger and does not
+          change the page content width or alignment. */}
+      <TouchableOpacity
+        style={[
+          styles.pageBackButton,
+          isDesktopWeb && styles.desktopPageBackButton,
+        ]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Icon
+          name="arrow-back"
+          size={24}
+          color="#ffffff"
+        />
+      </TouchableOpacity>
+
       {/* =========================================================
           PAGE CONTENT
       ========================================================= */}
@@ -2111,6 +2131,34 @@ const handlePlayPreview = async () => {
 }
 
 const styles = StyleSheet.create({
+
+  pageBackButton: {
+    position: "absolute",
+    top: Platform.OS === "web" ? 52 : 18,
+    right: 16,
+    zIndex: 90,
+    elevation: 15,
+
+    width: 44,
+    height: 44,
+
+    alignItems: "center",
+    justifyContent: "center",
+
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+
+  desktopPageBackButton: {
+    top: 20,
+    left: DESKTOP_SIDEBAR_WIDTH + 20,
+    right: undefined,
+  },
+
+
 desktopBottomNavBar: {
   left: DESKTOP_SIDEBAR_WIDTH,
   right: 0,
