@@ -2216,6 +2216,12 @@ export default function Profile({
                 styles.socialStatsRow,
                 isCompact &&
                   styles.compactSocialStatsRow,
+
+                isCompact &&
+                !isSpotifyLinked &&
+                !isAdmin &&
+                !hasAchievementBadge &&
+                  styles.compactSocialStatsRowNoBadges,
               ]}
             >
               <TouchableOpacity
@@ -3031,6 +3037,14 @@ desktopBottomNavBar: {
     paddingTop: 8,
 
     borderTopWidth: 0,
+  },
+
+  /*
+   * When no profile badges are displayed on mobile, leave a small
+   * visual gap between the username area and the follower numbers.
+   */
+  compactSocialStatsRowNoBadges: {
+    marginTop: 3,
   },
 
   statButton: {
