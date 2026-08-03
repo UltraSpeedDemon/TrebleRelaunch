@@ -81,9 +81,25 @@ app.use((req, res, next) => {
 });
 
 app.use((req, res, next) => {
+  const safeBody =
+    req.body && typeof req.body === "object"
+      ? {
+          ...req.body,
+          ...(req.body.id_token
+            ? { id_token: "[REDACTED]" }
+            : {}),
+          ...(req.body.token
+            ? { token: "[REDACTED]" }
+            : {}),
+          ...(req.body.access_token
+            ? { access_token: "[REDACTED]" }
+            : {}),
+        }
+      : req.body;
+
   console.log(`\n==========================`);
   console.log(`${req.method} ${req.originalUrl}`);
-  console.log(req.body);
+  console.log(safeBody);
   console.log(`==========================\n`);
   next();
 });
@@ -121,6 +137,26 @@ const deezerMemoryCache = new Map();
 
 const deezerRequestsInFlight = new Map();
 
+/*
+ * When Deezer/Akamai temporarily blocks the server IP, avoid repeatedly
+ * hammering Deezer with forced refresh requests. Cached data remains usable.
+ */
+let deezerBlockedUntil = 0;
+const DEEZER_BLOCK_COOLDOWN_MS =
+  15 * 60 * 1000;
+
+function isDeezerAccessDenied(error) {
+  const message =
+    String(error?.message || "").toLowerCase();
+
+  return (
+    message.includes("access denied") ||
+    message.includes("http 403") ||
+    message.includes("permission to access") ||
+    message.includes("edgesuite")
+  );
+}
+
 const DEEZER_CACHE_COLLECTION =
   "deezerApiCache";
 
@@ -137,7 +173,7 @@ const DEEZER_MEMORY_CACHE_MAX_ITEMS =
  */
 const DEEZER_CACHE_TTL = {
   track:
-    6 * 60 * 60 * 1000,
+    7 * 24 * 60 * 60 * 1000,
 
   album:
     7 * 24 * 60 * 60 * 1000,
@@ -1739,6 +1775,34 @@ async function fetchDeezer(
         `${DEEZER_API_BASE}${normalizedPath}`;
 
       /*
+       * Deezer sometimes blocks the DigitalOcean public IP temporarily.
+       * During that cooldown, return cached data instead of making another
+       * request that is expected to fail.
+       */
+      if (
+        Date.now() < deezerBlockedUntil &&
+        staleData
+      ) {
+        const temporaryExpiresAt =
+          Math.max(
+            Date.now() + 5 * 60 * 1000,
+            deezerBlockedUntil
+          );
+
+        saveToDeezerMemoryCache(
+          cacheKey,
+          staleData,
+          temporaryExpiresAt
+        );
+
+        console.warn(
+          `[DEEZER CACHE] BLOCK COOLDOWN HIT ${normalizedPath}`
+        );
+
+        return staleData;
+      }
+
+      /*
        * No valid cache was found.
        * Call Deezer.
        */
@@ -1876,6 +1940,22 @@ async function fetchDeezer(
       } catch (
         deezerError
       ) {
+        if (
+          isDeezerAccessDenied(
+            deezerError
+          )
+        ) {
+          deezerBlockedUntil =
+            Date.now() +
+            DEEZER_BLOCK_COOLDOWN_MS;
+
+          console.warn(
+            `[DEEZER] Access denied. Pausing outbound Deezer requests for ${Math.round(
+              DEEZER_BLOCK_COOLDOWN_MS / 60000
+            )} minutes.`
+          );
+        }
+
         /*
          * STALE CACHE FALLBACK
          *
@@ -4104,23 +4184,47 @@ app.get("/search/getSongFromDeezer", async (req, res) => {
      * new preview URL. Normal refresh=true remains cache-friendly and
      * only refreshes records that have no preview.
      */
-    if (forceRefreshRequested || (refreshRequested && !cachedPreview)) {
-      track = await fetchDeezer(
-        `/track/${encodeURIComponent(trackId)}`,
-        {
-          forceRefresh: true,
-          ttl: DEEZER_CACHE_TTL.track,
-        }
-      );
+    if (
+      forceRefreshRequested ||
+      (refreshRequested && !cachedPreview)
+    ) {
+      const refreshedTrack =
+        await fetchDeezer(
+          `/track/${encodeURIComponent(trackId)}`,
+          {
+            forceRefresh: true,
+            ttl: DEEZER_CACHE_TTL.track,
+          }
+        );
 
-      previewRefreshed = true;
+      const refreshedPreview =
+        refreshedTrack?.preview ||
+        refreshedTrack?.previewUrl ||
+        refreshedTrack?.playbackUrl ||
+        "";
+
+      /*
+       * Keep the original cached record if Deezer was blocked and the
+       * forced refresh did not produce a usable preview.
+       */
+      if (refreshedPreview) {
+        track = refreshedTrack;
+        previewRefreshed =
+          refreshedPreview !== cachedPreview;
+      }
     }
 
+    const normalizedTrack =
+      normalizeDeezerTrack(track);
+
     return res.json({
-      ...normalizeDeezerTrack(track),
+      ...normalizedTrack,
+      ok: true,
       previewRefreshed,
       servedFromTrebleCache:
         !previewRefreshed,
+      deezerCooldownActive:
+        Date.now() < deezerBlockedUntil,
     });
   } catch (error) {
     console.error("GET /search/getSongFromDeezer error:", error);
