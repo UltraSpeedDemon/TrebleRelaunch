@@ -1897,6 +1897,9 @@ console.log(
               ? targetFollowersResult.value
               : [];
 
+          /* The followers endpoint is the source of truth for the live count. */
+          setFollowersCount(targetFollowers.length);
+
           const following =
             targetFollowers.some(
               (follower) =>
@@ -2061,19 +2064,26 @@ console.log(
       loadedUserThisFocus.current =
         focusKey;
 
-      const start = async () => {
-        if (
-          !profileHasPainted.current
-        ) {
-          await restoreProfileCache();
-        }
+      /*
+       * Start the cache paint and live refresh independently. Awaiting the
+       * cache here caused state updates to recreate this focus callback,
+       * run its cleanup, and cancel the live request before it even started.
+       */
+      if (!profileHasPainted.current) {
+        restoreProfileCache().catch((error) => {
+          console.warn(
+            "[UserProfiles] Cache paint failed:",
+            error
+          );
+        });
+      }
 
-        if (active) {
-          await fetchUserData(false);
-        }
-      };
-
-      start();
+      fetchUserData(false).catch((error) => {
+        console.error(
+          "[UserProfiles] Focus refresh failed:",
+          error
+        );
+      });
 
       return () => {
         active = false;

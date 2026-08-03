@@ -1783,19 +1783,26 @@ export default function Profile({
     loadedProfileThisFocus.current =
       true;
 
-    const start = async () => {
-      if (
-        !profileHasPainted.current
-      ) {
-        await restoreOwnProfileCache();
-      }
+    /*
+     * Paint cached data immediately, but never wait for it before starting
+     * the live request. Cache state updates used to recreate this effect and
+     * cancel the backend refresh before it began.
+     */
+    if (!profileHasPainted.current) {
+      restoreOwnProfileCache().catch((error) => {
+        console.warn(
+          "[Profile] Cache paint failed:",
+          error
+        );
+      });
+    }
 
-      if (active) {
-        await loadProfile();
-      }
-    };
-
-    start();
+    loadProfile().catch((error) => {
+      console.error(
+        "[Profile] Focus refresh failed:",
+        error
+      );
+    });
 
     return () => {
       active = false;
