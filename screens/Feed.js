@@ -51,6 +51,7 @@ import {
   getTimeline,
   getSongFromDeezer,
   getFollowRequests,
+  getFeedPosts,
 } from "../providers/rest";
 
 const PAGE_SIZE = 16;
@@ -1027,6 +1028,58 @@ export default function Feed({
       shuffleFeedItems,
     ]);
 
+  const fetchCreatedPostItems =
+    useCallback(
+      async (
+        offset,
+        limit = PAGE_SIZE
+      ) => {
+        const currentUser =
+          auth.currentUser;
+
+        if (!currentUser?.uid) {
+          return [];
+        }
+
+        try {
+          const response =
+            await getFeedPosts(
+              currentUser.uid,
+              {
+                limit,
+                offset,
+              }
+            );
+
+          if (!response?.ok) {
+            console.warn(
+              "[Feed] Created posts request failed:",
+              response?.status
+            );
+
+            return [];
+          }
+
+          const data =
+            await response.json();
+
+          return Array.isArray(
+            data?.posts
+          )
+            ? data.posts
+            : [];
+        } catch (error) {
+          console.error(
+            "[Feed] Created posts error:",
+            error
+          );
+
+          return [];
+        }
+      },
+      []
+    );
+
   const mergeFeedItems = useCallback(
     (
       timelineItems,
@@ -1153,6 +1206,7 @@ export default function Feed({
         const [
           timelineItems,
           recommendationItems,
+          createdPostItems,
         ] = await Promise.all([
           fetchTimelineItems(
             0,
@@ -1162,13 +1216,18 @@ export default function Feed({
             0,
             refresh
           ),
+          fetchCreatedPostItems(
+            0,
+            PAGE_SIZE
+          ),
         ]);
 
         const mixedItems =
-          mergeFeedItems(
-            timelineItems,
-            recommendationItems
-          );
+          diversifyFeedItems([
+            ...createdPostItems,
+            ...timelineItems,
+            ...recommendationItems,
+          ]);
 
         if (mixedItems.length > 0) {
           setCombinedFeed(
@@ -1231,9 +1290,10 @@ export default function Feed({
       }
     },
     [
+      diversifyFeedItems,
+      fetchCreatedPostItems,
       fetchRecommendationItems,
       fetchTimelineItems,
-      mergeFeedItems,
       saveFeedCache,
     ]
   );
@@ -1275,6 +1335,7 @@ export default function Feed({
         const [
           timelineItems,
           recommendationItems,
+          createdPostItems,
         ] = await Promise.all([
           fetchTimelineItems(
             requestOffset,
@@ -1284,16 +1345,21 @@ export default function Feed({
             requestOffset,
             false
           ),
+          fetchCreatedPostItems(
+            requestOffset,
+            PAGE_SIZE
+          ),
         ]);
 
         paginationCursorRef.current +=
           PAGE_SIZE;
 
         const mixedCandidates =
-          mergeFeedItems(
-            timelineItems,
-            recommendationItems
-          );
+          diversifyFeedItems([
+            ...createdPostItems,
+            ...timelineItems,
+            ...recommendationItems,
+          ]);
 
         const uniqueNewItems =
           mixedCandidates.filter(
@@ -1377,13 +1443,14 @@ export default function Feed({
         setLoadingMore(false);
       }
     }, [
+      diversifyFeedItems,
+      fetchCreatedPostItems,
       fetchRecommendationItems,
       fetchTimelineItems,
       getItemId,
       getRecordId,
       isLoading,
       loadingMore,
-      mergeFeedItems,
       saveFeedCache,
     ]);
 
@@ -1540,131 +1607,23 @@ export default function Feed({
     lastInsertedPostIdRef.current =
       postId;
 
-    const currentUser =
-      auth.currentUser;
-
-    const feedPost = {
-      ...newPost,
-
-      id: postId,
-      record_id:
-        `created-post-${postId}`,
-
-      type: "track",
-      source: "created-post",
-
-      origin: {
-        type: "post",
-        title: "Your new post",
-        description:
-          "You just shared this song.",
-      },
-
-      createdAt:
-        new Date().toISOString(),
-
-      item_info: {
-        ...newPost,
-
-        id:
-          String(
-            newPost.listenableId ||
-            newPost.listenable_id ||
-            newPost.songId ||
-            newPost.id
-          ),
-
-        listenableId:
-          String(
-            newPost.listenableId ||
-            newPost.listenable_id ||
-            newPost.songId ||
-            newPost.id
-          ),
-
-        listenable_id:
-          String(
-            newPost.listenableId ||
-            newPost.listenable_id ||
-            newPost.songId ||
-            newPost.id
-          ),
-
-        type: "track",
-
-        title:
-          newPost.title ||
-          newPost.name ||
-          "Shared song",
-
-        name:
-          newPost.name ||
-          newPost.title ||
-          "Shared song",
-
-        artist:
-          typeof newPost.artist ===
-          "string"
-            ? {
-                name:
-                  newPost.artist,
-              }
-            : newPost.artist ||
-              {
-                name:
-                  newPost.artistName ||
-                  "",
-              },
-
-        artistName:
-          typeof newPost.artist ===
-          "string"
-            ? newPost.artist
-            : newPost.artistName ||
-              newPost.artist?.name ||
-              "",
-
-        image:
-          newPost.image ||
-          newPost.coverArt ||
-          newPost.albumCover?.uri ||
-          "",
-
-        coverArt:
-          newPost.coverArt ||
-          newPost.image ||
-          newPost.albumCover?.uri ||
-          "",
-
-        comment:
-          newPost.comment ||
-          "",
-
-        rating:
-          Number(
-            newPost.rating || 0
-          ),
-
-        username:
-          newPost.username ||
-          currentUser?.displayName ||
-          "You",
-      },
-    };
-
     let updatedFeed = [];
 
     setCombinedFeed(
       (currentItems) => {
         updatedFeed = [
-          feedPost,
+          newPost,
           ...currentItems.filter(
             (item) =>
               String(
                 getRecordId(item) ||
+                getItemId(item) ||
                 ""
               ) !==
-              feedPost.record_id
+              String(
+                newPost.record_id ||
+                newPost.id
+              )
           ),
         ];
 
@@ -1686,6 +1645,7 @@ export default function Feed({
       newPost: undefined,
     });
   }, [
+    getItemId,
     getRecordId,
     navigation,
     route?.params?.newPost,

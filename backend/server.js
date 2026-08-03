@@ -3964,6 +3964,501 @@ app.post("/users", async (req, res) => {
   }
 });
 
+
+/* =========================================================
+   PERSISTENT CREATE POSTS
+========================================================= */
+
+const FEED_POSTS_COLLECTION = "feedPosts";
+
+function feedTimestampToIso(value) {
+  if (!value) {
+    return new Date().toISOString();
+  }
+
+  if (
+    typeof value.toDate ===
+    "function"
+  ) {
+    return value
+      .toDate()
+      .toISOString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const parsed =
+    new Date(value);
+
+  return Number.isNaN(
+    parsed.getTime()
+  )
+    ? new Date().toISOString()
+    : parsed.toISOString();
+}
+
+function normalizeFeedPostDocument(
+  document
+) {
+  const data =
+    document.data() || {};
+
+  const songId =
+    String(
+      data.songId ||
+      data.listenableId ||
+      data.listenable_id ||
+      data.itemId ||
+      ""
+    );
+
+  const image =
+    data.image ||
+    data.coverArt ||
+    data.albumCover ||
+    "";
+
+  const artistName =
+    data.artistName ||
+    data.artist?.name ||
+    (
+      typeof data.artist ===
+      "string"
+        ? data.artist
+        : ""
+    );
+
+  return {
+    id: document.id,
+    record_id:
+      `feed-post-${document.id}`,
+
+    type: "track",
+    source: "created-post",
+
+    authorId:
+      String(
+        data.authorId || ""
+      ),
+
+    username:
+      data.username ||
+      data.displayName ||
+      "Treble User",
+
+    createdAt:
+      feedTimestampToIso(
+        data.createdAt
+      ),
+
+    origin: {
+      type: "post",
+      title:
+        data.originTitle ||
+        "Created a post",
+      description:
+        data.comment || "",
+    },
+
+    item_info: {
+      id: songId,
+      listenableId: songId,
+      listenable_id: songId,
+
+      type: "track",
+
+      title:
+        data.title ||
+        data.name ||
+        "Shared song",
+
+      name:
+        data.name ||
+        data.title ||
+        "Shared song",
+
+      artist: {
+        name: artistName,
+      },
+
+      artistName,
+
+      image,
+      coverArt: image,
+
+      preview:
+        data.preview || "",
+
+      previewUrl:
+        data.preview || "",
+
+      playbackUrl:
+        data.preview || "",
+
+      comment:
+        data.comment || "",
+
+      rating:
+        Number(
+          data.rating || 0
+        ),
+
+      username:
+        data.username ||
+        data.displayName ||
+        "Treble User",
+
+      authorId:
+        String(
+          data.authorId || ""
+        ),
+    },
+  };
+}
+
+/*
+ * Save a Create Post permanently.
+ */
+app.post(
+  "/feed/posts",
+  async (req, res) => {
+    try {
+      const decodedUser =
+        await verifyFirebaseUser(req);
+
+      const body =
+        req.body || {};
+
+      const songId =
+        String(
+          body.song_id ||
+          body.songId ||
+          body.listenable_id ||
+          body.listenableId ||
+          body.item_id ||
+          ""
+        ).trim();
+
+      const comment =
+        String(
+          body.comment || ""
+        ).trim();
+
+      if (!songId) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "A song ID is required.",
+          });
+      }
+
+      if (!comment) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error:
+              "A post comment is required.",
+          });
+      }
+
+      const userSnapshot =
+        await db
+          .collection("users")
+          .doc(decodedUser.uid)
+          .get();
+
+      const userData =
+        userSnapshot.data() || {};
+
+      const artistName =
+        String(
+          body.artist_name ||
+          body.artistName ||
+          body.artist?.name ||
+          (
+            typeof body.artist ===
+            "string"
+              ? body.artist
+              : ""
+          )
+        ).trim();
+
+      const image =
+        String(
+          body.image ||
+          body.cover_art ||
+          body.coverArt ||
+          body.album_cover ||
+          body.albumCover ||
+          ""
+        ).trim();
+
+      const preview =
+        String(
+          body.preview ||
+          body.previewUrl ||
+          body.playbackUrl ||
+          ""
+        ).trim();
+
+      const postRef =
+        db
+          .collection(
+            FEED_POSTS_COLLECTION
+          )
+          .doc();
+
+      await postRef.set({
+        id: postRef.id,
+
+        authorId:
+          decodedUser.uid,
+
+        username:
+          userData.username ||
+          decodedUser.name ||
+          decodedUser.email ||
+          "Treble User",
+
+        songId,
+
+        listenableId: songId,
+        listenable_id: songId,
+
+        title:
+          String(
+            body.title ||
+            body.name ||
+            "Shared song"
+          ),
+
+        name:
+          String(
+            body.name ||
+            body.title ||
+            "Shared song"
+          ),
+
+        artistName,
+
+        artist: {
+          name: artistName,
+        },
+
+        image,
+        coverArt: image,
+
+        preview,
+
+        comment,
+
+        rating:
+          Math.max(
+            0,
+            Math.min(
+              5,
+              Number(
+                body.rating || 0
+              )
+            )
+          ),
+
+        createdAt:
+          FieldValue.serverTimestamp(),
+
+        updatedAt:
+          FieldValue.serverTimestamp(),
+      });
+
+      const savedSnapshot =
+        await postRef.get();
+
+      return res
+        .status(201)
+        .json({
+          ok: true,
+          post:
+            normalizeFeedPostDocument(
+              savedSnapshot
+            ),
+        });
+    } catch (error) {
+      console.error(
+        "POST /feed/posts error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          ok: false,
+          error: error.message,
+        });
+    }
+  }
+);
+
+/*
+ * Return posts created by the current user and people they follow.
+ */
+app.get(
+  "/feed/posts",
+  async (req, res) => {
+    try {
+      const userId =
+        String(
+          req.query.user_id || ""
+        ).trim();
+
+      const limit =
+        Math.max(
+          1,
+          Math.min(
+            50,
+            Number(
+              req.query.limit || 20
+            )
+          )
+        );
+
+      const offset =
+        Math.max(
+          0,
+          Number(
+            req.query.offset || 0
+          )
+        );
+
+      if (!userId) {
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            posts: [],
+            error:
+              "user_id is required.",
+          });
+      }
+
+      const followingSnapshot =
+        await db
+          .collection("follows")
+          .where(
+            "followerId",
+            "==",
+            userId
+          )
+          .get();
+
+      const visibleAuthorIds =
+        new Set([
+          userId,
+          ...followingSnapshot.docs
+            .map(
+              (document) =>
+                String(
+                  document.data()
+                    ?.followedId ||
+                  ""
+                )
+            )
+            .filter(Boolean),
+        ]);
+
+      /*
+       * Firestore "in" supports a limited number of values.
+       * Query the current user plus followed users in chunks.
+       */
+      const authorIds =
+        [...visibleAuthorIds];
+
+      const chunks = [];
+
+      for (
+        let index = 0;
+        index < authorIds.length;
+        index += 10
+      ) {
+        chunks.push(
+          authorIds.slice(
+            index,
+            index + 10
+          )
+        );
+      }
+
+      const snapshots =
+        await Promise.all(
+          chunks.map(
+            (chunk) =>
+              db
+                .collection(
+                  FEED_POSTS_COLLECTION
+                )
+                .where(
+                  "authorId",
+                  "in",
+                  chunk
+                )
+                .limit(100)
+                .get()
+          )
+        );
+
+      const posts =
+        snapshots
+          .flatMap(
+            (snapshot) =>
+              snapshot.docs.map(
+                normalizeFeedPostDocument
+              )
+          )
+          .sort(
+            (first, second) =>
+              new Date(
+                second.createdAt || 0
+              ) -
+              new Date(
+                first.createdAt || 0
+              )
+          )
+          .slice(
+            offset,
+            offset + limit
+          );
+
+      return res
+        .status(200)
+        .json({
+          ok: true,
+          posts,
+          limit,
+          offset,
+          hasMore:
+            posts.length >= limit,
+        });
+    } catch (error) {
+      console.error(
+        "GET /feed/posts error:",
+        error
+      );
+
+      return res
+        .status(502)
+        .json({
+          ok: false,
+          posts: [],
+          error: error.message,
+        });
+    }
+  }
+);
+
 app.get("/users/timeline", async (req, res) => {
   try {
     const { limit, offset } = getPagination(req);

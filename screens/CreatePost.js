@@ -29,6 +29,7 @@ import { auth } from "../utils/firebase";
 import Sidebar from "../components/Sidebar";
 import BottomNavbar from "../components/BottomNavbar";
 import {
+  createFeedPost,
   getUser,
   postSearchResults,
 } from "../providers/rest";
@@ -109,6 +110,11 @@ export default function CreatePost({
   const [
     searchLoading,
     setSearchLoading,
+  ] = useState(false);
+
+  const [
+    postSubmitting,
+    setPostSubmitting,
   ] = useState(false);
 
   const [
@@ -442,7 +448,7 @@ export default function CreatePost({
     ]);
 
   const handlePostSubmit =
-    useCallback(() => {
+    useCallback(async () => {
       if (!selectedSong) {
         Alert.alert(
           "Choose a song",
@@ -461,46 +467,120 @@ export default function CreatePost({
         return;
       }
 
-      const newPost = {
-        id:
-          Date.now().toString(),
+      if (postSubmitting) {
+        return;
+      }
 
-        name:
-          selectedSong.name,
+      setPostSubmitting(true);
 
-        artist:
-          selectedSong.artist,
+      try {
+        const songId =
+          String(
+            selectedSong.id ||
+            selectedSong.listenableId ||
+            selectedSong.listenable_id ||
+            ""
+          );
 
-        albumCover:
-          selectedSong.albumCover,
+        const image =
+          selectedSong.image ||
+          selectedSong.coverArt ||
+          selectedSong.albumCover?.uri ||
+          "";
 
-        username:
-          username ||
-          "Treble User",
+        const response =
+          await createFeedPost({
+            song_id: songId,
+            listenable_id: songId,
 
-        comment:
-          postComment.trim(),
+            title:
+              selectedSong.title ||
+              selectedSong.name,
 
-        rating,
-      };
+            name:
+              selectedSong.name ||
+              selectedSong.title,
 
-      setPostComment("");
-      setSelectedSong(null);
-      setRating(0);
-      setSearchTerm("");
+            artist_name:
+              selectedSong.artistName ||
+              selectedSong.artist ||
+              "",
 
-      navigation.navigate(
-        "Feed",
-        {
-          newPost,
+            image,
+            coverArt: image,
+
+            preview:
+              selectedSong.preview ||
+              selectedSong.previewUrl ||
+              selectedSong.playbackUrl ||
+              "",
+
+            comment:
+              postComment.trim(),
+
+            rating,
+          });
+
+        if (!response?.ok) {
+          let message =
+            "Treble could not save your post.";
+
+          try {
+            const errorBody =
+              await response.json();
+
+            message =
+              errorBody?.error ||
+              message;
+          } catch {}
+
+          throw new Error(message);
         }
-      );
+
+        const result =
+          await response.json();
+
+        const savedPost =
+          result?.post;
+
+        if (!savedPost?.id) {
+          throw new Error(
+            "Treble saved the post but did not return it."
+          );
+        }
+
+        setPostComment("");
+        setSelectedSong(null);
+        setRating(0);
+        setSearchTerm("");
+
+        navigation.navigate(
+          "Feed",
+          {
+            newPost:
+              savedPost,
+          }
+        );
+      } catch (error) {
+        console.error(
+          "[CreatePost] Save error:",
+          error
+        );
+
+        Alert.alert(
+          "Post not saved",
+          error?.message ||
+            "Treble could not save your post. Please try again."
+        );
+      } finally {
+        setPostSubmitting(false);
+      }
     }, [
       navigation,
       postComment,
+      postSubmitting,
       rating,
       selectedSong,
-      username,
     ]);
 
   const renderSongCard =
@@ -1102,27 +1182,42 @@ export default function CreatePost({
                   styles.compactActionButton,
                 (
                   !selectedSong ||
-                  !postComment.trim()
+                  !postComment.trim() ||
+                  postSubmitting
                 ) &&
                   styles.submitButtonDisabled,
               ]}
+              disabled={
+                !selectedSong ||
+                !postComment.trim() ||
+                postSubmitting
+              }
               onPress={
                 handlePostSubmit
               }
               activeOpacity={0.82}
             >
-              <Icon
-                name="send"
-                size={19}
-                color="#ffffff"
-              />
+              {postSubmitting ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#ffffff"
+                />
+              ) : (
+                <Icon
+                  name="send"
+                  size={19}
+                  color="#ffffff"
+                />
+              )}
 
               <Text
                 style={
                   styles.submitText
                 }
               >
-                Share Post
+                {postSubmitting
+                  ? "Saving Post..."
+                  : "Share Post"}
               </Text>
             </TouchableOpacity>
           </View>

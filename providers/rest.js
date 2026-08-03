@@ -405,6 +405,59 @@ export async function setRecommendationServed(userId, recId) {
   });
 }
 
+
+export async function createFeedPost(
+  post
+) {
+  const currentUser =
+    auth.currentUser;
+
+  if (!currentUser?.uid) {
+    throw new Error(
+      "You must be signed in to create a post."
+    );
+  }
+
+  const idToken =
+    await currentUser.getIdToken();
+
+  return await serverPost(
+    "feed/posts",
+    {
+      ...post,
+      id_token: idToken,
+    }
+  );
+}
+
+export async function getFeedPosts(
+  userId,
+  {
+    limit = 20,
+    offset = 0,
+  } = {}
+) {
+  if (!userId) {
+    throw new Error(
+      "getFeedPosts requires a user ID."
+    );
+  }
+
+  return await serverGet(
+    "feed/posts",
+    {
+      user_id:
+        String(userId),
+      limit:
+        String(limit),
+      offset:
+        String(offset),
+      _ts:
+        String(Date.now()),
+    }
+  );
+}
+
 export async function getTimeline(userId, { limit = 20, offset = 0, refresh = false} = {}) {
   try {
     return await serverGet("users/timeline", { 
