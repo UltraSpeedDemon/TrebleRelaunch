@@ -5731,7 +5731,7 @@ friendList: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.16)",
     color: "#ffffff",
-    backgroundColor: colours.foreground,
+    backgroundColor: colours.foreground,  
     textAlignVertical: "top",
   },
 

@@ -21,6 +21,7 @@ import {
 
 import {
   useFocusEffect,
+  useRoute,
 } from "@react-navigation/native";
 
 import { auth } from "../utils/firebase";
@@ -56,6 +57,8 @@ const NOTIFICATIONS_ICON =
 export default function FollowersList({
   navigation,
 }) {
+  const route = useRoute();
+
   const { width } =
     useWindowDimensions();
 
@@ -142,6 +145,25 @@ export default function FollowersList({
       auth.currentUser?.uid ||
       ""
     );
+
+  const targetUserId =
+    String(
+      route?.params?.userId ||
+      currentUserId ||
+      ""
+    );
+
+  const profileOwnerName =
+    String(
+      route?.params
+        ?.profileOwnerName ||
+      route?.params?.username ||
+      ""
+    ).trim();
+
+  const viewingOwnList =
+    targetUserId ===
+    currentUserId;
 
   /*
    * Keep sidebar open on desktop.
@@ -546,7 +568,10 @@ export default function FollowersList({
       async (
         isRefresh = false
       ) => {
-        if (!currentUserId) {
+        if (
+          !currentUserId ||
+          !targetUserId
+        ) {
           setFollowersList([]);
           setFollowingUsers({});
           setFollowRequests({});
@@ -570,7 +595,7 @@ export default function FollowersList({
             followingResponse,
           ] = await Promise.all([
             getFollowers(
-              currentUserId
+              targetUserId
             ),
 
             getFollowing(
@@ -581,7 +606,9 @@ export default function FollowersList({
           const followersData =
             await parseResponse(
               followersResponse,
-              "Unable to load your followers."
+              viewingOwnList
+                ? "Unable to load your followers."
+                : "Unable to load this user's followers."
             );
 
           const rawFollowers =
@@ -666,6 +693,8 @@ export default function FollowersList({
       },
       [
         currentUserId,
+        targetUserId,
+        viewingOwnList,
         enrichUser,
         loadRequestStatuses,
         normalizeUsers,

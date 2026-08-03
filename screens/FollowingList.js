@@ -21,15 +21,18 @@ import {
 
 import {
   useFocusEffect,
+  useRoute,
 } from "@react-navigation/native";
 
 import { auth } from "../utils/firebase";
 
 import {
+  followUser,
   getFollowers,
   getFollowing,
   getFollowRequests,
   getUser,
+  requestFollow,
   unfollowUser,
 } from "../providers/rest";
 
@@ -54,6 +57,8 @@ const NOTIFICATIONS_ICON =
 export default function FollowingList({
   navigation,
 }) {
+  const route = useRoute();
+
   const { width } =
     useWindowDimensions();
 
@@ -126,6 +131,11 @@ export default function FollowingList({
   ] = useState({});
 
   const [
+    followRequests,
+    setFollowRequests,
+  ] = useState({});
+
+  const [
     followLoading,
     setFollowLoading,
   ] = useState({});
@@ -140,6 +150,25 @@ export default function FollowingList({
       auth.currentUser?.uid ||
       ""
     );
+
+  const targetUserId =
+    String(
+      route?.params?.userId ||
+      currentUserId ||
+      ""
+    );
+
+  const profileOwnerName =
+    String(
+      route?.params
+        ?.profileOwnerName ||
+      route?.params?.username ||
+      ""
+    ).trim();
+
+  const viewingOwnList =
+    targetUserId ===
+    currentUserId;
 
   useEffect(() => {
     if (isDesktopWeb) {
@@ -310,7 +339,10 @@ export default function FollowingList({
       async (
         isRefresh = false
       ) => {
-        if (!currentUserId) {
+        if (
+          !currentUserId ||
+          !targetUserId
+        ) {
           setFollowingList([]);
           setFollowingUsers({});
           setFollowsMeUsers({});
@@ -330,8 +362,13 @@ export default function FollowingList({
 
           const [
             followingResponse,
+            myFollowingResponse,
             followersResponse,
           ] = await Promise.all([
+            getFollowing(
+              targetUserId
+            ),
+
             getFollowing(
               currentUserId
             ),
@@ -344,7 +381,9 @@ export default function FollowingList({
           const followingData =
             await parseResponse(
               followingResponse,
-              "Unable to load your following list."
+              viewingOwnList
+                ? "Unable to load your following list."
+                : "Unable to load this user's following list."
             );
 
           const rawUsers =
@@ -404,6 +443,27 @@ export default function FollowingList({
             users
           );
 
+          let myFollowingIds =
+            new Set();
+
+          if (
+            myFollowingResponse?.ok
+          ) {
+            const myFollowingData =
+              await myFollowingResponse.json();
+
+            myFollowingIds =
+              new Set(
+                normalizeUsers(
+                  myFollowingData
+                )
+                  .map(
+                    getRelationshipUserId
+                  )
+                  .filter(Boolean)
+              );
+          }
+
           setFollowingUsers(
             users.reduce(
               (
@@ -411,7 +471,9 @@ export default function FollowingList({
                 user
               ) => {
                 result[user.userId] =
-                  true;
+                  myFollowingIds.has(
+                    user.userId
+                  );
 
                 return result;
               },
@@ -474,6 +536,8 @@ export default function FollowingList({
       },
       [
         currentUserId,
+        targetUserId,
+        viewingOwnList,
         getRelationshipUserId,
         normalizeUsers,
         parseResponse,
@@ -617,6 +681,175 @@ export default function FollowingList({
       ]
     );
 
+  const handleRelationshipAction =
+    useCallback(
+      async (user) => {
+        const selectedUserId =
+          String(
+            user?.userId ||
+            ""
+          );
+
+        if (
+          !currentUserId ||
+          !selectedUserId ||
+          selectedUserId ===
+            currentUserId ||
+          followLoading[
+            selectedUserId
+          ]
+        ) {
+          return;
+        }
+
+        const currentlyFollowing =
+          Boolean(
+            followingUsers[
+              selectedUserId
+            ]
+          );
+
+        setFollowLoading(
+          (current) => ({
+            ...current,
+            [selectedUserId]:
+              true,
+          })
+        );
+
+        try {
+          if (currentlyFollowing) {
+            const response =
+              await unfollowUser(
+                currentUserId,
+                selectedUserId
+              );
+
+            await parseResponse(
+              response,
+              "Unable to unfollow this user."
+            );
+
+            setFollowingUsers(
+              (current) => ({
+                ...current,
+                [selectedUserId]:
+                  false,
+              })
+            );
+
+            if (viewingOwnList) {
+              setFollowingList(
+                (current) =>
+                  current.filter(
+                    (item) =>
+                      item.userId !==
+                      selectedUserId
+                  )
+              );
+            }
+
+            return;
+          }
+
+          if (user?.isPublic) {
+            const response =
+              await followUser(
+                currentUserId,
+                selectedUserId
+              );
+
+            await parseResponse(
+              response,
+              "Unable to follow this user."
+            );
+
+            setFollowingUsers(
+              (current) => ({
+                ...current,
+                [selectedUserId]:
+                  true,
+              })
+            );
+
+            setFollowRequests(
+              (current) => ({
+                ...current,
+                [selectedUserId]:
+                  false,
+              })
+            );
+
+            return;
+          }
+
+          if (
+            followRequests[
+              selectedUserId
+            ]
+          ) {
+            return;
+          }
+
+          const response =
+            await requestFollow(
+              currentUserId,
+              selectedUserId
+            );
+
+          await parseResponse(
+            response,
+            "Unable to send the follow request."
+          );
+
+          setFollowRequests(
+            (current) => ({
+              ...current,
+              [selectedUserId]:
+                true,
+            })
+          );
+        } catch (error) {
+          const message =
+            error?.message ||
+            "Please try again.";
+
+          if (
+            Platform.OS === "web"
+          ) {
+            window.alert(message);
+          } else {
+            Alert.alert(
+              "Unable to update follow status",
+              message
+            );
+          }
+        } finally {
+          setFollowLoading(
+            (current) => {
+              const updated = {
+                ...current,
+              };
+
+              delete updated[
+                selectedUserId
+              ];
+
+              return updated;
+            }
+          );
+        }
+      },
+      [
+        currentUserId,
+        followLoading,
+        followRequests,
+        followingUsers,
+        parseResponse,
+        viewingOwnList,
+      ]
+    );
+
   const getAvatarSource =
     useCallback((avatar) => {
       if (
@@ -664,7 +897,7 @@ export default function FollowingList({
                   targetUserId
                 ]
               )
-            : true;
+            : false;
 
         const followsMe =
           Boolean(
@@ -684,12 +917,25 @@ export default function FollowingList({
             ]
           );
 
+        const isRequested =
+          Boolean(
+            followRequests[
+              targetUserId
+            ]
+          );
+
         const buttonLabel =
           isUpdating
             ? "Loading..."
             : isFriend
               ? "Friends"
-              : "Following";
+              : isFollowing
+                ? "Following"
+                : isRequested
+                  ? "Requested"
+                  : followsMe
+                    ? "Follow Back"
+                    : "Follow";
 
         return (
           <TouchableOpacity
@@ -782,14 +1028,15 @@ export default function FollowingList({
                     styles.disabledButton,
                 ]}
                 disabled={
-                  isUpdating
+                  isUpdating ||
+                  isRequested
                 }
                 onPress={(event) => {
                   event
                     ?.stopPropagation
                     ?.();
 
-                  handleUnfollow(
+                  handleRelationshipAction(
                     item
                   );
                 }}
@@ -820,7 +1067,8 @@ export default function FollowingList({
         followingUsers,
         followsMeUsers,
         getAvatarSource,
-        handleUnfollow,
+        followRequests,
+        handleRelationshipAction,
         navigation,
       ]
     );

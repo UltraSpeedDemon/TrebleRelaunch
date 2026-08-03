@@ -2795,9 +2795,23 @@ const finalButtonLabel =
                   styles.statsRow
                 }
               >
-                <View
+                <TouchableOpacity
                   style={
                     styles.statBox
+                  }
+                  activeOpacity={0.72}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View ${username}'s followers`}
+                  onPress={() =>
+                    navigation.navigate(
+                      "FollowersList",
+                      {
+                        userId,
+                        username,
+                        profileOwnerName:
+                          username,
+                      }
+                    )
                   }
                 >
                   <Text
@@ -2817,7 +2831,7 @@ const finalButtonLabel =
                   >
                     Followers
                   </Text>
-                </View>
+                </TouchableOpacity>
 
                 <View
                   style={
@@ -2825,9 +2839,23 @@ const finalButtonLabel =
                   }
                 />
 
-                <View
+                <TouchableOpacity
                   style={
                     styles.statBox
+                  }
+                  activeOpacity={0.72}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View who ${username} follows`}
+                  onPress={() =>
+                    navigation.navigate(
+                      "FollowingList",
+                      {
+                        userId,
+                        username,
+                        profileOwnerName:
+                          username,
+                      }
+                    )
                   }
                 >
                   <Text
@@ -2847,7 +2875,7 @@ const finalButtonLabel =
                   >
                     Following
                   </Text>
-                </View>
+                </TouchableOpacity>
 
                 <View
                   style={
