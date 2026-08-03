@@ -417,13 +417,6 @@ export default function UserProfiles({
     React.useRef(false);
 
   /*
-   * When cached profile rows exist, even as empty arrays, do not replace
-   * them with large loading boxes during the background refresh.
-   */
-  const profileRowsRestored =
-    React.useRef(false);
-
-  /*
    * Only run one profile refresh while this user profile is open.
    * The loading callbacks change as row data changes, so without this guard
    * useFocusEffect repeatedly starts every loader again.
@@ -703,16 +696,12 @@ export default function UserProfiles({
 
   const loadCreatedPosts =
     useCallback(async () => {
-      if (
-        !profileRowsRestored.current
-      ) {
-        setSectionLoading(
-          (current) => ({
-            ...current,
-            posts: true,
-          })
-        );
-      }
+      setSectionLoading(
+        (current) => ({
+          ...current,
+          posts: true,
+        })
+      );
 
       if (!userId) {
         setCreatedPosts([]);
@@ -1029,20 +1018,16 @@ export default function UserProfiles({
 
   const loadAllReviewsSections =
     useCallback(async () => {
-      if (
-        !profileRowsRestored.current
-      ) {
-        setSectionLoading(
-          (current) => ({
-            ...current,
-            reviews: true,
-            likedSongs: true,
-            favorites: true,
-            mostUpvoted: true,
-            activity: true,
-          })
-        );
-      }
+      setSectionLoading(
+        (current) => ({
+          ...current,
+          reviews: true,
+          likedSongs: true,
+          favorites: true,
+          mostUpvoted: true,
+          activity: true,
+        })
+      );
 
       try {
         const [
@@ -1454,18 +1439,6 @@ console.log(
           cached.totalReviews || 0
         )
       );
-
-      profileRowsRestored.current =
-        true;
-
-      setSectionLoading({
-        posts: false,
-        reviews: false,
-        likedSongs: false,
-        favorites: false,
-        mostUpvoted: false,
-        activity: false,
-      });
 
       profileHasPainted.current = true;
       setLoading(false);
@@ -1907,9 +1880,6 @@ console.log(
       "";
 
     profileHasPainted.current =
-      false;
-
-    profileRowsRestored.current =
       false;
   }, [userId]);
 

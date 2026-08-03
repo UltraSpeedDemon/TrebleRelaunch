@@ -299,13 +299,6 @@ export default function Profile({
   const profileHasPainted =
     useRef(false);
 
-  /*
-   * Cached rows may legitimately contain zero items. Once restored, keep
-   * those empty states visible instead of showing another loading box.
-   */
-  const profileRowsRestored =
-    useRef(false);
-
   const profileRequestId =
     useRef(0);
 
@@ -537,16 +530,12 @@ export default function Profile({
 
   const loadCreatedPosts =
     useCallback(async () => {
-      if (
-        !profileRowsRestored.current
-      ) {
-        setSectionLoading(
-          (current) => ({
-            ...current,
-            posts: true,
-          })
-        );
-      }
+      setSectionLoading(
+        (current) => ({
+          ...current,
+          posts: true,
+        })
+      );
 
       const currentUser =
         auth.currentUser;
@@ -886,20 +875,16 @@ export default function Profile({
 
   const loadReviewSections =
     useCallback(async () => {
-      if (
-        !profileRowsRestored.current
-      ) {
-        setSectionLoading(
-          (current) => ({
-            ...current,
-            reviews: true,
-            likedSongs: true,
-            favorites: true,
-            mostUpvoted: true,
-            activity: true,
-          })
-        );
-      }
+      setSectionLoading(
+        (current) => ({
+          ...current,
+          reviews: true,
+          likedSongs: true,
+          favorites: true,
+          mostUpvoted: true,
+          activity: true,
+        })
+      );
 
       const currentUser =
         auth.currentUser;
@@ -1256,18 +1241,6 @@ export default function Profile({
             cached.avatar
           ).catch(() => {});
         }
-
-        profileRowsRestored.current =
-          true;
-
-        setSectionLoading({
-          posts: false,
-          reviews: false,
-          likedSongs: false,
-          favorites: false,
-          mostUpvoted: false,
-          activity: false,
-        });
 
         profileHasPainted.current = true;
         setLoading(false);
