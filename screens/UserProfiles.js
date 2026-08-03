@@ -76,6 +76,71 @@ const userProfileCacheKey = (userId) =>
     userId || ""
   )}`;
 
+const PROFILE_REQUEST_TIMEOUT_MS = 12000;
+
+async function withProfileTimeout(
+  promise,
+  label,
+  timeoutMs =
+    PROFILE_REQUEST_TIMEOUT_MS
+) {
+  let timeoutId;
+
+  try {
+    return await Promise.race([
+      promise,
+
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              `${label} timed out.`
+            )
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function readProfileResponse(
+  requestPromise,
+  fallbackValue,
+  label
+) {
+  try {
+    const response =
+      await withProfileTimeout(
+        requestPromise,
+        label
+      );
+
+    if (!response?.ok) {
+      console.warn(
+        `[Profile] ${label} returned HTTP ${response?.status || "unknown"}.`
+      );
+
+      return fallbackValue;
+    }
+
+    return await withProfileTimeout(
+      response.json(),
+      `${label} response`
+    );
+  } catch (error) {
+    console.warn(
+      `[Profile] ${label} failed:`,
+      error
+    );
+
+    return fallbackValue;
+  }
+}
+
 const ADMIN_BADGE_EMAILS = new Set([
   "mcplayzethan@gmail.com",
 ]);
@@ -417,6 +482,13 @@ export default function UserProfiles({
     React.useRef(false);
 
   /*
+   * When cached profile rows exist, even as empty arrays, do not replace
+   * them with large loading boxes during the background refresh.
+   */
+  const profileRowsRestored =
+    React.useRef(false);
+
+  /*
    * Only run one profile refresh while this user profile is open.
    * The loading callbacks change as row data changes, so without this guard
    * useFocusEffect repeatedly starts every loader again.
@@ -696,35 +768,45 @@ export default function UserProfiles({
 
   const loadCreatedPosts =
     useCallback(async () => {
-      setSectionLoading(
-        (current) => ({
-          ...current,
-          posts: true,
-        })
-      );
+      if (
+        !profileRowsRestored.current
+      ) {
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            posts: true,
+          })
+        );
+      }
 
       if (!userId) {
         setCreatedPosts([]);
+
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            posts: false,
+          })
+        );
+
         return;
       }
 
       try {
-        const response =
-          await getFeedPosts(
-            userId,
-            {
-              limit: 40,
-              offset: 0,
-            }
-          );
-
-        if (!response?.ok) {
-          setCreatedPosts([]);
-          return;
-        }
-
         const data =
-          await response.json();
+          await readProfileResponse(
+            getFeedPosts(
+              userId,
+              {
+                limit: 40,
+                offset: 0,
+              }
+            ),
+            {
+              posts: [],
+            },
+            "Posts"
+          );
 
         const theirPosts =
           (
@@ -768,7 +850,6 @@ export default function UserProfiles({
         );
       }
     }, [userId]);
-
 
 
   const renderCreatedPostsSection =
@@ -1018,141 +1099,203 @@ export default function UserProfiles({
 
   const loadAllReviewsSections =
     useCallback(async () => {
-      setSectionLoading(
-        (current) => ({
-          ...current,
-          reviews: true,
-          likedSongs: true,
-          favorites: true,
-          mostUpvoted: true,
-          activity: true,
-        })
-      );
-
-      try {
-        const [
-          topResponse,
-          likedResponse,
-          favoritesResponse,
-          upvotedResponse,
-          activityResponse,
-        ] = await Promise.all([
-          getUserTopReviews(userId),
-          getUserLikes(userId),
-          getUserFavorites(userId),
-          getUserMostUpvoted(userId),
-          getUserActivity(userId),
-        ]);
-
-        const [
-          topData,
-          likedData,
-          favoritesData,
-          upvotedData,
-          activityData,
-        ] = await Promise.all([
-          topResponse?.ok
-            ? topResponse.json()
-            : [],
-
-          likedResponse?.ok
-            ? likedResponse.json()
-            : { likes: [] },
-
-          favoritesResponse?.ok
-            ? favoritesResponse.json()
-            : [],
-
-          upvotedResponse?.ok
-            ? upvotedResponse.json()
-            : [],
-
-          activityResponse?.ok
-            ? activityResponse.json()
-            : [],
-        ]);
-
-        const [
-          enrichedTop,
-          enrichedFavorites,
-          enrichedUpvoted,
-          enrichedActivity,
-        ] = await Promise.all([
-          enrichReviewsWithSong(
-            normalizeArray(topData)
-          ),
-
-          enrichReviewsWithSong(
-            normalizeArray(
-              favoritesData
-            )
-          ),
-
-          enrichReviewsWithSong(
-            normalizeArray(
-              upvotedData
-            )
-          ),
-
-          enrichReviewsWithSong(
-            normalizeArray(
-              activityData
-            )
-          ),
-        ]);
-
-        const rawLikes =
-          Array.isArray(likedData?.likes)
-            ? likedData.likes
-            : normalizeArray(likedData);
-
-        const normalizedLikedSongs =
-          rawLikes
-            .filter((item) => {
-              const type =
-                String(
-                  item?.type ||
-                  item?.item_info?.type ||
-                  item?.song?.type ||
-                  "track"
-                ).toLowerCase();
-
-              return (
-                type === "track" ||
-                type === "song"
-              );
-            })
-            .map(normalizeLikedSong)
-            .filter(Boolean)
-            .slice(0, 20);
-
-        setTopReviews(enrichedTop);
-        setLikedSongs(normalizedLikedSongs);
-        setFavorites(enrichedFavorites);
-        setMostUpvoted(enrichedUpvoted);
-        setActivity(enrichedActivity);
-        setTotalReviews(
-          enrichedActivity.length
-        );
-      } catch (error) {
-        console.error(
-          "[UserProfiles] Profile section error:",
-          error
-        );
-
-        setLikedSongs([]);
-      } finally {
+      if (
+        !profileRowsRestored.current
+      ) {
         setSectionLoading(
           (current) => ({
             ...current,
-            reviews: false,
-            likedSongs: false,
-            favorites: false,
-            mostUpvoted: false,
-            activity: false,
+            reviews: true,
+            likedSongs: true,
+            favorites: true,
+            mostUpvoted: true,
+            activity: true,
           })
         );
       }
+
+      /*
+       * Every row loads independently. A slow or failed endpoint can no
+       * longer keep every profile section spinning forever.
+       */
+      const loadTopReviews = async () => {
+        try {
+          const data =
+            await readProfileResponse(
+              getUserTopReviews(userId),
+              [],
+              "Top reviews"
+            );
+
+          const enriched =
+            await withProfileTimeout(
+              enrichReviewsWithSong(
+                normalizeArray(data)
+              ),
+              "Top review songs"
+            );
+
+          setTopReviews(enriched);
+        } catch (error) {
+          console.warn(
+            "[UserProfiles] Top reviews failed:",
+            error
+          );
+
+          setTopReviews([]);
+        } finally {
+          setSectionLoading(
+            (current) => ({
+              ...current,
+              reviews: false,
+            })
+          );
+        }
+      };
+
+      const loadLikedSongs = async () => {
+        try {
+          const data =
+            await readProfileResponse(
+              getUserLikes(userId),
+              {
+                likes: [],
+              },
+              "Liked songs"
+            );
+
+          const rawLikes =
+            Array.isArray(data?.likes)
+              ? data.likes
+              : normalizeArray(data);
+
+          const normalized =
+            rawLikes
+              .filter((item) => {
+                const type =
+                  String(
+                    item?.type ||
+                    item?.item_info?.type ||
+                    item?.song?.type ||
+                    "track"
+                  ).toLowerCase();
+
+                return (
+                  type === "track" ||
+                  type === "song"
+                );
+              })
+              .map(normalizeLikedSong)
+              .filter(Boolean)
+              .slice(0, 20);
+
+          setLikedSongs(normalized);
+        } catch (error) {
+          console.warn(
+            "[UserProfiles] Liked songs failed:",
+            error
+          );
+
+          setLikedSongs([]);
+        } finally {
+          setSectionLoading(
+            (current) => ({
+              ...current,
+              likedSongs: false,
+            })
+          );
+        }
+      };
+
+      const loadReviewRow = async ({
+        request,
+        label,
+        setter,
+        loadingKey,
+      }) => {
+        try {
+          const data =
+            await readProfileResponse(
+              request,
+              [],
+              label
+            );
+
+          const enriched =
+            await withProfileTimeout(
+              enrichReviewsWithSong(
+                normalizeArray(data)
+              ),
+              `${label} songs`
+            );
+
+          setter(enriched);
+
+          return enriched;
+        } catch (error) {
+          console.warn(
+            `[UserProfiles] ${label} failed:`,
+            error
+          );
+
+          setter([]);
+          return [];
+        } finally {
+          setSectionLoading(
+            (current) => ({
+              ...current,
+              [loadingKey]: false,
+            })
+          );
+        }
+      };
+
+      const loadActivity = async () => {
+        const enriched =
+          await loadReviewRow({
+            request:
+              getUserActivity(userId),
+            label:
+              "Activity",
+            setter:
+              setActivity,
+            loadingKey:
+              "activity",
+          });
+
+        setTotalReviews(
+          enriched.length
+        );
+      };
+
+      await Promise.allSettled([
+        loadTopReviews(),
+        loadLikedSongs(),
+
+        loadReviewRow({
+          request:
+            getUserFavorites(userId),
+          label:
+            "Favourites",
+          setter:
+            setFavorites,
+          loadingKey:
+            "favorites",
+        }),
+
+        loadReviewRow({
+          request:
+            getUserMostUpvoted(userId),
+          label:
+            "Most upvoted",
+          setter:
+            setMostUpvoted,
+          loadingKey:
+            "mostUpvoted",
+        }),
+
+        loadActivity(),
+      ]);
     }, [
       enrichReviewsWithSong,
       normalizeArray,
@@ -1439,6 +1582,18 @@ console.log(
           cached.totalReviews || 0
         )
       );
+
+      profileRowsRestored.current =
+        true;
+
+      setSectionLoading({
+        posts: false,
+        reviews: false,
+        likedSongs: false,
+        favorites: false,
+        mostUpvoted: false,
+        activity: false,
+      });
 
       profileHasPainted.current = true;
       setLoading(false);
@@ -1880,6 +2035,9 @@ console.log(
       "";
 
     profileHasPainted.current =
+      false;
+
+    profileRowsRestored.current =
       false;
   }, [userId]);
 

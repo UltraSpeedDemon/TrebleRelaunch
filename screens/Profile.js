@@ -72,6 +72,71 @@ const ownProfileCacheKey = (userId) =>
     userId || ""
   )}`;
 
+const PROFILE_REQUEST_TIMEOUT_MS = 12000;
+
+async function withProfileTimeout(
+  promise,
+  label,
+  timeoutMs =
+    PROFILE_REQUEST_TIMEOUT_MS
+) {
+  let timeoutId;
+
+  try {
+    return await Promise.race([
+      promise,
+
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              `${label} timed out.`
+            )
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function readProfileResponse(
+  requestPromise,
+  fallbackValue,
+  label
+) {
+  try {
+    const response =
+      await withProfileTimeout(
+        requestPromise,
+        label
+      );
+
+    if (!response?.ok) {
+      console.warn(
+        `[Profile] ${label} returned HTTP ${response?.status || "unknown"}.`
+      );
+
+      return fallbackValue;
+    }
+
+    return await withProfileTimeout(
+      response.json(),
+      `${label} response`
+    );
+  } catch (error) {
+    console.warn(
+      `[Profile] ${label} failed:`,
+      error
+    );
+
+    return fallbackValue;
+  }
+}
+
 const ADMIN_BADGE_EMAILS = new Set([
   "mcplayzethan@gmail.com",
 ]);
@@ -297,6 +362,13 @@ export default function Profile({
     useState(true);
 
   const profileHasPainted =
+    useRef(false);
+
+  /*
+   * Cached rows may legitimately contain zero items. Once restored, keep
+   * those empty states visible instead of showing another loading box.
+   */
+  const profileRowsRestored =
     useRef(false);
 
   const profileRequestId =
@@ -530,38 +602,48 @@ export default function Profile({
 
   const loadCreatedPosts =
     useCallback(async () => {
-      setSectionLoading(
-        (current) => ({
-          ...current,
-          posts: true,
-        })
-      );
+      if (
+        !profileRowsRestored.current
+      ) {
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            posts: true,
+          })
+        );
+      }
 
       const currentUser =
         auth.currentUser;
 
       if (!currentUser?.uid) {
         setCreatedPosts([]);
+
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            posts: false,
+          })
+        );
+
         return;
       }
 
       try {
-        const response =
-          await getFeedPosts(
-            currentUser.uid,
-            {
-              limit: 40,
-              offset: 0,
-            }
-          );
-
-        if (!response?.ok) {
-          setCreatedPosts([]);
-          return;
-        }
-
         const data =
-          await response.json();
+          await readProfileResponse(
+            getFeedPosts(
+              currentUser.uid,
+              {
+                limit: 40,
+                offset: 0,
+              }
+            ),
+            {
+              posts: [],
+            },
+            "Posts"
+          );
 
         const ownPosts =
           (
@@ -875,16 +957,20 @@ export default function Profile({
 
   const loadReviewSections =
     useCallback(async () => {
-      setSectionLoading(
-        (current) => ({
-          ...current,
-          reviews: true,
-          likedSongs: true,
-          favorites: true,
-          mostUpvoted: true,
-          activity: true,
-        })
-      );
+      if (
+        !profileRowsRestored.current
+      ) {
+        setSectionLoading(
+          (current) => ({
+            ...current,
+            reviews: true,
+            likedSongs: true,
+            favorites: true,
+            mostUpvoted: true,
+            activity: true,
+          })
+        );
+      }
 
       const currentUser =
         auth.currentUser;
@@ -897,147 +983,6 @@ export default function Profile({
         setActivity([]);
         setTotalReviews(0);
 
-        return;
-      }
-
-      try {
-        const [
-          topResponse,
-          likedResponse,
-          favoritesResponse,
-          upvotedResponse,
-          activityResponse,
-        ] = await Promise.all([
-          getUserTopReviews(
-            currentUser.uid
-          ),
-          getUserLikes(
-            currentUser.uid
-          ),
-          getUserFavorites(
-            currentUser.uid
-          ),
-          getUserMostUpvoted(
-            currentUser.uid
-          ),
-          getUserActivity(
-            currentUser.uid
-          ),
-        ]);
-
-        const [
-          topData,
-          likedData,
-          favoritesData,
-          upvotedData,
-          activityData,
-        ] = await Promise.all([
-          topResponse?.ok
-            ? topResponse.json()
-            : [],
-          likedResponse?.ok
-            ? likedResponse.json()
-            : {
-                likes: [],
-              },
-          favoritesResponse?.ok
-            ? favoritesResponse.json()
-            : [],
-          upvotedResponse?.ok
-            ? upvotedResponse.json()
-            : [],
-          activityResponse?.ok
-            ? activityResponse.json()
-            : [],
-        ]);
-
-        const enrichedTop =
-          await enrichReviewsWithSong(
-            Array.isArray(topData)
-              ? topData
-              : []
-          );
-
-        const enrichedFavorites =
-          await enrichReviewsWithSong(
-            Array.isArray(favoritesData)
-              ? favoritesData
-              : []
-          );
-
-        const enrichedUpvoted =
-          await enrichReviewsWithSong(
-            Array.isArray(upvotedData)
-              ? upvotedData
-              : []
-          );
-
-        const rawActivity =
-          Array.isArray(activityData)
-            ? activityData
-            : [];
-
-        const enrichedActivity =
-          await enrichReviewsWithSong(
-            rawActivity
-          );
-
-        const rawLikes =
-          Array.isArray(likedData?.likes)
-            ? likedData.likes
-            : Array.isArray(likedData)
-              ? likedData
-              : [];
-
-        const normalizedLikedSongs =
-          rawLikes
-            .filter((item) => {
-              const type =
-                String(
-                  item?.type ||
-                  item?.item_info?.type ||
-                  item?.song?.type ||
-                  "track"
-                ).toLowerCase();
-
-              return (
-                type === "track" ||
-                type === "song"
-              );
-            })
-            .map(normalizeLikedSong)
-            .filter(Boolean)
-            .slice(0, 20);
-
-        setTopReviews(enrichedTop);
-        setLikedSongs(
-          normalizedLikedSongs
-        );
-        setFavorites(
-          enrichedFavorites
-        );
-        setMostUpvoted(
-          enrichedUpvoted
-        );
-        setActivity(
-          enrichedActivity
-        );
-        setTotalReviews(
-          rawActivity.length
-        );
-      } catch (error) {
-        console.error(
-          "[Profile] Profile-section error:",
-          error
-        );
-
-        setTopReviews([]);
-        setLikedSongs([]);
-        setFavorites([]);
-        setMostUpvoted([]);
-        setActivity([]);
-        setTotalReviews(0);
-      } finally {
         setSectionLoading(
           (current) => ({
             ...current,
@@ -1048,7 +993,196 @@ export default function Profile({
             activity: false,
           })
         );
+
+        return;
       }
+
+      const userId =
+        currentUser.uid;
+
+      const loadTopReviews = async () => {
+        try {
+          const data =
+            await readProfileResponse(
+              getUserTopReviews(userId),
+              [],
+              "Top reviews"
+            );
+
+          const enriched =
+            await withProfileTimeout(
+              enrichReviewsWithSong(
+                Array.isArray(data)
+                  ? data
+                  : []
+              ),
+              "Top review songs"
+            );
+
+          setTopReviews(enriched);
+        } catch (error) {
+          console.warn(
+            "[Profile] Top reviews failed:",
+            error
+          );
+
+          setTopReviews([]);
+        } finally {
+          setSectionLoading(
+            (current) => ({
+              ...current,
+              reviews: false,
+            })
+          );
+        }
+      };
+
+      const loadLikedSongs = async () => {
+        try {
+          const data =
+            await readProfileResponse(
+              getUserLikes(userId),
+              {
+                likes: [],
+              },
+              "Liked songs"
+            );
+
+          const rawLikes =
+            Array.isArray(data?.likes)
+              ? data.likes
+              : Array.isArray(data)
+                ? data
+                : [];
+
+          const normalized =
+            rawLikes
+              .filter((item) => {
+                const type =
+                  String(
+                    item?.type ||
+                    item?.item_info?.type ||
+                    item?.song?.type ||
+                    "track"
+                  ).toLowerCase();
+
+                return (
+                  type === "track" ||
+                  type === "song"
+                );
+              })
+              .map(normalizeLikedSong)
+              .filter(Boolean)
+              .slice(0, 20);
+
+          setLikedSongs(normalized);
+        } catch (error) {
+          console.warn(
+            "[Profile] Liked songs failed:",
+            error
+          );
+
+          setLikedSongs([]);
+        } finally {
+          setSectionLoading(
+            (current) => ({
+              ...current,
+              likedSongs: false,
+            })
+          );
+        }
+      };
+
+      const loadReviewRow = async ({
+        request,
+        label,
+        setter,
+        loadingKey,
+      }) => {
+        try {
+          const data =
+            await readProfileResponse(
+              request,
+              [],
+              label
+            );
+
+          const enriched =
+            await withProfileTimeout(
+              enrichReviewsWithSong(
+                Array.isArray(data)
+                  ? data
+                  : []
+              ),
+              `${label} songs`
+            );
+
+          setter(enriched);
+          return enriched;
+        } catch (error) {
+          console.warn(
+            `[Profile] ${label} failed:`,
+            error
+          );
+
+          setter([]);
+          return [];
+        } finally {
+          setSectionLoading(
+            (current) => ({
+              ...current,
+              [loadingKey]: false,
+            })
+          );
+        }
+      };
+
+      const loadActivity = async () => {
+        const enriched =
+          await loadReviewRow({
+            request:
+              getUserActivity(userId),
+            label:
+              "Activity",
+            setter:
+              setActivity,
+            loadingKey:
+              "activity",
+          });
+
+        setTotalReviews(
+          enriched.length
+        );
+      };
+
+      await Promise.allSettled([
+        loadTopReviews(),
+        loadLikedSongs(),
+
+        loadReviewRow({
+          request:
+            getUserFavorites(userId),
+          label:
+            "Favourites",
+          setter:
+            setFavorites,
+          loadingKey:
+            "favorites",
+        }),
+
+        loadReviewRow({
+          request:
+            getUserMostUpvoted(userId),
+          label:
+            "Most upvoted",
+          setter:
+            setMostUpvoted,
+          loadingKey:
+            "mostUpvoted",
+        }),
+
+        loadActivity(),
+      ]);
     }, [
       enrichReviewsWithSong,
       normalizeLikedSong,
@@ -1241,6 +1375,18 @@ export default function Profile({
             cached.avatar
           ).catch(() => {});
         }
+
+        profileRowsRestored.current =
+          true;
+
+        setSectionLoading({
+          posts: false,
+          reviews: false,
+          likedSongs: false,
+          favorites: false,
+          mostUpvoted: false,
+          activity: false,
+        });
 
         profileHasPainted.current = true;
         setLoading(false);
