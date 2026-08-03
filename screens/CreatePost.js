@@ -674,9 +674,9 @@ export default function CreatePost({
         >
           <LinearGradient
             colors={[
-              "rgba(53,175,229,0.22)",
-              "rgba(25,31,40,0.98)",
-              "rgba(16,19,25,0.99)",
+              "rgba(34,34,36,0.99)",
+              "rgba(29,29,31,0.99)",
+              "rgba(24,24,26,0.99)",
             ]}
             start={{
               x: 0,
@@ -1305,7 +1305,7 @@ const styles =
       borderRadius: 110,
 
       backgroundColor:
-        "rgba(53,175,229,0.14)",
+        "rgba(255,255,255,0.025)",
     },
 
     heroGlowTwo: {
@@ -1320,7 +1320,7 @@ const styles =
       borderRadius: 100,
 
       backgroundColor:
-        "rgba(105,80,255,0.08)",
+        "rgba(255,255,255,0.018)",
     },
 
     heroIcon: {
@@ -1336,19 +1336,19 @@ const styles =
       borderRadius: 24,
 
       backgroundColor:
-        "rgba(7,20,35,0.72)",
+        "rgba(35,35,38,0.98)",
 
       borderWidth: 1,
       borderColor:
-        "rgba(53,175,229,0.34)",
+        "rgba(255,255,255,0.10)",
 
-      shadowColor: "#35afe5",
+      shadowColor: "#000000",
       shadowOffset: {
         width: 0,
         height: 7,
       },
-      shadowOpacity: 0.24,
-      shadowRadius: 16,
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
 
       elevation: 6,
     },
@@ -1405,12 +1405,12 @@ const styles =
 
       borderWidth: 1,
       borderColor:
-        "rgba(53,175,229,0.16)",
+        "rgba(255,255,255,0.09)",
 
       borderRadius: 22,
 
       backgroundColor:
-        "rgba(24,26,31,0.98)",
+        "rgba(30,30,32,0.99)",
 
       shadowColor: "#000000",
       shadowOffset: {
@@ -1492,12 +1492,12 @@ const styles =
 
       borderWidth: 1,
       borderColor:
-        "rgba(53,175,229,0.30)",
+        "rgba(255,255,255,0.11)",
 
       borderRadius: 16,
 
       backgroundColor:
-        "rgba(9,17,27,0.82)",
+        "rgba(39,39,42,0.98)",
     },
 
     searchInput: {
@@ -1576,7 +1576,7 @@ const styles =
       borderRadius: 16,
 
       backgroundColor:
-        "rgba(16,22,30,0.98)",
+        "rgba(35,35,38,0.99)",
     },
 
     compactSongCard: {
@@ -1705,7 +1705,7 @@ const styles =
       borderRadius: 15,
 
       backgroundColor:
-        "rgba(53,175,229,0.08)",
+        "rgba(255,255,255,0.045)",
     },
 
     selectedSongIcon: {
@@ -1720,8 +1720,7 @@ const styles =
       borderRadius: 14,
 
       backgroundColor:
-        colours.secondaryblue ||
-        "#2878c7",
+        "rgba(255,255,255,0.07)",
     },
 
     selectedSongText: {
@@ -1785,12 +1784,12 @@ const styles =
 
       borderWidth: 1,
       borderColor:
-        "rgba(53,175,229,0.30)",
+        "rgba(255,255,255,0.11)",
 
       borderRadius: 18,
 
       backgroundColor:
-        "rgba(9,17,27,0.82)",
+        "rgba(39,39,42,0.98)",
     },
 
     ratingLabel: {
