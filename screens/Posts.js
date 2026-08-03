@@ -697,7 +697,7 @@ const styles =
      */
     rootBackButton: {
       position: "absolute",
-      top: Platform.OS === "web" ? 20 : -22,
+      top: Platform.OS === "web" ? 18 : -22,
       left: 80,
 
       zIndex: 101,
@@ -718,7 +718,7 @@ const styles =
     },
 
     desktopRootBackButton: {
-      top: 20,
+      top: 18,
       left:
         DESKTOP_SIDEBAR_WIDTH +
         20,
