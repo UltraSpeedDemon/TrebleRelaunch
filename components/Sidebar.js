@@ -28,13 +28,18 @@ import {
   useNavigation,
 } from "@react-navigation/native";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import {
   getFollowRequests,
   getNotifications,
   getUser,
 } from "../providers/rest";
 
-import { signOut } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signOut,
+} from "firebase/auth";
 import Icon from "react-native-vector-icons/MaterialIcons";
 
 import { auth } from "../utils/firebase";
@@ -52,6 +57,15 @@ const MOBILE_BREAKPOINT = 768;
  * each page transition from immediately repeating the same two requests.
  */
 const NOTIFICATION_REFRESH_MS = 60000;
+const SIDEBAR_PROFILE_CACHE_PREFIX =
+  "treble_sidebar_profile_v1";
+
+const getSidebarProfileCacheKey =
+  (userId) =>
+    `${SIDEBAR_PROFILE_CACHE_PREFIX}:${String(
+      userId || "anonymous"
+    )}`;
+
 const notificationCountCache = new Map();
 const notificationRequestCache = new Map();
 
@@ -77,9 +91,27 @@ export default function Sidebar({
     ? DESKTOP_SIDEBAR_WIDTH
     : mobileMenuWidth;
 
-  const [avatar, setAvatar] = useState(null);
-  const [username, setUsername] = useState("User");
-  const [email, setEmail] = useState("");
+  const initialFirebaseUser =
+    auth.currentUser;
+
+  const [avatar, setAvatar] =
+    useState(
+      initialFirebaseUser?.photoURL ||
+      null
+    );
+
+  const [username, setUsername] =
+    useState(
+      initialFirebaseUser
+        ?.displayName ||
+      "User"
+    );
+
+  const [email, setEmail] =
+    useState(
+      initialFirebaseUser?.email ||
+      ""
+    );
   const [notificationsCount, setNotificationsCount] = useState(0);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
@@ -111,6 +143,116 @@ export default function Sidebar({
     animateMenu(isDesktop ? true : menuOpen);
   }, [animateMenu, isDesktop, menuOpen]);
 
+  const restoreCachedProfile =
+    useCallback(
+      async (userId) => {
+        if (!userId) {
+          return false;
+        }
+
+        try {
+          const raw =
+            await AsyncStorage.getItem(
+              getSidebarProfileCacheKey(
+                userId
+              )
+            );
+
+          if (!raw) {
+            return false;
+          }
+
+          const cached =
+            JSON.parse(raw);
+
+          if (
+            cached?.username
+          ) {
+            setUsername(
+              cached.username
+            );
+          }
+
+          if (
+            typeof cached?.email ===
+            "string"
+          ) {
+            setEmail(
+              cached.email
+            );
+          }
+
+          if (
+            typeof cached?.avatar ===
+              "string" &&
+            cached.avatar
+          ) {
+            setAvatar(
+              cached.avatar
+            );
+
+            Image.prefetch(
+              cached.avatar
+            ).catch(() => {});
+          }
+
+          setLoadingProfile(false);
+          return true;
+        } catch (error) {
+          console.warn(
+            "[Sidebar] Could not restore cached profile:",
+            error
+          );
+
+          return false;
+        }
+      },
+      []
+    );
+
+  useEffect(() => {
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        async (firebaseUser) => {
+          if (!firebaseUser?.uid) {
+            setAvatar(null);
+            setUsername("User");
+            setEmail("");
+            setLoadingProfile(false);
+            return;
+          }
+
+          /*
+           * Firebase values paint immediately while the backend profile and
+           * cached custom avatar are restored.
+           */
+          setUsername(
+            firebaseUser.displayName ||
+            "User"
+          );
+
+          setEmail(
+            firebaseUser.email || ""
+          );
+
+          if (
+            firebaseUser.photoURL
+          ) {
+            setAvatar(
+              firebaseUser.photoURL
+            );
+          }
+
+          await restoreCachedProfile(
+            firebaseUser.uid
+          );
+        }
+      );
+
+    return unsubscribe;
+  }, [restoreCachedProfile]);
+
   const loadProfile = useCallback(async () => {
     const currentUser = auth.currentUser;
 
@@ -123,7 +265,13 @@ export default function Sidebar({
     }
 
     try {
-      setLoadingProfile(true);
+      /*
+       * Keep cached/Firebase profile visible while refreshing in the
+       * background. Only show a loader when there is truly no avatar.
+       */
+      if (!avatar) {
+        setLoadingProfile(true);
+      }
 
       await currentUser.reload();
 
@@ -162,9 +310,38 @@ export default function Sidebar({
           ? refreshedUser.photoURL.trim()
           : "";
 
+      const finalAvatar =
+        backendAvatar ||
+        firebaseAvatar ||
+        "";
+
       setUsername(finalUsername);
       setEmail(finalEmail);
-      setAvatar(backendAvatar || firebaseAvatar || null);
+      setAvatar(
+        finalAvatar || null
+      );
+
+      if (finalAvatar) {
+        Image.prefetch(
+          finalAvatar
+        ).catch(() => {});
+      }
+
+      await AsyncStorage.setItem(
+        getSidebarProfileCacheKey(
+          refreshedUser.uid
+        ),
+        JSON.stringify({
+          username:
+            finalUsername,
+          email:
+            finalEmail,
+          avatar:
+            finalAvatar,
+          savedAt:
+            Date.now(),
+        })
+      );
     } catch (error) {
       console.error("[Sidebar] User-data error:", error);
 
@@ -176,7 +353,7 @@ export default function Sidebar({
     } finally {
       setLoadingProfile(false);
     }
-  }, []);
+  }, [avatar]);
 
   useFocusEffect(
     useCallback(() => {

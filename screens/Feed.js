@@ -39,6 +39,7 @@ import SearchBar from "../components/SearchBar";
 
 import colours from "../styles/colours";
 import { auth } from "../utils/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 import {
   getRecommendations,
@@ -64,7 +65,13 @@ const DOUBLE_TAP_DELAY = 300;
 const FEED_AUTO_REFRESH_MS =
   90 * 1000;
 
-const FEED_CACHE_KEY = "treble_feed_cache_v3";
+const FEED_CACHE_KEY_PREFIX =
+  "treble_feed_cache_v4";
+
+const getFeedCacheKey = (userId) =>
+  `${FEED_CACHE_KEY_PREFIX}:${String(
+    userId || "anonymous"
+  )}`;
 /*
  * The visible feed stays in place until the user manually refreshes.
  * Friend shares and friend-liked cards must not disappear while the
@@ -101,6 +108,19 @@ export default function Feed({
   const isCompact = width < 768;
 
   const [isLoading, setIsLoading] = useState(true);
+
+  /*
+   * Firebase restores the signed-in user asynchronously after a hard reload.
+   * The feed must wait for that restoration before requesting cards.
+   */
+  const [authReady, setAuthReady] =
+    useState(false);
+
+  const [activeUserId, setActiveUserId] =
+    useState(
+      auth.currentUser?.uid || ""
+    );
+
   const [refreshing, setRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -172,6 +192,35 @@ export default function Feed({
     useCallback(() => {
       navigation.navigate("CreatePost");
     }, [navigation]);
+
+  useEffect(() => {
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        (firebaseUser) => {
+          const nextUserId =
+            firebaseUser?.uid || "";
+
+          setActiveUserId(
+            nextUserId
+          );
+
+          setAuthReady(true);
+
+          /*
+           * A login/account change requires a fresh initialization.
+           */
+          fetchedInitial.current =
+            false;
+
+          initialRequestInFlight.current =
+            false;
+        }
+      );
+
+    return unsubscribe;
+  }, []);
+
   useEffect(() => {
     if (isDesktopWeb) {
       setMenuOpen(true);
@@ -1267,7 +1316,9 @@ export default function Feed({
     async (items) => {
       try {
         await AsyncStorage.setItem(
-          FEED_CACHE_KEY,
+          getFeedCacheKey(
+            activeUserId
+          ),
           JSON.stringify({
             savedAt: Date.now(),
             items,
@@ -1280,15 +1331,21 @@ export default function Feed({
         );
       }
     },
-    []
+    [activeUserId]
   );
 
   const restoreFeedCache = useCallback(
     async () => {
       try {
+        if (!activeUserId) {
+          return false;
+        }
+
         const raw =
           await AsyncStorage.getItem(
-            FEED_CACHE_KEY
+            getFeedCacheKey(
+              activeUserId
+            )
           );
 
         if (!raw) {
@@ -1339,7 +1396,7 @@ export default function Feed({
         return false;
       }
     },
-    []
+    [activeUserId]
   );
 
   const fetchInitialFeed = useCallback(
@@ -1349,6 +1406,13 @@ export default function Feed({
     ) => {
       if (
         initialRequestInFlight.current
+      ) {
+        return;
+      }
+
+      if (
+        !authReady ||
+        !activeUserId
       ) {
         return;
       }
@@ -1393,10 +1457,7 @@ export default function Feed({
         ]);
 
         const currentUserId =
-          String(
-            auth.currentUser?.uid ||
-            ""
-          );
+          String(activeUserId);
 
         const ownCreatedPosts =
           createdPostItems
@@ -1506,6 +1567,8 @@ export default function Feed({
       }
     },
     [
+      activeUserId,
+      authReady,
       diversifyFeedItems,
       fetchCreatedPostItems,
       fetchRecommendationItems,
@@ -1766,8 +1829,12 @@ export default function Feed({
   ]);
 
   useEffect(() => {
-    if (fetchedInitial.current) {
-      return;
+    if (
+      !authReady ||
+      !activeUserId ||
+      fetchedInitial.current
+    ) {
+      return undefined;
     }
 
     fetchedInitial.current = true;
@@ -1775,6 +1842,10 @@ export default function Feed({
     let cancelled = false;
 
     const startFeed = async () => {
+      /*
+       * Restore cards first so the Feed paints immediately. A fresh mix is
+       * requested in parallel afterward and safely replaces the cache.
+       */
       const restoredFeed =
         await restoreFeedCache();
 
@@ -1782,10 +1853,6 @@ export default function Feed({
         return;
       }
 
-      /*
-       * Render cached cards immediately for speed, then always request a
-       * fresh randomized mix in the background when the app/feed reloads.
-       */
       await fetchInitialFeed(
         true,
         !restoredFeed
@@ -1798,6 +1865,8 @@ export default function Feed({
       cancelled = true;
     };
   }, [
+    activeUserId,
+    authReady,
     fetchInitialFeed,
     restoreFeedCache,
   ]);
@@ -4004,7 +4073,9 @@ export default function Feed({
             ]}
 
             ListEmptyComponent={
-              combinedFeed.length === 0
+              combinedFeed.length === 0 &&
+              authReady &&
+              !isLoading
                 ? renderEmptyFeed
                 : null
             }
