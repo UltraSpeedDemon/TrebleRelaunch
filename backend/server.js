@@ -157,6 +157,86 @@ function isDeezerAccessDenied(error) {
   );
 }
 
+/*
+ * Deezer preview URLs are signed and contain an expiry value in the
+ * hdnea query parameter. Song metadata can be cached for days, but the
+ * preview URL must be refreshed when it is close to expiring.
+ */
+const PREVIEW_EXPIRY_BUFFER_MS =
+  2 * 60 * 1000;
+
+function getPreviewExpiryMilliseconds(
+  previewUrl
+) {
+  const cleanUrl =
+    String(previewUrl || "").trim();
+
+  if (!cleanUrl) {
+    return 0;
+  }
+
+  try {
+    const decoded =
+      decodeURIComponent(cleanUrl);
+
+    const match =
+      decoded.match(
+        /(?:^|[?&~])exp=(\d{9,13})(?:[&~]|$)/
+      );
+
+    if (!match) {
+      return 0;
+    }
+
+    const raw =
+      Number(match[1]);
+
+    if (!Number.isFinite(raw)) {
+      return 0;
+    }
+
+    return raw > 1e12
+      ? raw
+      : raw * 1000;
+  } catch {
+    return 0;
+  }
+}
+
+function isPreviewUrlLikelyPlayable(
+  previewUrl,
+  {
+    bufferMs =
+      PREVIEW_EXPIRY_BUFFER_MS,
+  } = {}
+) {
+  const cleanUrl =
+    String(previewUrl || "").trim();
+
+  if (!cleanUrl) {
+    return false;
+  }
+
+  const expiresAt =
+    getPreviewExpiryMilliseconds(
+      cleanUrl
+    );
+
+  /*
+   * Older Deezer preview URLs may not expose exp in a parseable way.
+   * In that case, allow playback and let the client refresh only if
+   * the audio element or expo-av reports an actual failure.
+   */
+  if (!expiresAt) {
+    return true;
+  }
+
+  return (
+    expiresAt >
+    Date.now() + Math.max(0, bufferMs)
+  );
+}
+
 const DEEZER_CACHE_COLLECTION =
   "deezerApiCache";
 
@@ -1234,32 +1314,16 @@ function isPermanentEntityUsable(
     return true;
   }
 
-  const preview =
-    data.preview ||
-    data.previewUrl ||
-    data.playbackUrl ||
-    data.raw?.preview ||
-    "";
-
-  if (!preview) {
-    return false;
-  }
-
   /*
-   * Deezer preview links can expire. Use a stored track only
-   * while its preview metadata is recent; otherwise continue
-   * to the API cache/Deezer and refresh it.
+   * Track metadata remains useful permanently even when a signed preview
+   * URL expires. The song endpoint checks preview expiry separately and
+   * refreshes only the preview when required.
    */
-  const refreshedAt =
-    permanentTimestampMilliseconds(
-      data.previewUpdatedAt ||
-      data.lastSeenAt
-    );
-
-  return (
-    refreshedAt > 0 &&
-    Date.now() - refreshedAt <
-      DEEZER_CACHE_TTL.track
+  return Boolean(
+    data.id ||
+    data.title ||
+    data.name ||
+    data.raw?.id
   );
 }
 
@@ -1677,23 +1741,26 @@ async function fetchDeezer(
   /*
    * DUPLICATE REQUEST PREVENTION
    *
-   * If several parts of the page request the same track
-   * simultaneously, only one request is performed.
-   *
-   * All other callers wait for the existing request.
+   * Normal and forced requests use separate keys. This ensures that if
+   * many users hit an expired preview at once, Treble performs only one
+   * forced Deezer refresh for that track and every caller shares it.
    */
+  const inFlightKey =
+    forceRefresh
+      ? `${cacheKey}|force`
+      : `${cacheKey}|normal`;
+
   if (
-    !forceRefresh &&
     deezerRequestsInFlight.has(
-      cacheKey
+      inFlightKey
     )
   ) {
     console.log(
-      `[DEEZER CACHE] WAITING FOR EXISTING REQUEST ${normalizedPath}`
+      `[DEEZER CACHE] WAITING FOR EXISTING ${forceRefresh ? "FORCED " : ""}REQUEST ${normalizedPath}`
     );
 
     return deezerRequestsInFlight.get(
-      cacheKey
+      inFlightKey
     );
   }
 
@@ -1997,7 +2064,7 @@ async function fetchDeezer(
    * the same Deezer or Firestore operation.
    */
   deezerRequestsInFlight.set(
-    cacheKey,
+    inFlightKey,
     requestPromise
   );
 
@@ -2005,7 +2072,7 @@ async function fetchDeezer(
     return await requestPromise;
   } finally {
     deezerRequestsInFlight.delete(
-      cacheKey
+      inFlightKey
     );
   }
 }
@@ -4170,23 +4237,28 @@ app.get("/search/getSongFromDeezer", async (req, res) => {
       track?.playbackUrl ||
       "";
 
-    /*
-     * Only perform a true Deezer refresh when the cached record has
-     * no playable preview. A normal refresh=true request no longer
-     * forces a network call when Treble already has a preview.
-     */
-    const forceRefreshRequested =
-      String(req.query.force_refresh || "").toLowerCase() === "true";
+    const cachedPreviewPlayable =
+      isPreviewUrlLikelyPlayable(
+        cachedPreview
+      );
 
     /*
-     * A play failure usually means an existing Deezer preview URL has
-     * expired. force_refresh=true must bypass every cache and obtain a
-     * new preview URL. Normal refresh=true remains cache-friendly and
-     * only refreshes records that have no preview.
+     * force_refresh=true is reserved for a real playback failure.
+     * refresh=true remains cache-friendly, but proactively refreshes a
+     * missing or signed preview URL that is already expired/near expiry.
      */
+    const forceRefreshRequested =
+      String(
+        req.query.force_refresh ||
+        ""
+      ).toLowerCase() === "true";
+
     if (
       forceRefreshRequested ||
-      (refreshRequested && !cachedPreview)
+      (
+        refreshRequested &&
+        !cachedPreviewPlayable
+      )
     ) {
       const refreshedTrack =
         await fetchDeezer(
@@ -4207,20 +4279,49 @@ app.get("/search/getSongFromDeezer", async (req, res) => {
        * Keep the original cached record if Deezer was blocked and the
        * forced refresh did not produce a usable preview.
        */
-      if (refreshedPreview) {
+      if (
+        refreshedPreview &&
+        isPreviewUrlLikelyPlayable(
+          refreshedPreview,
+          {
+            bufferMs: 0,
+          }
+        )
+      ) {
         track = refreshedTrack;
         previewRefreshed =
-          refreshedPreview !== cachedPreview;
+          refreshedPreview !==
+          cachedPreview;
       }
     }
 
     const normalizedTrack =
       normalizeDeezerTrack(track);
 
+    const finalPreview =
+      normalizedTrack.preview ||
+      normalizedTrack.previewUrl ||
+      normalizedTrack.playbackUrl ||
+      "";
+
+    const previewExpiresAt =
+      getPreviewExpiryMilliseconds(
+        finalPreview
+      );
+
     return res.json({
       ...normalizedTrack,
       ok: true,
       previewRefreshed,
+      previewPlayable:
+        isPreviewUrlLikelyPlayable(
+          finalPreview,
+          {
+            bufferMs: 0,
+          }
+        ),
+      previewExpiresAt:
+        previewExpiresAt || null,
       servedFromTrebleCache:
         !previewRefreshed,
       deezerCooldownActive:

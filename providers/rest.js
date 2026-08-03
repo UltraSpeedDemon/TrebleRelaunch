@@ -114,6 +114,9 @@ export async function postSearchResults(
 // Merge these functions into your existing providers/rest.js.
 // Keep your existing API_URL/API helper names if they differ.
 
+const songRefreshRequestsInFlight =
+  new Map();
+
 export async function getSongFromDeezer(
   trackId,
   {
@@ -127,21 +130,107 @@ export async function getSongFromDeezer(
     );
   }
 
-  return await serverGet(
-    "search/getSongFromDeezer",
-    {
-      listenable_id: String(trackId),
-      refresh:
-        refresh
-          ? "true"
-          : "false",
-      force_refresh:
-        forceRefresh
-          ? "true"
-          : "false",
-      _ts: String(Date.now()),
-    }
+  const id =
+    String(trackId);
+
+  const requestKey =
+    `${id}:${forceRefresh ? "force" : refresh ? "refresh" : "cached"}`;
+
+  if (
+    songRefreshRequestsInFlight.has(
+      requestKey
+    )
+  ) {
+    return await songRefreshRequestsInFlight.get(
+      requestKey
+    );
+  }
+
+  const request =
+    serverGet(
+      "search/getSongFromDeezer",
+      {
+        listenable_id: id,
+        refresh:
+          refresh
+            ? "true"
+            : "false",
+        force_refresh:
+          forceRefresh
+            ? "true"
+            : "false",
+        _ts: String(Date.now()),
+      }
+    ).finally(() => {
+      songRefreshRequestsInFlight.delete(
+        requestKey
+      );
+    });
+
+  songRefreshRequestsInFlight.set(
+    requestKey,
+    request
   );
+
+  return await request;
+}
+
+/*
+ * Resolve a track for playback. The first request uses Treble's cache.
+ * A forced Deezer refresh is intentionally NOT made here; the player
+ * performs that only after a real audio load/play error.
+ */
+export async function getCachedPlayableTrack(
+  trackId
+) {
+  const response =
+    await getSongFromDeezer(
+      trackId,
+      {
+        refresh: true,
+        forceRefresh: false,
+      }
+    );
+
+  if (!response?.ok) {
+    throw new Error(
+      `Unable to load track ${trackId}.`
+    );
+  }
+
+  return await response.json();
+}
+
+export async function forceRefreshPlayableTrack(
+  trackId
+) {
+  const response =
+    await getSongFromDeezer(
+      trackId,
+      {
+        refresh: true,
+        forceRefresh: true,
+      }
+    );
+
+  if (!response?.ok) {
+    let message =
+      `Unable to refresh track ${trackId}.`;
+
+    try {
+      const body =
+        await response.json();
+
+      message =
+        body?.error ||
+        body?.message ||
+        message;
+    } catch {}
+
+    throw new Error(message);
+  }
+
+  return await response.json();
 }
 
 //#region User endpoints
