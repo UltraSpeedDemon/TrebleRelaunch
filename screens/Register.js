@@ -111,66 +111,20 @@ function getRegisterError(error) {
     case "auth/too-many-requests":
       return "Too many registration attempts were made. Please wait and try again.";
 
+    case "auth/popup-closed-by-user":
+      return "Google registration was cancelled.";
+
+    case "auth/popup-blocked":
+      return "Your browser blocked the Google sign-in window. Allow popups for Treble and try again.";
+
+    case "auth/unauthorized-domain":
+      return "This Treble domain has not been authorized in Firebase yet.";
+
+    case "auth/argument-error":
+      return "Firebase Authentication was not initialized correctly.";
+
     default:
-      const handleGoogleRegister =
-    async () => {
-      if (authLoading) {
-        return;
-      }
-
-      if (Platform.OS !== "web") {
-        setErrorMessage(
-          "Google registration is currently available on the Treble website and installed web app."
-        );
-        return;
-      }
-
-      setGoogleLoading(true);
-      setErrorMessage("");
-
-      try {
-        const user =
-          await signInWithGoogle();
-
-        await saveSession(
-          "userUid",
-          user.uid
-        );
-
-        navigation.reset({
-          index: 0,
-          routes: [
-            {
-              name: "Feed",
-            },
-          ],
-        });
-      } catch (googleError) {
-        console.error(
-          "[Register] Google registration failed:",
-          googleError
-        );
-
-        const message =
-          googleError?.code ===
-          "auth/popup-closed-by-user"
-            ? "Google registration was cancelled."
-            : googleError?.code ===
-              "auth/unauthorized-domain"
-            ? "This Treble domain has not been authorized in Firebase yet."
-            : googleError?.code ===
-              "auth/argument-error"
-            ? "Firebase Authentication was not initialized correctly. Replace utils/firebase.js with the fixed file in this ZIP, then redeploy."
-            : googleError?.message ||
-              "Unable to create your account with Google.";
-
-        setErrorMessage(message);
-      } finally {
-        setGoogleLoading(false);
-      }
-    };
-
-  return (
+      return (
         error?.message ||
         "Unable to create your account."
       );
@@ -234,9 +188,78 @@ export default function Register({
     }
   };
 
+  const handleGoogleRegister =
+    async () => {
+      if (authLoading) {
+        return;
+      }
+
+      if (Platform.OS !== "web") {
+        setErrorMessage(
+          "Google registration is currently available on the Treble website and installed web app."
+        );
+        return;
+      }
+
+      setGoogleLoading(true);
+      setErrorMessage("");
+
+      try {
+        await authReady;
+
+        const user =
+          await signInWithGoogle();
+
+        if (!user?.uid) {
+          throw new Error(
+            "Firebase did not return a valid Google account."
+          );
+        }
+
+        await saveSession(
+          "userUid",
+          user.uid
+        );
+
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: "Feed",
+            },
+          ],
+        });
+      } catch (googleError) {
+        console.error(
+          "[Register] Google registration failed:",
+          googleError
+        );
+
+        const finalMessage =
+          getRegisterError(
+            googleError
+          );
+
+        setErrorMessage(
+          finalMessage
+        );
+
+        if (
+          Platform.OS !== "web"
+        ) {
+          Alert.alert(
+            "Google registration failed",
+            finalMessage
+          );
+        }
+      } finally {
+        setGoogleLoading(false);
+      }
+    };
+
   const handleRegister =
     async () => {
-      if (loading) {
+      if (authLoading) {
         return;
       }
 
