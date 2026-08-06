@@ -704,109 +704,49 @@ export default function SongPage({ route, navigation }) {
       webUrl,
     }) => {
       try {
+        /*
+         * Every web version of Treble opens the service website in a
+         * separate browser tab. The current Treble song page stays open.
+         *
+         * This applies to:
+         * - desktop browsers
+         * - mobile browsers
+         * - the installed Treble PWA
+         */
         if (
           Platform.OS === "web" &&
           typeof window !== "undefined"
         ) {
-          const mobileBrowser =
-            window.matchMedia?.(
-              "(max-width: 767px)"
-            )?.matches;
+          const openedWindow =
+            window.open(
+              webUrl,
+              "_blank"
+            );
 
-          /*
-           * Normal desktop/laptop browser:
-           * open the service website in a separate tab.
-           */
-          if (!mobileBrowser) {
-            const openedWindow =
-              window.open(
-                webUrl,
-                "_blank",
-                "noopener,noreferrer"
-              );
-
-            if (!openedWindow) {
-              window.location.href =
-                webUrl;
-            }
-
+          if (openedWindow) {
+            /*
+             * Prevent the new page from controlling the Treble window.
+             */
+            openedWindow.opener = null;
             return;
           }
 
           /*
-           * Mobile website / installed PWA:
-           * preserve the current Treble route before handing off to an app.
+           * Never replace the Treble tab when popups are blocked.
            */
-          const trebleSongUrl =
-            window.location.href;
-
-          let restored = false;
-
-          const restoreTrebleSong =
-            () => {
-              if (restored) {
-                return;
-              }
-
-              restored = true;
-
-              window.removeEventListener(
-                "pageshow",
-                restoreTrebleSong
-              );
-
-              document.removeEventListener(
-                "visibilitychange",
-                handleVisibilityChange
-              );
-
-              if (
-                window.location.href !==
-                trebleSongUrl
-              ) {
-                window.location.replace(
-                  trebleSongUrl
-                );
-              }
-            };
-
-          const handleVisibilityChange =
-            () => {
-              if (
-                document.visibilityState ===
-                "visible"
-              ) {
-                restoreTrebleSong();
-              }
-            };
-
-          window.addEventListener(
-            "pageshow",
-            restoreTrebleSong
-          );
-
-          document.addEventListener(
-            "visibilitychange",
-            handleVisibilityChange
-          );
-
-          /*
-           * Spotify has a dependable registered app scheme.
-           * Apple Music and YouTube Music use their HTTPS links; iOS/Android
-           * can open the installed app through universal/app links, while the
-           * website remains a reliable fallback.
-           */
-          window.location.href =
-            appUrl || webUrl;
-
-          window.setTimeout(
-            restoreTrebleSong,
-            1800
+          Alert.alert(
+            `${serviceName} was blocked`,
+            `Allow popups for Treble so ${serviceName} can open in a separate tab.`
           );
 
           return;
         }
 
+        /*
+         * A separately compiled native iOS/Android app does not have browser
+         * tabs. Open the installed service app when possible, then use its
+         * website as the fallback.
+         */
         if (appUrl) {
           const canOpenApp =
             await Linking.canOpenURL(
