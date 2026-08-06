@@ -12,7 +12,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   useWindowDimensions,
   View,
@@ -27,7 +26,6 @@ import { auth } from "../utils/firebase";
 import {
   getLinkedAuthProviders,
   linkGoogleToCurrentUser,
-  linkPasswordToCurrentUser,
 } from "../utils/googleAuth";
 
 import {
@@ -109,31 +107,6 @@ export default function Connections({
   const [
     linkingGoogle,
     setLinkingGoogle,
-  ] = useState(false);
-
-  const [
-    linkingPassword,
-    setLinkingPassword,
-  ] = useState(false);
-
-  const [
-    newPassword,
-    setNewPassword,
-  ] = useState("");
-
-  const [
-    confirmNewPassword,
-    setConfirmNewPassword,
-  ] = useState("");
-
-  const [
-    showNewPassword,
-    setShowNewPassword,
-  ] = useState(false);
-
-  const [
-    showConfirmNewPassword,
-    setShowConfirmNewPassword,
   ] = useState(false);
 
   const [
@@ -712,8 +685,7 @@ export default function Connections({
     useCallback(async () => {
       if (
         isGoogleLinked ||
-        linkingGoogle ||
-        linkingPassword
+        linkingGoogle
       ) {
         return;
       }
@@ -805,122 +777,6 @@ export default function Connections({
     }, [
       isGoogleLinked,
       linkingGoogle,
-      linkingPassword,
-    ]);
-
-  const handleAddTreblePassword =
-    useCallback(async () => {
-      if (
-        isPasswordLinked ||
-        linkingPassword ||
-        linkingGoogle
-      ) {
-        return;
-      }
-
-      if (
-        newPassword.length < 6
-      ) {
-        Alert.alert(
-          "Password too short",
-          "Your Treble password must be at least 6 characters."
-        );
-        return;
-      }
-
-      if (
-        newPassword !==
-        confirmNewPassword
-      ) {
-        Alert.alert(
-          "Passwords do not match",
-          "Enter the same password in both fields."
-        );
-        return;
-      }
-
-      try {
-        setLinkingPassword(true);
-
-        const user =
-          await linkPasswordToCurrentUser(
-            newPassword
-          );
-
-        const providers =
-          getLinkedAuthProviders(
-            user
-          );
-
-        setIsGoogleLinked(
-          providers.google
-        );
-
-        setIsPasswordLinked(
-          providers.password
-        );
-
-        setNewPassword("");
-        setConfirmNewPassword("");
-
-        Alert.alert(
-          "Treble password added",
-          "You can now sign in with Google or your email and Treble password. Both open the same account."
-        );
-      } catch (error) {
-        console.error(
-          "[Connections] Password linking error:",
-          error
-        );
-
-        const code =
-          String(
-            error?.code || ""
-          );
-
-        let message =
-          error?.message ||
-          "Please try again.";
-
-        if (
-          code ===
-          "auth/email-already-in-use"
-        ) {
-          message =
-            "This email already belongs to another Firebase password account. The accounts must be resolved before they can be linked.";
-        } else if (
-          code ===
-          "auth/provider-already-linked"
-        ) {
-          message =
-            "Email and password login is already connected.";
-        } else if (
-          code ===
-          "auth/requires-recent-login"
-        ) {
-          message =
-            "For security, sign out and sign back in with Google, then add the password again.";
-        } else if (
-          code ===
-          "auth/weak-password"
-        ) {
-          message =
-            "Choose a stronger password with at least 6 characters.";
-        }
-
-        Alert.alert(
-          "Unable to add password",
-          message
-        );
-      } finally {
-        setLinkingPassword(false);
-      }
-    }, [
-      confirmNewPassword,
-      isPasswordLinked,
-      linkingGoogle,
-      linkingPassword,
-      newPassword,
     ]);
 
   if (loading) {
@@ -1064,11 +920,10 @@ export default function Connections({
             ) : null}
           </View>
 
-          {/* GOOGLE + TREBLE LOGIN */}
+          {/* GOOGLE ACCOUNT */}
           <View
             style={[
               styles.connectionCard,
-              styles.googleAccountCard,
               isCompact &&
                 styles.compactConnectionCard,
             ]}
@@ -1085,209 +940,31 @@ export default function Connections({
 
             <View style={styles.connectionInfo}>
               <Text style={styles.connectionName}>
-                Account Login Methods
+                Google Account
               </Text>
 
-              <View style={styles.providerStatusRow}>
-                <View
-                  style={[
-                    styles.providerPill,
-                    isGoogleLinked
-                      ? styles.providerPillConnected
-                      : styles.providerPillDisconnected,
-                  ]}
-                >
-                  <Icon
-                    name={
-                      isGoogleLinked
-                        ? "check-circle"
-                        : "cancel"
-                    }
-                    size={16}
-                    color={
-                      isGoogleLinked
-                        ? "#45d67b"
-                        : "rgba(255,255,255,0.48)"
-                    }
-                  />
-
-                  <Text
-                    style={[
-                      styles.providerPillText,
-                      isGoogleLinked &&
-                        styles.providerPillTextConnected,
-                    ]}
-                  >
-                    Google
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.providerPill,
-                    isPasswordLinked
-                      ? styles.providerPillConnected
-                      : styles.providerPillDisconnected,
-                  ]}
-                >
-                  <Icon
-                    name={
-                      isPasswordLinked
-                        ? "check-circle"
-                        : "cancel"
-                    }
-                    size={16}
-                    color={
-                      isPasswordLinked
-                        ? "#45d67b"
-                        : "rgba(255,255,255,0.48)"
-                    }
-                  />
-
-                  <Text
-                    style={[
-                      styles.providerPillText,
-                      isPasswordLinked &&
-                        styles.providerPillTextConnected,
-                    ]}
-                  >
-                    Email & Password
-                  </Text>
-                </View>
-              </View>
+              <Text
+                style={[
+                  styles.connectionStatus,
+                  isGoogleLinked &&
+                    styles.connectedStatus,
+                ]}
+              >
+                {isGoogleLinked
+                  ? "Connected"
+                  : "Not connected"}
+              </Text>
 
               <Text style={styles.connectionDescription}>
-                {isGoogleLinked &&
-                isPasswordLinked
-                  ? `Both login methods are connected${googleEmail ? ` to ${googleEmail}` : ""}. Either option opens this same Treble profile.`
-                  : isGoogleLinked
-                    ? `Google is connected${googleEmail ? ` to ${googleEmail}` : ""}. Add a Treble password below so both login methods work.`
-                    : "Connect Google while signed in to attach it to this existing Treble profile."}
+                {isGoogleLinked
+                  ? `Google sign-in is connected${googleEmail ? ` to ${googleEmail}` : ""}. You can use Sign In with Google to access this Treble profile.`
+                  : "Connect Google to this existing Treble profile so you can use Google as a login option."}
               </Text>
 
-              {isGoogleLinked &&
-              !isPasswordLinked ? (
-                <View
-                  style={
-                    styles.passwordLinkSection
-                  }
-                >
-                  <Text
-                    style={
-                      styles.passwordLinkTitle
-                    }
-                  >
-                    Add Treble email/password login
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.passwordLinkHelp
-                    }
-                  >
-                    Your email will be {googleEmail || "your Google email"}.
-                  </Text>
-
-                  <View
-                    style={
-                      styles.passwordField
-                    }
-                  >
-                    <TextInput
-                      style={
-                        styles.passwordFieldInput
-                      }
-                      value={newPassword}
-                      onChangeText={
-                        setNewPassword
-                      }
-                      placeholder="Create a Treble password"
-                      placeholderTextColor="rgba(255,255,255,0.38)"
-                      secureTextEntry={
-                        !showNewPassword
-                      }
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      autoComplete="new-password"
-                      textContentType="newPassword"
-                      editable={
-                        !linkingPassword
-                      }
-                    />
-
-                    <TouchableOpacity
-                      style={
-                        styles.passwordFieldToggle
-                      }
-                      onPress={() =>
-                        setShowNewPassword(
-                          (value) => !value
-                        )
-                      }
-                    >
-                      <Icon
-                        name={
-                          showNewPassword
-                            ? "visibility"
-                            : "visibility-off"
-                        }
-                        size={21}
-                        color="rgba(255,255,255,0.62)"
-                      />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View
-                    style={
-                      styles.passwordField
-                    }
-                  >
-                    <TextInput
-                      style={
-                        styles.passwordFieldInput
-                      }
-                      value={
-                        confirmNewPassword
-                      }
-                      onChangeText={
-                        setConfirmNewPassword
-                      }
-                      placeholder="Confirm Treble password"
-                      placeholderTextColor="rgba(255,255,255,0.38)"
-                      secureTextEntry={
-                        !showConfirmNewPassword
-                      }
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      autoComplete="new-password"
-                      textContentType="newPassword"
-                      editable={
-                        !linkingPassword
-                      }
-                    />
-
-                    <TouchableOpacity
-                      style={
-                        styles.passwordFieldToggle
-                      }
-                      onPress={() =>
-                        setShowConfirmNewPassword(
-                          (value) => !value
-                        )
-                      }
-                    >
-                      <Icon
-                        name={
-                          showConfirmNewPassword
-                            ? "visibility"
-                            : "visibility-off"
-                        }
-                        size={21}
-                        color="rgba(255,255,255,0.62)"
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+              {isGoogleLinked ? (
+                <Text style={styles.passwordResetHelp}>
+                  To create or change your Treble password, use the secure password-reset page. Treble never displays or stores your password here.
+                </Text>
               ) : null}
             </View>
 
@@ -1305,8 +982,7 @@ export default function Connections({
                   handleConnectGoogle
                 }
                 disabled={
-                  linkingGoogle ||
-                  linkingPassword
+                  linkingGoogle
                 }
               >
                 {linkingGoogle ? (
@@ -1315,71 +991,70 @@ export default function Connections({
                     color="#ffffff"
                   />
                 ) : (
-                  <Text
-                    style={
-                      styles.buttonText
-                    }
-                  >
+                  <Text style={styles.buttonText}>
                     Connect Google
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ) : !isPasswordLinked ? (
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  styles.connectButton,
-                  linkingPassword &&
-                    styles.disabledButton,
-                  isCompact &&
-                    styles.compactButton,
-                ]}
-                onPress={
-                  handleAddTreblePassword
-                }
-                disabled={
-                  linkingPassword ||
-                  linkingGoogle
-                }
-              >
-                {linkingPassword ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#ffffff"
-                  />
-                ) : (
-                  <Text
-                    style={
-                      styles.buttonText
-                    }
-                  >
-                    Add Password
                   </Text>
                 )}
               </TouchableOpacity>
             ) : (
               <View
                 style={[
-                  styles.googleStatusButton,
-                  styles.googleConnectedButton,
+                  styles.googleActionColumn,
                   isCompact &&
-                    styles.compactButton,
+                    styles.googleActionColumnCompact,
                 ]}
               >
-                <Icon
-                  name="verified-user"
-                  size={17}
-                  color="#45d67b"
-                />
-
-                <Text
+                <View
                   style={[
-                    styles.googleStatusButtonText,
-                    styles.googleConnectedButtonText,
+                    styles.googleStatusButton,
+                    styles.googleConnectedButton,
                   ]}
                 >
-                  Both Connected
-                </Text>
+                  <Icon
+                    name="check-circle"
+                    size={17}
+                    color="#45d67b"
+                  />
+
+                  <Text
+                    style={[
+                      styles.googleStatusButtonText,
+                      styles.googleConnectedButtonText,
+                    ]}
+                  >
+                    Connected
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.button,
+                    styles.resetPasswordButton,
+                  ]}
+                  onPress={() =>
+                    navigation.navigate(
+                      "ForgotPassword",
+                      {
+                        email:
+                          googleEmail ||
+                          auth.currentUser?.email ||
+                          "",
+                        fromConnections:
+                          true,
+                      }
+                    )
+                  }
+                >
+                  <Icon
+                    name="lock-reset"
+                    size={18}
+                    color="#ffffff"
+                  />
+
+                  <Text style={styles.buttonText}>
+                    Reset Password
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -2104,148 +1779,43 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 
-  googleAccountCard: {
-    alignItems: "flex-start",
-  },
-
-  providerStatusRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-
-    gap: 8,
-
-    marginTop: 8,
-  },
-
-  providerPill: {
-    flexDirection: "row",
-    alignItems: "center",
-
-    gap: 5,
-
-    minHeight: 30,
-
-    paddingHorizontal: 10,
-
-    borderRadius: 15,
-
-    borderWidth: 1,
-  },
-
-  providerPillConnected: {
-    backgroundColor:
-      "rgba(69,214,123,0.09)",
-
-    borderColor:
-      "rgba(69,214,123,0.34)",
-  },
-
-  providerPillDisconnected: {
-    backgroundColor:
-      "rgba(255,255,255,0.04)",
-
-    borderColor:
-      "rgba(255,255,255,0.10)",
-  },
-
-  providerPillText: {
+  passwordResetHelp: {
     color:
-      "rgba(255,255,255,0.48)",
-
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  providerPillTextConnected: {
-    color: "#45d67b",
-  },
-
-  passwordLinkSection: {
-    width: "100%",
-
-    marginTop: 15,
-    padding: 14,
-
-    borderRadius: 14,
-
-    borderWidth: 1,
-    borderColor:
-      "rgba(66,191,238,0.22)",
-
-    backgroundColor:
-      "rgba(66,191,238,0.06)",
-  },
-
-  passwordLinkTitle: {
-    color: "#ffffff",
-
-    fontSize: 13,
-    fontWeight: "900",
-  },
-
-  passwordLinkHelp: {
-    color:
-      "rgba(255,255,255,0.52)",
+      "rgba(255,255,255,0.42)",
 
     fontSize: 11,
     lineHeight: 16,
 
-    marginTop: 4,
-    marginBottom: 10,
+    marginTop: 9,
   },
 
-  passwordField: {
-    position: "relative",
+  googleActionColumn: {
+    minWidth: 154,
 
+    alignItems: "stretch",
+
+    gap: 9,
+  },
+
+  googleActionColumnCompact: {
     width: "100%",
-    height: 46,
+
+    marginTop: 17,
+  },
+
+  resetPasswordButton: {
+    minWidth: 154,
 
     flexDirection: "row",
-    alignItems: "center",
 
-    marginTop: 9,
+    gap: 7,
+
+    backgroundColor:
+      "rgba(66,191,238,0.16)",
 
     borderWidth: 1,
     borderColor:
-      "rgba(66,191,238,0.36)",
-
-    borderRadius: 12,
-
-    backgroundColor:
-      "rgba(255,255,255,0.05)",
-
-    overflow: "hidden",
-  },
-
-  passwordFieldInput: {
-    flex: 1,
-    height: "100%",
-
-    color: "#ffffff",
-
-    paddingLeft: 13,
-    paddingRight: 48,
-
-    fontSize: 13,
-
-    borderWidth: 0,
-    outlineStyle: "none",
-
-    backgroundColor:
-      "transparent",
-  },
-
-  passwordFieldToggle: {
-    position: "absolute",
-
-    top: 0,
-    right: 0,
-    bottom: 0,
-
-    width: 46,
-
-    alignItems: "center",
-    justifyContent: "center",
+      "rgba(66,191,238,0.42)",
   },
 
   googleStatusButton: {

@@ -1,7 +1,5 @@
 import {
-  EmailAuthProvider,
   GoogleAuthProvider,
-  linkWithCredential,
   linkWithPopup,
   signInWithPopup,
 } from "firebase/auth";
@@ -307,64 +305,3 @@ export async function linkGoogleToCurrentUser() {
     result.user;
 }
 
-export async function linkPasswordToCurrentUser(
-  password
-) {
-  await authReady;
-
-  const currentUser =
-    auth.currentUser;
-
-  if (!currentUser?.uid) {
-    throw new Error(
-      "Sign in with Google before adding a Treble password."
-    );
-  }
-
-  const email =
-    String(
-      currentUser.email || ""
-    )
-      .trim()
-      .toLowerCase();
-
-  if (!email) {
-    throw new Error(
-      "This Google account does not provide an email address."
-    );
-  }
-
-  if (
-    String(password || "").length < 6
-  ) {
-    throw new Error(
-      "Your password must be at least 6 characters."
-    );
-  }
-
-  const providers =
-    getLinkedAuthProviders(
-      currentUser
-    );
-
-  if (providers.password) {
-    return currentUser;
-  }
-
-  const credential =
-    EmailAuthProvider.credential(
-      email,
-      password
-    );
-
-  const result =
-    await linkWithCredential(
-      currentUser,
-      credential
-    );
-
-  await result.user.reload();
-
-  return auth.currentUser ||
-    result.user;
-}

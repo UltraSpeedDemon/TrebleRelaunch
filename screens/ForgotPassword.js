@@ -1,10 +1,10 @@
 import React, {
+  useEffect,
   useState,
 } from "react";
 
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,48 +15,24 @@ import {
   View,
 } from "react-native";
 
+import Icon from "react-native-vector-icons/MaterialIcons";
+
 import {
   sendPasswordResetEmail,
 } from "firebase/auth";
 
-import { auth } from "../utils/firebase";
+import {
+  auth,
+  authReady,
+} from "../utils/firebase";
+
 import colours from "../styles/colours";
 
 const EMAIL_PATTERN =
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function getResetError(error) {
-  const code =
-    String(error?.code || "");
-
-  switch (code) {
-    case "auth/invalid-email":
-      return "Please enter a valid email address.";
-
-    case "auth/user-not-found":
-      return "No account was found with that email address.";
-
-    case "auth/missing-email":
-      return "Please enter your email address.";
-
-    case "auth/too-many-requests":
-      return "Too many reset attempts were made. Please wait and try again.";
-
-    case "auth/network-request-failed":
-      return "Unable to connect. Check your internet connection.";
-
-    case "auth/operation-not-allowed":
-      return "Password reset is not enabled for this project.";
-
-    default:
-      return (
-        error?.message ||
-        "Unable to send the password reset email."
-      );
-  }
-}
-
 export default function ForgotPassword({
+  route,
   navigation,
 }) {
   const [
@@ -65,132 +41,114 @@ export default function ForgotPassword({
   ] = useState("");
 
   const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState("");
-
-  const [
-    successMessage,
-    setSuccessMessage,
-  ] = useState("");
-
-  const [
     loading,
     setLoading,
   ] = useState(false);
 
-  const handleResetPassword =
-    async () => {
-      if (loading) {
-        return;
-      }
+  const [
+    message,
+    setMessage,
+  ] = useState("");
 
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+  useEffect(() => {
+    const suppliedEmail =
+      route?.params?.email ||
+      auth.currentUser?.email ||
+      "";
+
+    setEmail(
+      String(suppliedEmail)
+        .trim()
+        .toLowerCase()
+    );
+  }, [
+    route?.params?.email,
+  ]);
+
+  const sendReset =
+    async () => {
       const cleanEmail =
-        email
+        String(email || "")
           .trim()
           .toLowerCase();
-
-      setErrorMessage("");
-      setSuccessMessage("");
-
-      if (!cleanEmail) {
-        setErrorMessage(
-          "Please enter your email address."
-        );
-
-        return;
-      }
 
       if (
         !EMAIL_PATTERN.test(
           cleanEmail
         )
       ) {
-        setErrorMessage(
-          "Please enter a valid email address."
+        setError(
+          "Enter a valid email address."
         );
-
+        setMessage("");
         return;
       }
 
       setLoading(true);
+      setError("");
+      setMessage("");
 
       try {
-        auth.useDeviceLanguage();
+        await authReady;
 
         await sendPasswordResetEmail(
           auth,
-          cleanEmail
+          cleanEmail,
+          {
+            url:
+              "https://treblemusic.app/login",
+            handleCodeInApp:
+              false,
+          }
         );
 
-        const message =
-          "Password reset email sent. Check your inbox and spam folder.";
-
-        setSuccessMessage(
-          message
+        /*
+         * Use a neutral success message. This avoids exposing whether an
+         * email is registered with Treble.
+         */
+        setMessage(
+          "If this email can use Treble password login, Firebase has sent password-reset instructions. Check your inbox and junk folder."
         );
-
-        if (
-          Platform.OS !== "web"
-        ) {
-          Alert.alert(
-            "Reset email sent",
-            message,
-            [
-              {
-                text:
-                  "Back to Login",
-
-                onPress: () => {
-                  navigation.reset({
-                    index: 0,
-
-                    routes: [
-                      {
-                        name: "Login",
-                      },
-                    ],
-                  });
-                },
-              },
-            ]
-          );
-
-          return;
-        }
-
-        setTimeout(() => {
-          navigation.reset({
-            index: 0,
-
-            routes: [
-              {
-                name: "Login",
-              },
-            ],
-          });
-        }, 1800);
       } catch (resetError) {
         console.error(
-          "[ForgotPassword] Reset failed:",
+          "[ForgotPassword] Reset error:",
           resetError
         );
 
-        const finalMessage =
-          getResetError(
-            resetError
+        const code =
+          String(
+            resetError?.code || ""
           );
 
-        setErrorMessage(
-          finalMessage
-        );
-
         if (
-          Platform.OS !== "web"
+          code ===
+          "auth/invalid-email"
         ) {
-          Alert.alert(
-            "Password reset failed",
-            finalMessage
+          setError(
+            "Enter a valid email address."
+          );
+        } else if (
+          code ===
+          "auth/too-many-requests"
+        ) {
+          setError(
+            "Too many reset attempts were made. Wait a little and try again."
+          );
+        } else if (
+          code ===
+          "auth/network-request-failed"
+        ) {
+          setError(
+            "Unable to connect. Check your internet connection."
+          );
+        } else {
+          setError(
+            "Unable to send the reset email right now. Please try again."
           );
         }
       } finally {
@@ -200,165 +158,85 @@ export default function ForgotPassword({
 
   return (
     <KeyboardAvoidingView
-      style={
-        styles.container
-      }
+      style={styles.container}
       behavior={
         Platform.OS === "ios"
           ? "padding"
           : undefined
       }
     >
-      <View
-        style={
-          styles.backgroundGlowTop
-        }
-      />
-
-      <View
-        style={
-          styles.backgroundGlowBottom
-        }
-      />
-
       <ScrollView
         contentContainerStyle={
           styles.scrollContent
         }
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={
-          false
-        }
       >
-        <View
-          style={
-            styles.card
-          }
-        >
-          <View
-            style={
-              styles.cardAccent
-            }
-          />
-          
-          <Text
-            style={
-              styles.title
-            }
-          >
-            Forgot Your Password?
-          </Text>
-
-          <Text
-            style={
-              styles.subtitle
-            }
-          >
-            Enter the email connected to your
-            Treble account and we will send you
-            a secure password reset link.
-          </Text>
-
-          {errorMessage ? (
-            <View
-              style={
-                styles.errorContainer
-              }
-            >
-              <Text
-                style={
-                  styles.errorText
-                }
-              >
-                {errorMessage}
-              </Text>
-            </View>
-          ) : null}
-
-          {successMessage ? (
-            <View
-              style={
-                styles.successContainer
-              }
-            >
-              <Text
-                style={
-                  styles.successIcon
-                }
-              >
-                ✓
-              </Text>
-
-              <Text
-                style={
-                  styles.successText
-                }
-              >
-                {successMessage}
-              </Text>
-            </View>
-          ) : null}
-
-          <View
-            style={
-              styles.formGroup
-            }
-          >
-            <Text
-              style={
-                styles.label
-              }
-            >
-              Email Address
-            </Text>
-
-            <TextInput
-              style={
-                styles.input
-              }
-              placeholder="Enter your email"
-              placeholderTextColor={
-                colours.lightgrey ||
-                "#8c929c"
-              }
-              value={email}
-              onChangeText={(value) => {
-                setEmail(value);
-
-                if (errorMessage) {
-                  setErrorMessage("");
-                }
-
-                if (successMessage) {
-                  setSuccessMessage("");
-                }
-              }}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              autoComplete="email"
-              textContentType="emailAddress"
-              editable={!loading}
-              returnKeyType="send"
-              onSubmitEditing={
-                handleResetPassword
+        <View style={styles.card}>
+          <View style={styles.iconCircle}>
+            <Icon
+              name="lock-reset"
+              size={34}
+              color={
+                colours.lightblue ||
+                "#42bfee"
               }
             />
           </View>
 
+          <Text style={styles.title}>
+            Reset Password
+          </Text>
+
+          <Text style={styles.subtitle}>
+            Firebase will send secure password-reset instructions to your email. Treble never displays or stores your password.
+          </Text>
+
+          {error ? (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>
+                {error}
+              </Text>
+            </View>
+          ) : null}
+
+          {message ? (
+            <View style={styles.successBox}>
+              <Text style={styles.successText}>
+                {message}
+              </Text>
+            </View>
+          ) : null}
+
+          <Text style={styles.label}>
+            Email Address
+          </Text>
+
+          <TextInput
+            style={styles.input}
+            value={email}
+            onChangeText={(value) => {
+              setEmail(value);
+              setError("");
+              setMessage("");
+            }}
+            placeholder="Enter your email address"
+            placeholderTextColor="rgba(255,255,255,0.38)"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
+            editable={!loading}
+          />
+
           <TouchableOpacity
             style={[
-              styles.button,
               styles.primaryButton,
-
               loading &&
                 styles.disabledButton,
             ]}
-            onPress={
-              handleResetPassword
-            }
+            onPress={sendReset}
             disabled={loading}
-            activeOpacity={0.82}
           >
             {loading ? (
               <ActivityIndicator
@@ -366,76 +244,38 @@ export default function ForgotPassword({
                 color="#ffffff"
               />
             ) : (
-              <Text
-                style={
-                  styles.buttonText
-                }
-              >
-                Send Reset Link
-              </Text>
+              <>
+                <Icon
+                  name="email"
+                  size={19}
+                  color="#ffffff"
+                />
+
+                <Text
+                  style={
+                    styles.primaryButtonText
+                  }
+                >
+                  Send Reset Email
+                </Text>
+              </>
             )}
           </TouchableOpacity>
 
-          <View
-            style={
-              styles.loginPrompt
-            }
-          >
-            <Text
-              style={
-                styles.loginPromptText
-              }
-            >
-              Remembered your password?
-            </Text>
-          </View>
-
           <TouchableOpacity
-            style={[
-              styles.button,
-              styles.backButton,
-            ]}
-            onPress={() => {
-              navigation.reset({
-                index: 0,
-
-                routes: [
-                  {
-                    name: "Login",
-                  },
-                ],
-              });
-            }}
-            disabled={loading}
-            activeOpacity={0.82}
-          >
-            <Text
-              style={
-                styles.buttonText
-              }
-            >
-              Back to Login
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={
-              styles.homeButton
-            }
+            style={styles.backButton}
             onPress={() =>
-              navigation.navigate(
-                "Home"
-              )
+              navigation.goBack()
             }
-            disabled={loading}
-            activeOpacity={0.7}
           >
-            <Text
-              style={
-                styles.homeButtonText
-              }
-            >
-              Back to Home
+            <Icon
+              name="arrow-back"
+              size={18}
+              color="rgba(255,255,255,0.65)"
+            />
+
+            <Text style={styles.backText}>
+              Back
             </Text>
           </TouchableOpacity>
         </View>
@@ -449,43 +289,9 @@ const styles =
     container: {
       flex: 1,
 
-      position: "relative",
-      overflow: "hidden",
-
       backgroundColor:
         colours.background ||
-        colours.bluegrey ||
         "#101010",
-    },
-
-    backgroundGlowTop: {
-      position: "absolute",
-
-      top: -180,
-      right: -150,
-
-      width: 420,
-      height: 420,
-
-      borderRadius: 210,
-
-      backgroundColor:
-        "rgba(53,159,225,0.12)",
-    },
-
-    backgroundGlowBottom: {
-      position: "absolute",
-
-      bottom: -230,
-      left: -190,
-
-      width: 480,
-      height: 480,
-
-      borderRadius: 240,
-
-      backgroundColor:
-        "rgba(66,191,238,0.08)",
     },
 
     scrollContent: {
@@ -494,159 +300,82 @@ const styles =
       alignItems: "center",
       justifyContent: "center",
 
-      paddingVertical: 35,
-      paddingHorizontal: 20,
+      padding: 20,
     },
 
     card: {
-      position: "relative",
-
       width: "100%",
-      maxWidth: 470,
+      maxWidth: 500,
 
-      alignItems: "center",
+      padding: 28,
 
-      paddingTop: 38,
-      paddingBottom: 31,
-      paddingHorizontal: 32,
+      borderRadius: 24,
+
+      backgroundColor:
+        colours.darkblue ||
+        "#222222",
 
       borderWidth: 1,
       borderColor:
         "rgba(255,255,255,0.12)",
 
-      borderRadius: 28,
-
-      backgroundColor:
-        colours.darkblue ||
-        "#1b1f28",
-
       shadowColor: "#000000",
-
       shadowOffset: {
         width: 0,
-        height: 14,
+        height: 10,
       },
+      shadowOpacity: 0.34,
+      shadowRadius: 22,
 
-      shadowOpacity: 0.36,
-      shadowRadius: 30,
-
-      elevation: 12,
-
-      overflow: "hidden",
+      elevation: 8,
     },
 
-    cardAccent: {
-      position: "absolute",
+    iconCircle: {
+      width: 68,
+      height: 68,
 
-      top: 0,
-      left: 0,
-      right: 0,
-
-      height: 5,
-
-      backgroundColor:
-        colours.lightblue ||
-        "#42bfee",
-    },
-
-    logoCircle: {
-      width: 64,
-      height: 64,
-
+      alignSelf: "center",
       alignItems: "center",
       justifyContent: "center",
 
-      borderWidth: 1,
-      borderColor:
-        "rgba(66,191,238,0.48)",
-
-      borderRadius: 32,
+      borderRadius: 34,
 
       backgroundColor:
-        "rgba(66,191,238,0.13)",
+        "rgba(66,191,238,0.10)",
 
-      shadowColor:
-        colours.lightblue ||
-        "#42bfee",
-
-      shadowOffset: {
-        width: 0,
-        height: 4,
-      },
-
-      shadowOpacity: 0.25,
-      shadowRadius: 12,
-
-      elevation: 5,
-    },
-
-    musicNote: {
-      color:
-        colours.lightblue ||
-        "#42bfee",
-
-      fontSize: 34,
-      lineHeight: 39,
-      fontWeight: "800",
-    },
-
-    brandText: {
-      color: "#ffffff",
-
-      fontSize: 52,
-      lineHeight: 62,
-
-      fontFamily: "Lobster",
-
-      textAlign: "center",
-
-      marginTop: 6,
+      marginBottom: 16,
     },
 
     title: {
       color: "#ffffff",
 
-      fontSize: 25,
-      lineHeight: 32,
-      fontWeight: "800",
-
-      marginTop: 4,
+      fontSize: 27,
+      fontWeight: "900",
 
       textAlign: "center",
     },
 
     subtitle: {
-      width: "100%",
-      maxWidth: 350,
-
       color:
-        "rgba(255,255,255,0.58)",
+        "rgba(255,255,255,0.60)",
 
-      fontSize: 14,
-      lineHeight: 21,
-
-      marginTop: 8,
-      marginBottom: 23,
+      fontSize: 13,
+      lineHeight: 20,
 
       textAlign: "center",
-    },
 
-    formGroup: {
-      width: "100%",
-
-      marginBottom: 5,
+      marginTop: 8,
+      marginBottom: 22,
     },
 
     label: {
       color:
-        "rgba(255,255,255,0.76)",
+        "rgba(255,255,255,0.82)",
 
-      fontSize: 13,
-      lineHeight: 18,
-      fontWeight: "700",
+      fontSize: 12,
+      fontWeight: "800",
 
       marginBottom: 7,
-      marginLeft: 3,
     },
 
     input: {
@@ -655,166 +384,114 @@ const styles =
 
       color: "#ffffff",
 
-      paddingHorizontal: 15,
+      paddingHorizontal: 14,
 
       borderWidth: 1,
       borderColor:
-        "rgba(66,191,238,0.48)",
+        "rgba(66,191,238,0.46)",
 
       borderRadius: 13,
 
       backgroundColor:
-        "rgba(255,255,255,0.05)",
+        "rgba(255,255,255,0.06)",
 
-      fontFamily: "Domine",
-      fontSize: 15,
+      fontSize: 14,
 
       outlineStyle: "none",
     },
 
-    errorContainer: {
-      width: "100%",
-
+    errorBox: {
       padding: 12,
-      marginBottom: 16,
-
-      borderWidth: 1,
-      borderColor:
-        "rgba(255,75,75,0.45)",
 
       borderRadius: 11,
 
       backgroundColor:
-        "rgba(255,50,50,0.1)",
+        "rgba(255,76,76,0.11)",
+
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,76,76,0.40)",
+
+      marginBottom: 15,
     },
 
     errorText: {
-      color: "#ff7777",
+      color: "#ff8585",
 
-      fontSize: 14,
-      lineHeight: 20,
+      fontSize: 12,
+      lineHeight: 17,
 
       textAlign: "center",
     },
 
-    successContainer: {
-      width: "100%",
-
-      flexDirection: "row",
-      alignItems: "center",
-
+    successBox: {
       padding: 12,
-      marginBottom: 16,
-
-      borderWidth: 1,
-      borderColor:
-        "rgba(80,220,130,0.5)",
 
       borderRadius: 11,
 
       backgroundColor:
-        "rgba(70,200,120,0.12)",
-    },
+        "rgba(69,214,123,0.09)",
 
-    successIcon: {
-      color: "#7ee2a8",
+      borderWidth: 1,
+      borderColor:
+        "rgba(69,214,123,0.34)",
 
-      fontSize: 20,
-      lineHeight: 24,
-      fontWeight: "900",
-
-      marginRight: 9,
+      marginBottom: 15,
     },
 
     successText: {
-      flex: 1,
+      color: "#68e598",
 
-      color: "#7ee2a8",
+      fontSize: 12,
+      lineHeight: 17,
 
-      fontSize: 14,
-      lineHeight: 20,
-    },
-
-    button: {
-      width: "100%",
-      height: 52,
-
-      alignItems: "center",
-      justifyContent: "center",
-
-      borderRadius: 26,
-
-      marginTop: 11,
+      textAlign: "center",
     },
 
     primaryButton: {
+      width: "100%",
+      minHeight: 50,
+
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+
+      gap: 8,
+
+      borderRadius: 25,
+
       backgroundColor:
-        colours.primaryblue ||
-        "#359fe1",
+        colours.lightblue ||
+        "#42bfee",
 
-      shadowColor:
-        colours.primaryblue ||
-        "#359fe1",
-
-      shadowOffset: {
-        width: 0,
-        height: 5,
-      },
-
-      shadowOpacity: 0.25,
-      shadowRadius: 10,
-
-      elevation: 4,
+      marginTop: 18,
     },
 
-    backButton: {
-      borderWidth: 1,
-      borderColor:
-        colours.primaryblue ||
-        "#359fe1",
+    primaryButtonText: {
+      color: "#ffffff",
 
-      backgroundColor:
-        "rgba(55,160,225,0.15)",
+      fontSize: 14,
+      fontWeight: "900",
     },
 
     disabledButton: {
-      opacity: 0.55,
+      opacity: 0.58,
     },
 
-    buttonText: {
-      color: "#ffffff",
+    backButton: {
+      alignSelf: "center",
 
-      fontSize: 16,
-      fontWeight: "800",
-    },
-
-    loginPrompt: {
-      width: "100%",
-
+      flexDirection: "row",
       alignItems: "center",
 
-      marginTop: 19,
-      marginBottom: -1,
+      gap: 6,
+
+      marginTop: 20,
     },
 
-    loginPromptText: {
+    backText: {
       color:
-        "rgba(255,255,255,0.45)",
-
-      fontSize: 13,
-      lineHeight: 18,
-    },
-
-    homeButton: {
-      marginTop: 17,
-
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-    },
-
-    homeButtonText: {
-      color:
-        "rgba(255,255,255,0.42)",
+        "rgba(255,255,255,0.65)",
 
       fontSize: 13,
       fontWeight: "700",
