@@ -4,6 +4,7 @@ import React, {
 
 import {
   ActivityIndicator,
+  Image,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -21,7 +22,7 @@ import {
   updateProfile,
 } from "firebase/auth";
 
-import { auth } from "../utils/firebase";
+import { auth, authReady } from "../utils/firebase";
 
 import {
   createUser,
@@ -33,6 +34,7 @@ import {
 } from "../utils/session";
 
 import colours from "../styles/colours";
+import { signInWithGoogle } from "../utils/googleAuth";
 
 const EMAIL_PATTERN =
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -110,7 +112,65 @@ function getRegisterError(error) {
       return "Too many registration attempts were made. Please wait and try again.";
 
     default:
-      return (
+      const handleGoogleRegister =
+    async () => {
+      if (authLoading) {
+        return;
+      }
+
+      if (Platform.OS !== "web") {
+        setErrorMessage(
+          "Google registration is currently available on the Treble website and installed web app."
+        );
+        return;
+      }
+
+      setGoogleLoading(true);
+      setErrorMessage("");
+
+      try {
+        const user =
+          await signInWithGoogle();
+
+        await saveSession(
+          "userUid",
+          user.uid
+        );
+
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: "Feed",
+            },
+          ],
+        });
+      } catch (googleError) {
+        console.error(
+          "[Register] Google registration failed:",
+          googleError
+        );
+
+        const message =
+          googleError?.code ===
+          "auth/popup-closed-by-user"
+            ? "Google registration was cancelled."
+            : googleError?.code ===
+              "auth/unauthorized-domain"
+            ? "This Treble domain has not been authorized in Firebase yet."
+            : googleError?.code ===
+              "auth/argument-error"
+            ? "Firebase Authentication was not initialized correctly. Replace utils/firebase.js with the fixed file in this ZIP, then redeploy."
+            : googleError?.message ||
+              "Unable to create your account with Google.";
+
+        setErrorMessage(message);
+      } finally {
+        setGoogleLoading(false);
+      }
+    };
+
+  return (
         error?.message ||
         "Unable to create your account."
       );
@@ -154,6 +214,14 @@ export default function Register({
     loading,
     setLoading,
   ] = useState(false);
+
+  const [
+    googleLoading,
+    setGoogleLoading,
+  ] = useState(false);
+
+  const authLoading =
+    loading || googleLoading;
 
   const [
     errorMessage,
@@ -254,6 +322,8 @@ export default function Register({
         null;
 
       try {
+        await authReady;
+
         const lookupResponse =
           await getUserByUsername(
             cleanUsername
@@ -536,7 +606,7 @@ export default function Register({
               autoCorrect={false}
               autoComplete="username-new"
               textContentType="username"
-              editable={!loading}
+              editable={!authLoading}
               returnKeyType="next"
             />
           </View>
@@ -573,7 +643,7 @@ export default function Register({
               autoCorrect={false}
               autoComplete="email"
               textContentType="emailAddress"
-              editable={!loading}
+              editable={!authLoading}
               returnKeyType="next"
             />
           </View>
@@ -609,7 +679,7 @@ export default function Register({
     autoCorrect={false}
     autoComplete="new-password"
     textContentType="newPassword"
-    editable={!loading}
+    editable={!authLoading}
     returnKeyType="next"
   />
 
@@ -621,7 +691,7 @@ export default function Register({
           !currentValue
       )
     }
-    disabled={loading}
+    disabled={authLoading}
     activeOpacity={0.7}
     accessibilityRole="button"
     accessibilityLabel={
@@ -682,7 +752,7 @@ export default function Register({
               autoCorrect={false}
               autoComplete="new-password"
               textContentType="newPassword"
-              editable={!loading}
+              editable={!authLoading}
               returnKeyType="done"
               onSubmitEditing={handleRegister}
             />
@@ -695,7 +765,7 @@ export default function Register({
                     !currentValue
                 )
               }
-              disabled={loading}
+              disabled={authLoading}
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel={
@@ -727,7 +797,7 @@ export default function Register({
             onPress={
               handleRegister
             }
-            disabled={loading}
+            disabled={authLoading}
             activeOpacity={0.82}
           >
             {loading ? (
@@ -745,6 +815,51 @@ export default function Register({
               </Text>
             )}
           </TouchableOpacity>
+
+          <View style={styles.authDivider}>
+            <View style={styles.authDividerLine} />
+            <Text style={styles.authDividerText}>OR</Text>
+            <View style={styles.authDividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.googleButton,
+              authLoading &&
+                styles.disabledButton,
+            ]}
+            onPress={handleGoogleRegister}
+            disabled={authLoading}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+          >
+            {googleLoading ? (
+              <ActivityIndicator
+                size="small"
+                color="#3c4043"
+              />
+            ) : (
+              <>
+                <Image
+                  source={require(
+                    "../images/Googleicon.png"
+                  )}
+                  style={styles.googleIcon}
+                  resizeMode="contain"
+                />
+
+                <Text style={styles.googleButtonText}>
+                  Continue with Google
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <Text style={styles.googleUsernameNote}>
+            We’ll create a unique public Treble username. You can change it later in Edit Profile.
+          </Text>
 
           <View
             style={
@@ -775,7 +890,7 @@ export default function Register({
                 ],
               });
             }}
-            disabled={loading}
+            disabled={authLoading}
             activeOpacity={0.82}
           >
             <Text
@@ -796,7 +911,7 @@ export default function Register({
                 "Home"
               )
             }
-            disabled={loading}
+            disabled={authLoading}
             activeOpacity={0.7}
           >
             <Text
@@ -1171,6 +1286,69 @@ passwordToggle: {
 
       backgroundColor:
         "rgba(55,160,225,0.15)",
+    },
+
+    authDivider: {
+      width: "100%",
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 17,
+      marginBottom: 2,
+    },
+
+    authDividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor:
+        "rgba(255,255,255,0.11)",
+    },
+
+    authDividerText: {
+      color:
+        "rgba(255,255,255,0.42)",
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 1,
+      marginHorizontal: 12,
+    },
+
+    googleButton: {
+      position: "relative",
+      flexDirection: "row",
+      backgroundColor: "#ffffff",
+      borderWidth: 1,
+      borderColor: "#dadce0",
+      shadowColor: "#000000",
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.14,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+
+    googleIcon: {
+      position: "absolute",
+      left: 18,
+      width: 21,
+      height: 21,
+    },
+
+    googleButtonText: {
+      color: "#3c4043",
+      fontSize: 15,
+      fontWeight: "700",
+    },
+
+    googleUsernameNote: {
+      color:
+        "rgba(255,255,255,0.42)",
+      fontSize: 11,
+      lineHeight: 16,
+      textAlign: "center",
+      marginTop: 9,
+      paddingHorizontal: 12,
     },
 
     disabledButton: {

@@ -12,6 +12,7 @@ import {
   getReactNativePersistence,
   initializeAuth,
   onAuthStateChanged,
+  setPersistence,
 } from "firebase/auth";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -43,33 +44,39 @@ const app =
     : initializeApp(firebaseConfig);
 
 let auth;
+let authReady;
 
-try {
-  if (Platform.OS === "web") {
-    /*
-     * Keep the user logged in after refreshing
-     * or closing and reopening the browser.
-     */
-    auth = initializeAuth(app, {
-      persistence: browserLocalPersistence,
-    });
-  } else {
-    /*
-     * Native Android/iOS authentication persistence.
-     */
+if (Platform.OS === "web") {
+  /*
+   * Use the normal browser Auth instance on web. Calling initializeAuth()
+   * with a browser persistence object can trigger auth/argument-error in
+   * some Expo Web/Firebase bundle combinations.
+   */
+  auth = getAuth(app);
+
+  authReady = setPersistence(
+    auth,
+    browserLocalPersistence
+  ).catch((error) => {
+    console.warn(
+      "[Firebase] Could not enable local browser persistence:",
+      error
+    );
+  });
+} else {
+  try {
     auth = initializeAuth(app, {
       persistence:
         getReactNativePersistence(
           AsyncStorage
         ),
     });
+  } catch (error) {
+    /* Firebase Auth may already exist during Expo Fast Refresh. */
+    auth = getAuth(app);
   }
-} catch (error) {
-  /*
-   * Firebase Auth may already be initialized
-   * during Expo Fast Refresh.
-   */
-  auth = getAuth(app);
+
+  authReady = Promise.resolve();
 }
 
 const storage = getStorage(
@@ -80,6 +87,7 @@ const storage = getStorage(
 export {
   app,
   auth,
+  authReady,
   onAuthStateChanged,
   storage,
 };

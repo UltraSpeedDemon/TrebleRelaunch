@@ -4,6 +4,7 @@ import React, {
 
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,13 +16,12 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import {
-  GoogleAuthProvider,
   signInWithEmailAndPassword,
-  signInWithPopup,
 } from "firebase/auth";
 
-import { auth } from "../utils/firebase";
+import { auth, authReady } from "../utils/firebase";
 import { saveSession } from "../utils/session";
+import { signInWithGoogle } from "../utils/googleAuth";
 import colours from "../styles/colours";
 
 const EMAIL_PATTERN =
@@ -67,6 +67,9 @@ function getFriendlyLoginError(error) {
 
     case "auth/unauthorized-domain":
       return "This Treble domain has not been authorized in Firebase yet.";
+
+    case "auth/argument-error":
+      return "Firebase Authentication was not initialized correctly. Replace utils/firebase.js with the fixed file in this ZIP, then redeploy.";
 
     default:
       return (
@@ -167,6 +170,8 @@ export default function Login({
     setError("");
 
     try {
+      await authReady;
+
       const userCredential =
         await signInWithEmailAndPassword(
           auth,
@@ -209,22 +214,10 @@ export default function Login({
     setError("");
 
     try {
-      const provider =
-        new GoogleAuthProvider();
+      const user =
+        await signInWithGoogle();
 
-      provider.setCustomParameters({
-        prompt: "select_account",
-      });
-
-      const userCredential =
-        await signInWithPopup(
-          auth,
-          provider
-        );
-
-      await finishLogin(
-        userCredential.user
-      );
+      await finishLogin(user);
     } catch (googleError) {
       console.error(
         "[Login] Google login failed:",
@@ -492,9 +485,13 @@ export default function Login({
               />
             ) : (
               <>
-                <View style={styles.googleIconCircle}>
-                  <Text style={styles.googleIconText}>G</Text>
-                </View>
+                <Image
+                  source={require(
+                    "../images/Googleicon.png"
+                  )}
+                  style={styles.googleIcon}
+                  resizeMode="contain"
+                />
 
                 <Text style={styles.googleButtonText}>
                   Continue with Google
@@ -960,31 +957,28 @@ passwordToggle: {
       flexDirection: "row",
       backgroundColor: "#ffffff",
       borderWidth: 1,
-      borderColor:
-        "rgba(255,255,255,0.20)",
+      borderColor: "#dadce0",
+      shadowColor: "#000000",
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.14,
+      shadowRadius: 4,
+      elevation: 3,
     },
 
-    googleIconCircle: {
+    googleIcon: {
       position: "absolute",
-      left: 17,
-      width: 25,
-      height: 25,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: 13,
-      backgroundColor: "#ffffff",
-    },
-
-    googleIconText: {
-      color: "#4285f4",
-      fontSize: 19,
-      fontWeight: "900",
+      left: 18,
+      width: 21,
+      height: 21,
     },
 
     googleButtonText: {
-      color: "#202124",
+      color: "#3c4043",
       fontSize: 15,
-      fontWeight: "800",
+      fontWeight: "700",
     },
 
     disabledButton: {
