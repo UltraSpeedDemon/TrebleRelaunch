@@ -15,11 +15,12 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import {
+  GoogleAuthProvider,
   signInWithEmailAndPassword,
+  signInWithPopup,
 } from "firebase/auth";
 
 import { auth } from "../utils/firebase";
-import { getUserByUsername } from "../providers/rest";
 import { saveSession } from "../utils/session";
 import colours from "../styles/colours";
 
@@ -32,70 +33,6 @@ function isEmail(value) {
   );
 }
 
-async function readResponse(response) {
-  if (!response) {
-    throw new Error(
-      "The server did not return a response."
-    );
-  }
-
-  const responseText =
-    await response.text();
-
-  let data = null;
-
-  if (responseText) {
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      throw new Error(
-        "The server returned an invalid response."
-      );
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      data?.error ||
-        data?.message ||
-        `Server error ${response.status}.`
-    );
-  }
-
-  return data;
-}
-
-function findUserRecord(data) {
-  if (Array.isArray(data)) {
-    return data[0] || null;
-  }
-
-  if (Array.isArray(data?.users)) {
-    return data.users[0] || null;
-  }
-
-  if (Array.isArray(data?.results)) {
-    return data.results[0] || null;
-  }
-
-  if (data?.user) {
-    return data.user;
-  }
-
-  if (
-    data &&
-    typeof data === "object" &&
-    (
-      data.email ||
-      data.userEmail
-    )
-  ) {
-    return data;
-  }
-
-  return null;
-}
-
 function getFriendlyLoginError(error) {
   const code =
     String(error?.code || "");
@@ -105,7 +42,7 @@ function getFriendlyLoginError(error) {
     case "auth/invalid-login-credentials":
     case "auth/user-not-found":
     case "auth/wrong-password":
-      return "Invalid username, email, or password.";
+      return "Invalid email address or password.";
 
     case "auth/invalid-email":
       return "Please enter a valid email address.";
@@ -118,6 +55,18 @@ function getFriendlyLoginError(error) {
 
     case "auth/network-request-failed":
       return "Unable to connect to Firebase. Check your internet connection.";
+
+    case "auth/popup-closed-by-user":
+      return "Google sign-in was cancelled.";
+
+    case "auth/popup-blocked":
+      return "Your browser blocked the Google sign-in window. Allow popups for Treble and try again.";
+
+    case "auth/cancelled-popup-request":
+      return "Another Google sign-in window is already open.";
+
+    case "auth/unauthorized-domain":
+      return "This Treble domain has not been authorized in Firebase yet.";
 
     default:
       return (
@@ -155,19 +104,55 @@ export default function Login({
     setLoading,
   ] = useState(false);
 
+  const [
+    googleLoading,
+    setGoogleLoading,
+  ] = useState(false);
+
+  const authLoading =
+    loading || googleLoading;
+
+  const finishLogin = async (user) => {
+    if (!user?.uid) {
+      throw new Error(
+        "Firebase did not return a valid user account."
+      );
+    }
+
+    await saveSession(
+      "userUid",
+      user.uid
+    );
+
+    navigation.reset({
+      index: 0,
+      routes: [
+        {
+          name: "Feed",
+        },
+      ],
+    });
+  };
+
   const handleLogin = async () => {
-    if (loading) {
+    if (authLoading) {
       return;
     }
 
-    const cleanIdentifier =
-      identifier.trim();
+    const cleanEmail =
+      identifier.trim().toLowerCase();
 
-    if (!cleanIdentifier) {
+    if (!cleanEmail) {
       setError(
-        "Enter your username or email."
+        "Enter your email address."
       );
+      return;
+    }
 
+    if (!isEmail(cleanEmail)) {
+      setError(
+        "Please enter a valid email address."
+      );
       return;
     }
 
@@ -175,7 +160,6 @@ export default function Login({
       setError(
         "Enter your password."
       );
-
       return;
     }
 
@@ -183,91 +167,19 @@ export default function Login({
     setError("");
 
     try {
-      let userEmail =
-        cleanIdentifier.toLowerCase();
-
-      if (!isEmail(cleanIdentifier)) {
-        console.log(
-          "[Login] Looking up username:",
-          userEmail
-        );
-
-        const response =
-          await getUserByUsername(
-            userEmail
-          );
-
-        const data =
-          await readResponse(
-            response
-          );
-
-        const userRecord =
-          findUserRecord(data);
-
-        if (!userRecord) {
-          throw new Error(
-            "Username not found."
-          );
-        }
-
-        userEmail =
-          String(
-            userRecord.email ||
-              userRecord.userEmail ||
-              userRecord.uemail ||
-              ""
-          )
-            .trim()
-            .toLowerCase();
-
-        if (
-          !userEmail ||
-          !isEmail(userEmail)
-        ) {
-          throw new Error(
-            "This username does not have a valid email address attached to it."
-          );
-        }
-      }
-
-      console.log(
-        "[Login] Signing in as:",
-        userEmail
-      );
-
       const userCredential =
         await signInWithEmailAndPassword(
           auth,
-          userEmail,
+          cleanEmail,
           password
         );
 
-      const user =
-        userCredential.user;
-
-      if (!user?.uid) {
-        throw new Error(
-          "Firebase did not return a valid user account."
-        );
-      }
-
-      await saveSession(
-        "userUid",
-        user.uid
+      await finishLogin(
+        userCredential.user
       );
-
-      navigation.reset({
-        index: 0,
-        routes: [
-          {
-            name: "Feed",
-          },
-        ],
-      });
     } catch (loginError) {
       console.error(
-        "[Login] Login failed:",
+        "[Login] Email login failed:",
         loginError
       );
 
@@ -278,6 +190,54 @@ export default function Login({
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    if (authLoading) {
+      return;
+    }
+
+    if (Platform.OS !== "web") {
+      setError(
+        "Google sign-in is currently available on the Treble website and installed web app."
+      );
+      return;
+    }
+
+    setGoogleLoading(true);
+    setError("");
+
+    try {
+      const provider =
+        new GoogleAuthProvider();
+
+      provider.setCustomParameters({
+        prompt: "select_account",
+      });
+
+      const userCredential =
+        await signInWithPopup(
+          auth,
+          provider
+        );
+
+      await finishLogin(
+        userCredential.user
+      );
+    } catch (googleError) {
+      console.error(
+        "[Login] Google login failed:",
+        googleError
+      );
+
+      setError(
+        getFriendlyLoginError(
+          googleError
+        )
+      );
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -365,14 +325,14 @@ export default function Login({
                 styles.inputLabel
               }
             >
-              Username or Email
+              Email Address
             </Text>
 
             <TextInput
               style={
                 styles.input
               }
-              placeholder="Enter your username or email"
+              placeholder="Enter your email address"
               placeholderTextColor={
                 colours.lightgrey ||
                 "#8c929c"
@@ -386,9 +346,9 @@ export default function Login({
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
-              textContentType="username"
-              autoComplete="username"
-              editable={!loading}
+              textContentType="emailAddress"
+              autoComplete="email"
+              editable={!authLoading}
               returnKeyType="next"
             />
           </View>
@@ -421,7 +381,7 @@ export default function Login({
                 autoCorrect={false}
                 textContentType="password"
                 autoComplete="current-password"
-                editable={!loading}
+                editable={!authLoading}
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
               />
@@ -434,7 +394,7 @@ export default function Login({
                       !currentValue
                   )
                 }
-                disabled={loading}
+                disabled={authLoading}
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel={
@@ -465,7 +425,7 @@ export default function Login({
                 "ForgotPassword"
               )
             }
-            disabled={loading}
+            disabled={authLoading}
             activeOpacity={0.75}
           >
             <Text
@@ -487,7 +447,7 @@ export default function Login({
             onPress={
               handleLogin
             }
-            disabled={loading}
+            disabled={authLoading}
             activeOpacity={0.82}
           >
             {loading ? (
@@ -503,6 +463,43 @@ export default function Login({
               >
                 Login
               </Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.authDivider}>
+            <View style={styles.authDividerLine} />
+            <Text style={styles.authDividerText}>OR</Text>
+            <View style={styles.authDividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.button,
+              styles.googleButton,
+              authLoading &&
+                styles.disabledButton,
+            ]}
+            onPress={handleGoogleLogin}
+            disabled={authLoading}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+          >
+            {googleLoading ? (
+              <ActivityIndicator
+                size="small"
+                color="#202124"
+              />
+            ) : (
+              <>
+                <View style={styles.googleIconCircle}>
+                  <Text style={styles.googleIconText}>G</Text>
+                </View>
+
+                <Text style={styles.googleButtonText}>
+                  Continue with Google
+                </Text>
+              </>
             )}
           </TouchableOpacity>
 
@@ -530,7 +527,7 @@ export default function Login({
                 "Register"
               )
             }
-            disabled={loading}
+            disabled={authLoading}
             activeOpacity={0.82}
           >
             <Text
@@ -551,7 +548,7 @@ export default function Login({
                 "Home"
               )
             }
-            disabled={loading}
+            disabled={authLoading}
             activeOpacity={0.7}
           >
             <Text
@@ -932,6 +929,62 @@ passwordToggle: {
 
       backgroundColor:
         "rgba(55,160,225,0.15)",
+    },
+
+    authDivider: {
+      width: "100%",
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 17,
+      marginBottom: 2,
+    },
+
+    authDividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor:
+        "rgba(255,255,255,0.11)",
+    },
+
+    authDividerText: {
+      color:
+        "rgba(255,255,255,0.42)",
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 1,
+      marginHorizontal: 12,
+    },
+
+    googleButton: {
+      position: "relative",
+      flexDirection: "row",
+      backgroundColor: "#ffffff",
+      borderWidth: 1,
+      borderColor:
+        "rgba(255,255,255,0.20)",
+    },
+
+    googleIconCircle: {
+      position: "absolute",
+      left: 17,
+      width: 25,
+      height: 25,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 13,
+      backgroundColor: "#ffffff",
+    },
+
+    googleIconText: {
+      color: "#4285f4",
+      fontSize: 19,
+      fontWeight: "900",
+    },
+
+    googleButtonText: {
+      color: "#202124",
+      fontSize: 15,
+      fontWeight: "800",
     },
 
     disabledButton: {

@@ -85,6 +85,70 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 
 const Stack = createStackNavigator();
 
+/*
+ * Web URL routing
+ *
+ * React Navigation uses this map to keep the browser address bar and
+ * Back/Forward buttons synchronized with Treble's navigation stack.
+ * Internal route names remain unchanged, so all existing
+ * navigation.navigate("RouteName") calls continue to work.
+ */
+const linking = {
+  prefixes: [
+    "https://treblemusic.app",
+    "https://www.treblemusic.app",
+    "https://treblemusic.netlify.app",
+    "treble://",
+  ],
+
+  config: {
+    screens: {
+      Home: "",
+      Login: "login",
+      Register: "register",
+      ForgotPassword: "forgot-password",
+      Error: "error",
+
+      Explore: "explore",
+      Feed: "feed",
+      Search: "search",
+
+      Profile: "profile",
+      EditProfile: "profile/edit",
+      UserProfiles: "users",
+      FollowersList: "profile/followers",
+      FollowingList: "profile/following",
+      FriendsList: "friends",
+
+      Groups: "community",
+      Messages: "messages",
+      Notifications: "notifications",
+
+      Favourites: "liked",
+      RecentlyViewed: "recently-viewed",
+
+      Connections: "connections",
+      Settings: "settings",
+      Achievements: "achievements",
+      Credits: "credits",
+
+      CreatePost: "posts/create",
+      Posts: "posts",
+
+      SongPage: "song",
+      AlbumPage: "album",
+      ArtistPage: "artist",
+      ArtistListenables: "artist/music",
+      UpdateReview: "reviews/update",
+
+      MusicSwiper: "music-discovery",
+      MusicSwiperTest: "discover",
+      SongCardSwipe: "discover-songs",
+    },
+  },
+};
+
+
 const screenOptions = {
   headerShown: false,
 
@@ -337,7 +401,10 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      linking={linking}
+      fallback={null}
+    >
       <Stack.Navigator
         initialRouteName="Home"
 

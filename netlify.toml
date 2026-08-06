@@ -1,5 +1,14 @@
+# Redirect the original Netlify subdomain to the branded Treble domain.
 [[redirects]]
 from = "https://treblemusic.netlify.app/*"
 to = "https://treblemusic.app/:splat"
 status = 301
 force = true
+
+# React Navigation / SPA fallback.
+# Keep this rule LAST so direct visits and browser refreshes on routes such as
+# /profile, /feed, /settings, and /achievements load the Treble application.
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
