@@ -118,6 +118,41 @@ const DEEZER_API_BASE = "https://api.deezer.com";
 
 /*
  * =========================================================
+ * FIREBASE COST CONTROLS
+ * =========================================================
+ *
+ * These expensive persistence/background features are OFF by default.
+ * Turn them on explicitly only when needed through environment variables.
+ */
+const FIRESTORE_DEEZER_CACHE_ENABLED =
+  String(
+    process.env.FIRESTORE_DEEZER_CACHE_ENABLED ||
+    "false"
+  ).toLowerCase() === "true";
+
+const FIRESTORE_CATALOG_READ_ENABLED =
+  String(
+    process.env.FIRESTORE_CATALOG_READ_ENABLED ||
+    "false"
+  ).toLowerCase() === "true";
+
+const FIRESTORE_CATALOG_PERSISTENCE_ENABLED =
+  String(
+    process.env.FIRESTORE_CATALOG_PERSISTENCE_ENABLED ||
+    "false"
+  ).toLowerCase() === "true";
+
+console.log("[Firebase Cost Controls]", {
+  firestoreDeezerCache:
+    FIRESTORE_DEEZER_CACHE_ENABLED,
+  firestoreCatalogReads:
+    FIRESTORE_CATALOG_READ_ENABLED,
+  firestoreCatalogPersistence:
+    FIRESTORE_CATALOG_PERSISTENCE_ENABLED,
+});
+
+/*
+ * =========================================================
  * DEEZER HYBRID CACHE
  * =========================================================
  *
@@ -1148,6 +1183,12 @@ function scheduleCatalogPersistence(
   path,
   payload
 ) {
+  if (
+    !FIRESTORE_CATALOG_PERSISTENCE_ENABLED
+  ) {
+    return;
+  }
+
   /*
    * Never make the app wait for catalog or graph writes.
    * The API response is returned first and Firestore is
@@ -1708,6 +1749,7 @@ async function fetchDeezer(
     );
 
   if (
+    FIRESTORE_CATALOG_READ_ENABLED &&
     !forceRefresh &&
     permanentRequest
   ) {
@@ -1780,7 +1822,11 @@ async function fetchDeezer(
        */
       try {
         const cacheSnapshot =
-          await cacheRef.get();
+          FIRESTORE_DEEZER_CACHE_ENABLED
+            ? await cacheRef.get()
+            : {
+                exists: false,
+              };
 
         if (
           cacheSnapshot.exists
@@ -1960,31 +2006,35 @@ async function fetchDeezer(
          * Save persistently to Firestore.
          */
         try {
-          await cacheRef.set(
-            {
-              path:
-                normalizedPath,
+          if (
+            FIRESTORE_DEEZER_CACHE_ENABLED
+          ) {
+            await cacheRef.set(
+              {
+                path:
+                  normalizedPath,
 
-              data,
+                data,
 
-              cachedAt:
-                new Date(),
+                cachedAt:
+                  new Date(),
 
-              expiresAt:
-                new Date(
-                  expiresAt
-                ),
+                expiresAt:
+                  new Date(
+                    expiresAt
+                  ),
 
-              ttl,
-            },
-            {
-              merge: true,
-            }
-          );
+                ttl,
+              },
+              {
+                merge: true,
+              }
+            );
 
-          console.log(
-            `[DEEZER CACHE] SAVED ${normalizedPath}`
-          );
+            console.log(
+              `[DEEZER CACHE] SAVED ${normalizedPath}`
+            );
+          }
         } catch (
           cacheWriteError
         ) {
@@ -9778,7 +9828,7 @@ const NEO4J_SYNC_INTERVAL_MS =
   Math.max(
     Number(
       process.env.NEO4J_SYNC_INTERVAL_MS ||
-      15 * 60 * 1000
+      24 * 60 * 60 * 1000
     ),
     60 * 1000
   );
@@ -9786,8 +9836,8 @@ const NEO4J_SYNC_INTERVAL_MS =
 const NEO4J_AUTO_SYNC_ENABLED =
   String(
     process.env.NEO4J_AUTO_SYNC_ENABLED ||
-    "true"
-  ).toLowerCase() !== "false";
+    "false"
+  ).toLowerCase() === "true";
 
 let neo4jSyncRunning = false;
 let lastNeo4jSyncResult = null;
