@@ -47,11 +47,6 @@ let auth;
 let authReady;
 
 if (Platform.OS === "web") {
-  /*
-   * Use the normal browser Auth instance on web. Calling initializeAuth()
-   * with a browser persistence object can trigger auth/argument-error in
-   * some Expo Web/Firebase bundle combinations.
-   */
   auth = getAuth(app);
 
   authReady = setPersistence(
@@ -59,7 +54,7 @@ if (Platform.OS === "web") {
     browserLocalPersistence
   ).catch((error) => {
     console.warn(
-      "[Firebase] Could not enable local browser persistence:",
+      "[Firebase] Could not enable browser persistence:",
       error
     );
   });
@@ -71,8 +66,7 @@ if (Platform.OS === "web") {
           AsyncStorage
         ),
     });
-  } catch (error) {
-    /* Firebase Auth may already exist during Expo Fast Refresh. */
+  } catch {
     auth = getAuth(app);
   }
 

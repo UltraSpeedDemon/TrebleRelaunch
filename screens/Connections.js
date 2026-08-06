@@ -12,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   useWindowDimensions,
   View,
@@ -22,6 +23,12 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import * as AuthSession from "expo-auth-session";
 
 import { auth } from "../utils/firebase";
+
+import {
+  getLinkedAuthProviders,
+  linkGoogleToCurrentUser,
+  linkPasswordToCurrentUser,
+} from "../utils/googleAuth";
 
 import {
   discovery,
@@ -93,6 +100,41 @@ export default function Connections({
     googleEmail,
     setGoogleEmail,
   ] = useState("");
+
+  const [
+    isPasswordLinked,
+    setIsPasswordLinked,
+  ] = useState(false);
+
+  const [
+    linkingGoogle,
+    setLinkingGoogle,
+  ] = useState(false);
+
+  const [
+    linkingPassword,
+    setLinkingPassword,
+  ] = useState(false);
+
+  const [
+    newPassword,
+    setNewPassword,
+  ] = useState("");
+
+  const [
+    confirmNewPassword,
+    setConfirmNewPassword,
+  ] = useState("");
+
+  const [
+    showNewPassword,
+    setShowNewPassword,
+  ] = useState(false);
+
+  const [
+    showConfirmNewPassword,
+    setShowConfirmNewPassword,
+  ] = useState(false);
 
   const [
     spotifyBetaError,
@@ -198,20 +240,35 @@ export default function Connections({
       try {
         setLoading(true);
 
+        await currentUser.reload();
+
+        const refreshedUser =
+          auth.currentUser ||
+          currentUser;
+
+        const providers =
+          getLinkedAuthProviders(
+            refreshedUser
+          );
+
+        setIsGoogleLinked(
+          providers.google
+        );
+
+        setIsPasswordLinked(
+          providers.password
+        );
+
         const googleProvider =
-          currentUser.providerData?.find(
+          refreshedUser.providerData?.find(
             (provider) =>
               provider?.providerId ===
               "google.com"
           );
 
-        setIsGoogleLinked(
-          Boolean(googleProvider)
-        );
-
         setGoogleEmail(
           googleProvider?.email ||
-          currentUser.email ||
+          refreshedUser.email ||
           ""
         );
 
@@ -651,6 +708,221 @@ export default function Connections({
       performSpotifyUnlink,
     ]);
 
+  const handleConnectGoogle =
+    useCallback(async () => {
+      if (
+        isGoogleLinked ||
+        linkingGoogle ||
+        linkingPassword
+      ) {
+        return;
+      }
+
+      try {
+        setLinkingGoogle(true);
+
+        const user =
+          await linkGoogleToCurrentUser();
+
+        const providers =
+          getLinkedAuthProviders(
+            user
+          );
+
+        setIsGoogleLinked(
+          providers.google
+        );
+
+        setIsPasswordLinked(
+          providers.password
+        );
+
+        const googleProvider =
+          user.providerData?.find(
+            (provider) =>
+              provider?.providerId ===
+              "google.com"
+          );
+
+        setGoogleEmail(
+          googleProvider?.email ||
+          user.email ||
+          ""
+        );
+
+        Alert.alert(
+          "Google connected",
+          "Google and your Treble email/password now open the same Treble account."
+        );
+      } catch (error) {
+        console.error(
+          "[Connections] Google linking error:",
+          error
+        );
+
+        const code =
+          String(
+            error?.code || ""
+          );
+
+        let message =
+          error?.message ||
+          "Please try again.";
+
+        if (
+          code ===
+          "auth/credential-already-in-use"
+        ) {
+          message =
+            "That Google account is already attached to a different Firebase user. Sign in with that Google account first or use a different Google account.";
+        } else if (
+          code ===
+          "auth/provider-already-linked"
+        ) {
+          message =
+            "Google is already connected to this Treble account.";
+        } else if (
+          code ===
+          "auth/requires-recent-login"
+        ) {
+          message =
+            "For security, sign out and sign back in with your Treble password, then connect Google again.";
+        } else if (
+          code ===
+          "auth/popup-closed-by-user"
+        ) {
+          message =
+            "Google connection was cancelled.";
+        }
+
+        Alert.alert(
+          "Unable to connect Google",
+          message
+        );
+      } finally {
+        setLinkingGoogle(false);
+      }
+    }, [
+      isGoogleLinked,
+      linkingGoogle,
+      linkingPassword,
+    ]);
+
+  const handleAddTreblePassword =
+    useCallback(async () => {
+      if (
+        isPasswordLinked ||
+        linkingPassword ||
+        linkingGoogle
+      ) {
+        return;
+      }
+
+      if (
+        newPassword.length < 6
+      ) {
+        Alert.alert(
+          "Password too short",
+          "Your Treble password must be at least 6 characters."
+        );
+        return;
+      }
+
+      if (
+        newPassword !==
+        confirmNewPassword
+      ) {
+        Alert.alert(
+          "Passwords do not match",
+          "Enter the same password in both fields."
+        );
+        return;
+      }
+
+      try {
+        setLinkingPassword(true);
+
+        const user =
+          await linkPasswordToCurrentUser(
+            newPassword
+          );
+
+        const providers =
+          getLinkedAuthProviders(
+            user
+          );
+
+        setIsGoogleLinked(
+          providers.google
+        );
+
+        setIsPasswordLinked(
+          providers.password
+        );
+
+        setNewPassword("");
+        setConfirmNewPassword("");
+
+        Alert.alert(
+          "Treble password added",
+          "You can now sign in with Google or your email and Treble password. Both open the same account."
+        );
+      } catch (error) {
+        console.error(
+          "[Connections] Password linking error:",
+          error
+        );
+
+        const code =
+          String(
+            error?.code || ""
+          );
+
+        let message =
+          error?.message ||
+          "Please try again.";
+
+        if (
+          code ===
+          "auth/email-already-in-use"
+        ) {
+          message =
+            "This email already belongs to another Firebase password account. The accounts must be resolved before they can be linked.";
+        } else if (
+          code ===
+          "auth/provider-already-linked"
+        ) {
+          message =
+            "Email and password login is already connected.";
+        } else if (
+          code ===
+          "auth/requires-recent-login"
+        ) {
+          message =
+            "For security, sign out and sign back in with Google, then add the password again.";
+        } else if (
+          code ===
+          "auth/weak-password"
+        ) {
+          message =
+            "Choose a stronger password with at least 6 characters.";
+        }
+
+        Alert.alert(
+          "Unable to add password",
+          message
+        );
+      } finally {
+        setLinkingPassword(false);
+      }
+    }, [
+      confirmNewPassword,
+      isPasswordLinked,
+      linkingGoogle,
+      linkingPassword,
+      newPassword,
+    ]);
+
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -792,10 +1064,11 @@ export default function Connections({
             ) : null}
           </View>
 
-          {/* GOOGLE ACCOUNT */}
+          {/* GOOGLE + TREBLE LOGIN */}
           <View
             style={[
               styles.connectionCard,
+              styles.googleAccountCard,
               isCompact &&
                 styles.compactConnectionCard,
             ]}
@@ -812,64 +1085,303 @@ export default function Connections({
 
             <View style={styles.connectionInfo}>
               <Text style={styles.connectionName}>
-                Google
+                Account Login Methods
               </Text>
 
-              <Text
-                style={[
-                  styles.connectionStatus,
-                  isGoogleLinked &&
-                    styles.connectedStatus,
-                ]}
-              >
-                {isGoogleLinked
-                  ? "Connected"
-                  : "Not connected"}
-              </Text>
+              <View style={styles.providerStatusRow}>
+                <View
+                  style={[
+                    styles.providerPill,
+                    isGoogleLinked
+                      ? styles.providerPillConnected
+                      : styles.providerPillDisconnected,
+                  ]}
+                >
+                  <Icon
+                    name={
+                      isGoogleLinked
+                        ? "check-circle"
+                        : "cancel"
+                    }
+                    size={16}
+                    color={
+                      isGoogleLinked
+                        ? "#45d67b"
+                        : "rgba(255,255,255,0.48)"
+                    }
+                  />
+
+                  <Text
+                    style={[
+                      styles.providerPillText,
+                      isGoogleLinked &&
+                        styles.providerPillTextConnected,
+                    ]}
+                  >
+                    Google
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.providerPill,
+                    isPasswordLinked
+                      ? styles.providerPillConnected
+                      : styles.providerPillDisconnected,
+                  ]}
+                >
+                  <Icon
+                    name={
+                      isPasswordLinked
+                        ? "check-circle"
+                        : "cancel"
+                    }
+                    size={16}
+                    color={
+                      isPasswordLinked
+                        ? "#45d67b"
+                        : "rgba(255,255,255,0.48)"
+                    }
+                  />
+
+                  <Text
+                    style={[
+                      styles.providerPillText,
+                      isPasswordLinked &&
+                        styles.providerPillTextConnected,
+                    ]}
+                  >
+                    Email & Password
+                  </Text>
+                </View>
+              </View>
 
               <Text style={styles.connectionDescription}>
-                {isGoogleLinked
-                  ? `Google sign-in is connected${googleEmail ? ` to ${googleEmail}` : ""}. You can use Continue with Google when signing in.`
-                  : "This Treble account currently uses email and password sign-in only."}
+                {isGoogleLinked &&
+                isPasswordLinked
+                  ? `Both login methods are connected${googleEmail ? ` to ${googleEmail}` : ""}. Either option opens this same Treble profile.`
+                  : isGoogleLinked
+                    ? `Google is connected${googleEmail ? ` to ${googleEmail}` : ""}. Add a Treble password below so both login methods work.`
+                    : "Connect Google while signed in to attach it to this existing Treble profile."}
               </Text>
+
+              {isGoogleLinked &&
+              !isPasswordLinked ? (
+                <View
+                  style={
+                    styles.passwordLinkSection
+                  }
+                >
+                  <Text
+                    style={
+                      styles.passwordLinkTitle
+                    }
+                  >
+                    Add Treble email/password login
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.passwordLinkHelp
+                    }
+                  >
+                    Your email will be {googleEmail || "your Google email"}.
+                  </Text>
+
+                  <View
+                    style={
+                      styles.passwordField
+                    }
+                  >
+                    <TextInput
+                      style={
+                        styles.passwordFieldInput
+                      }
+                      value={newPassword}
+                      onChangeText={
+                        setNewPassword
+                      }
+                      placeholder="Create a Treble password"
+                      placeholderTextColor="rgba(255,255,255,0.38)"
+                      secureTextEntry={
+                        !showNewPassword
+                      }
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="new-password"
+                      textContentType="newPassword"
+                      editable={
+                        !linkingPassword
+                      }
+                    />
+
+                    <TouchableOpacity
+                      style={
+                        styles.passwordFieldToggle
+                      }
+                      onPress={() =>
+                        setShowNewPassword(
+                          (value) => !value
+                        )
+                      }
+                    >
+                      <Icon
+                        name={
+                          showNewPassword
+                            ? "visibility"
+                            : "visibility-off"
+                        }
+                        size={21}
+                        color="rgba(255,255,255,0.62)"
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View
+                    style={
+                      styles.passwordField
+                    }
+                  >
+                    <TextInput
+                      style={
+                        styles.passwordFieldInput
+                      }
+                      value={
+                        confirmNewPassword
+                      }
+                      onChangeText={
+                        setConfirmNewPassword
+                      }
+                      placeholder="Confirm Treble password"
+                      placeholderTextColor="rgba(255,255,255,0.38)"
+                      secureTextEntry={
+                        !showConfirmNewPassword
+                      }
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="new-password"
+                      textContentType="newPassword"
+                      editable={
+                        !linkingPassword
+                      }
+                    />
+
+                    <TouchableOpacity
+                      style={
+                        styles.passwordFieldToggle
+                      }
+                      onPress={() =>
+                        setShowConfirmNewPassword(
+                          (value) => !value
+                        )
+                      }
+                    >
+                      <Icon
+                        name={
+                          showConfirmNewPassword
+                            ? "visibility"
+                            : "visibility-off"
+                        }
+                        size={21}
+                        color="rgba(255,255,255,0.62)"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
             </View>
 
-            <View
-              style={[
-                styles.googleStatusButton,
-                isGoogleLinked
-                  ? styles.googleConnectedButton
-                  : styles.googleNotConnectedButton,
-                isCompact &&
-                  styles.compactButton,
-              ]}
-            >
-              <Icon
-                name={
-                  isGoogleLinked
-                    ? "check-circle"
-                    : "mail-outline"
-                }
-                size={17}
-                color={
-                  isGoogleLinked
-                    ? "#45d67b"
-                    : "rgba(255,255,255,0.58)"
-                }
-              />
-
-              <Text
+            {!isGoogleLinked ? (
+              <TouchableOpacity
                 style={[
-                  styles.googleStatusButtonText,
-                  isGoogleLinked &&
-                    styles.googleConnectedButtonText,
+                  styles.button,
+                  styles.connectButton,
+                  linkingGoogle &&
+                    styles.disabledButton,
+                  isCompact &&
+                    styles.compactButton,
+                ]}
+                onPress={
+                  handleConnectGoogle
+                }
+                disabled={
+                  linkingGoogle ||
+                  linkingPassword
+                }
+              >
+                {linkingGoogle ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.buttonText
+                    }
+                  >
+                    Connect Google
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : !isPasswordLinked ? (
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  styles.connectButton,
+                  linkingPassword &&
+                    styles.disabledButton,
+                  isCompact &&
+                    styles.compactButton,
+                ]}
+                onPress={
+                  handleAddTreblePassword
+                }
+                disabled={
+                  linkingPassword ||
+                  linkingGoogle
+                }
+              >
+                {linkingPassword ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.buttonText
+                    }
+                  >
+                    Add Password
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : (
+              <View
+                style={[
+                  styles.googleStatusButton,
+                  styles.googleConnectedButton,
+                  isCompact &&
+                    styles.compactButton,
                 ]}
               >
-                {isGoogleLinked
-                  ? "Connected"
-                  : "Email Login"}
-              </Text>
-            </View>
+                <Icon
+                  name="verified-user"
+                  size={17}
+                  color="#45d67b"
+                />
+
+                <Text
+                  style={[
+                    styles.googleStatusButtonText,
+                    styles.googleConnectedButtonText,
+                  ]}
+                >
+                  Both Connected
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* SPOTIFY */}
@@ -1590,6 +2102,150 @@ const styles = StyleSheet.create({
     lineHeight: 18,
 
     marginTop: 6,
+  },
+
+  googleAccountCard: {
+    alignItems: "flex-start",
+  },
+
+  providerStatusRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+
+    gap: 8,
+
+    marginTop: 8,
+  },
+
+  providerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    gap: 5,
+
+    minHeight: 30,
+
+    paddingHorizontal: 10,
+
+    borderRadius: 15,
+
+    borderWidth: 1,
+  },
+
+  providerPillConnected: {
+    backgroundColor:
+      "rgba(69,214,123,0.09)",
+
+    borderColor:
+      "rgba(69,214,123,0.34)",
+  },
+
+  providerPillDisconnected: {
+    backgroundColor:
+      "rgba(255,255,255,0.04)",
+
+    borderColor:
+      "rgba(255,255,255,0.10)",
+  },
+
+  providerPillText: {
+    color:
+      "rgba(255,255,255,0.48)",
+
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  providerPillTextConnected: {
+    color: "#45d67b",
+  },
+
+  passwordLinkSection: {
+    width: "100%",
+
+    marginTop: 15,
+    padding: 14,
+
+    borderRadius: 14,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(66,191,238,0.22)",
+
+    backgroundColor:
+      "rgba(66,191,238,0.06)",
+  },
+
+  passwordLinkTitle: {
+    color: "#ffffff",
+
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  passwordLinkHelp: {
+    color:
+      "rgba(255,255,255,0.52)",
+
+    fontSize: 11,
+    lineHeight: 16,
+
+    marginTop: 4,
+    marginBottom: 10,
+  },
+
+  passwordField: {
+    position: "relative",
+
+    width: "100%",
+    height: 46,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    marginTop: 9,
+
+    borderWidth: 1,
+    borderColor:
+      "rgba(66,191,238,0.36)",
+
+    borderRadius: 12,
+
+    backgroundColor:
+      "rgba(255,255,255,0.05)",
+
+    overflow: "hidden",
+  },
+
+  passwordFieldInput: {
+    flex: 1,
+    height: "100%",
+
+    color: "#ffffff",
+
+    paddingLeft: 13,
+    paddingRight: 48,
+
+    fontSize: 13,
+
+    borderWidth: 0,
+    outlineStyle: "none",
+
+    backgroundColor:
+      "transparent",
+  },
+
+  passwordFieldToggle: {
+    position: "absolute",
+
+    top: 0,
+    right: 0,
+    bottom: 0,
+
+    width: 46,
+
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   googleStatusButton: {

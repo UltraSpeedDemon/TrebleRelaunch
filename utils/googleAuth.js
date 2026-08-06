@@ -1,5 +1,8 @@
 import {
+  EmailAuthProvider,
   GoogleAuthProvider,
+  linkWithCredential,
+  linkWithPopup,
   signInWithPopup,
 } from "firebase/auth";
 
@@ -27,7 +30,8 @@ async function readJsonResponse(response) {
     return null;
   }
 
-  const text = await response.text();
+  const text =
+    await response.text();
 
   if (!text) {
     return null;
@@ -53,19 +57,27 @@ function responseHasUser(data) {
     return data.results.length > 0;
   }
 
-  return Boolean(data?.user || data?.firebaseUid || data?.uid);
+  return Boolean(
+    data?.user ||
+    data?.firebaseUid ||
+    data?.uid
+  );
 }
 
 async function usernameExists(username) {
   const response =
-    await getUserByUsername(username);
+    await getUserByUsername(
+      username
+    );
 
   if (!response?.ok) {
     return false;
   }
 
   const data =
-    await readJsonResponse(response);
+    await readJsonResponse(
+      response
+    );
 
   return responseHasUser(data);
 }
@@ -86,14 +98,23 @@ async function makeUniqueUsername(user) {
     return base;
   }
 
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  for (
+    let attempt = 0;
+    attempt < 12;
+    attempt += 1
+  ) {
     const suffix =
-      Math.floor(1000 + Math.random() * 9000);
+      Math.floor(
+        1000 +
+        Math.random() * 9000
+      );
 
     const candidate =
       `${base.slice(0, 19)}${suffix}`;
 
-    if (!(await usernameExists(candidate))) {
+    if (
+      !(await usernameExists(candidate))
+    ) {
       return candidate;
     }
   }
@@ -101,17 +122,49 @@ async function makeUniqueUsername(user) {
   return `treble${String(user.uid).slice(0, 8)}`;
 }
 
-export async function ensureTrebleGoogleUser(user) {
+export function getLinkedAuthProviders(
+  user = auth.currentUser
+) {
+  const providerIds =
+    new Set(
+      (user?.providerData || [])
+        .map(
+          (provider) =>
+            provider?.providerId
+        )
+        .filter(Boolean)
+    );
+
+  return {
+    google:
+      providerIds.has(
+        "google.com"
+      ),
+
+    password:
+      providerIds.has(
+        "password"
+      ),
+
+    providerIds:
+      [...providerIds],
+  };
+}
+
+export async function ensureTrebleGoogleUser(
+  user
+) {
   if (!user?.uid) {
     throw new Error(
       "Google did not return a valid Firebase user."
     );
   }
 
-  /* Existing Treble users do not need to be created again. */
   try {
     const existingResponse =
-      await getUser(user.uid);
+      await getUser(
+        user.uid
+      );
 
     if (existingResponse?.ok) {
       return await readJsonResponse(
@@ -120,37 +173,66 @@ export async function ensureTrebleGoogleUser(user) {
     }
   } catch (error) {
     console.warn(
-      "[Google Auth] Could not check existing Treble profile:",
+      "[Google Auth] Could not check the existing Treble profile:",
       error
     );
   }
 
   const username =
-    await makeUniqueUsername(user);
+    await makeUniqueUsername(
+      user
+    );
 
   const payload = {
-    firebaseUid: user.uid,
-    userId: user.uid,
-    uid: user.uid,
+    firebaseUid:
+      user.uid,
+
+    userId:
+      user.uid,
+
+    uid:
+      user.uid,
+
     username,
-    email: String(user.email || "")
-      .trim()
-      .toLowerCase(),
-    avatar: user.photoURL || null,
-    isPublic: true,
-    spotifyAccessToken: "",
-    spotifyIsLinked: false,
-    spotifyRefreshToken: "",
-    authProvider: "google",
-    createdAt: new Date().toISOString(),
+
+    email:
+      String(user.email || "")
+        .trim()
+        .toLowerCase(),
+
+    avatar:
+      user.photoURL ||
+      null,
+
+    isPublic:
+      true,
+
+    spotifyAccessToken:
+      "",
+
+    spotifyIsLinked:
+      false,
+
+    spotifyRefreshToken:
+      "",
+
+    authProvider:
+      "google",
+
+    createdAt:
+      new Date().toISOString(),
   };
 
   const response =
-    await createUser(payload);
+    await createUser(
+      payload
+    );
 
   if (!response?.ok) {
     const data =
-      await readJsonResponse(response);
+      await readJsonResponse(
+        response
+      );
 
     throw new Error(
       data?.error ||
@@ -159,23 +241,30 @@ export async function ensureTrebleGoogleUser(user) {
     );
   }
 
-  return await readJsonResponse(response);
+  return await readJsonResponse(
+    response
+  );
+}
+
+function makeGoogleProvider() {
+  const provider =
+    new GoogleAuthProvider();
+
+  provider.setCustomParameters({
+    prompt:
+      "select_account",
+  });
+
+  return provider;
 }
 
 export async function signInWithGoogle() {
   await authReady;
 
-  const provider =
-    new GoogleAuthProvider();
-
-  provider.setCustomParameters({
-    prompt: "select_account",
-  });
-
   const credential =
     await signInWithPopup(
       auth,
-      provider
+      makeGoogleProvider()
     );
 
   await ensureTrebleGoogleUser(
@@ -183,4 +272,99 @@ export async function signInWithGoogle() {
   );
 
   return credential.user;
+}
+
+export async function linkGoogleToCurrentUser() {
+  await authReady;
+
+  const currentUser =
+    auth.currentUser;
+
+  if (!currentUser?.uid) {
+    throw new Error(
+      "Sign in to Treble before connecting Google."
+    );
+  }
+
+  const providers =
+    getLinkedAuthProviders(
+      currentUser
+    );
+
+  if (providers.google) {
+    return currentUser;
+  }
+
+  const result =
+    await linkWithPopup(
+      currentUser,
+      makeGoogleProvider()
+    );
+
+  await result.user.reload();
+
+  return auth.currentUser ||
+    result.user;
+}
+
+export async function linkPasswordToCurrentUser(
+  password
+) {
+  await authReady;
+
+  const currentUser =
+    auth.currentUser;
+
+  if (!currentUser?.uid) {
+    throw new Error(
+      "Sign in with Google before adding a Treble password."
+    );
+  }
+
+  const email =
+    String(
+      currentUser.email || ""
+    )
+      .trim()
+      .toLowerCase();
+
+  if (!email) {
+    throw new Error(
+      "This Google account does not provide an email address."
+    );
+  }
+
+  if (
+    String(password || "").length < 6
+  ) {
+    throw new Error(
+      "Your password must be at least 6 characters."
+    );
+  }
+
+  const providers =
+    getLinkedAuthProviders(
+      currentUser
+    );
+
+  if (providers.password) {
+    return currentUser;
+  }
+
+  const credential =
+    EmailAuthProvider.credential(
+      email,
+      password
+    );
+
+  const result =
+    await linkWithCredential(
+      currentUser,
+      credential
+    );
+
+  await result.user.reload();
+
+  return auth.currentUser ||
+    result.user;
 }
