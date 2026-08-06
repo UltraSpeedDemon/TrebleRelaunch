@@ -658,8 +658,8 @@ export default function SongPage({ route, navigation }) {
     }
   };
 
-  const openFullSongInSpotify =
-    async () => {
+  const getExternalMusicSearch =
+    () => {
       const title =
         String(
           track?.title ||
@@ -683,44 +683,60 @@ export default function SongPage({ route, navigation }) {
           ""
         ).trim();
 
-      const searchQuery =
-        [title, artist]
-          .filter(Boolean)
-          .join(" ")
-          .trim();
+      return [title, artist]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+    };
 
-      if (!searchQuery) {
-        Alert.alert(
-          "Spotify unavailable",
-          "This song does not contain enough information to search Spotify."
-        );
-
-        return;
-      }
-
-      const encodedQuery =
-        encodeURIComponent(
-          searchQuery
-        );
-
-      const spotifyAppUrl =
-        `spotify:search:${encodedQuery}`;
-
-      const spotifyWebUrl =
-        `https://open.spotify.com/search/${encodedQuery}`;
-
+  /*
+   * Open a music service without replacing Treble on desktop web.
+   *
+   * Desktop web opens a normal website in a new tab.
+   * Mobile web/PWA can hand off to an installed app. When the user returns,
+   * Treble restores the exact song route instead of leaving a blank page.
+   * Native builds use Linking and retain SongPage in the navigation stack.
+   */
+  const openExternalMusicService =
+    async ({
+      serviceName,
+      appUrl,
+      webUrl,
+    }) => {
       try {
-        /*
-         * Mobile web / installed PWA:
-         *
-         * iOS opens Spotify but can leave a blank Safari hand-off page
-         * behind. Save the exact Treble song URL before launching Spotify,
-         * then restore it when the browser becomes visible again.
-         */
         if (
           Platform.OS === "web" &&
           typeof window !== "undefined"
         ) {
+          const mobileBrowser =
+            window.matchMedia?.(
+              "(max-width: 767px)"
+            )?.matches;
+
+          /*
+           * Normal desktop/laptop browser:
+           * open the service website in a separate tab.
+           */
+          if (!mobileBrowser) {
+            const openedWindow =
+              window.open(
+                webUrl,
+                "_blank",
+                "noopener,noreferrer"
+              );
+
+            if (!openedWindow) {
+              window.location.href =
+                webUrl;
+            }
+
+            return;
+          }
+
+          /*
+           * Mobile website / installed PWA:
+           * preserve the current Treble route before handing off to an app.
+           */
           const trebleSongUrl =
             window.location.href;
 
@@ -744,10 +760,6 @@ export default function SongPage({ route, navigation }) {
                 handleVisibilityChange
               );
 
-              /*
-               * Replace the blank Spotify hand-off page with the exact
-               * Treble route that was open before Spotify launched.
-               */
               if (
                 window.location.href !==
                 trebleSongUrl
@@ -779,16 +791,14 @@ export default function SongPage({ route, navigation }) {
           );
 
           /*
-           * Use Spotify's registered app scheme on mobile web.
-           * This avoids opening Spotify's website in a Safari tab.
+           * Spotify has a dependable registered app scheme.
+           * Apple Music and YouTube Music use their HTTPS links; iOS/Android
+           * can open the installed app through universal/app links, while the
+           * website remains a reliable fallback.
            */
           window.location.href =
-            spotifyAppUrl;
+            appUrl || webUrl;
 
-          /*
-           * Fallback for browsers that never emit a visibility event.
-           * The timer resumes after returning from Spotify.
-           */
           window.setTimeout(
             restoreTrebleSong,
             1800
@@ -797,38 +807,117 @@ export default function SongPage({ route, navigation }) {
           return;
         }
 
-        /*
-         * Native app:
-         * Open Spotify directly. The mounted SongPage remains in Treble's
-         * navigation stack and is shown again when the user returns.
-         */
-        const spotifyInstalled =
-          await Linking.canOpenURL(
-            "spotify:"
-          );
+        if (appUrl) {
+          const canOpenApp =
+            await Linking.canOpenURL(
+              appUrl
+            );
 
-        if (spotifyInstalled) {
-          await Linking.openURL(
-            spotifyAppUrl
-          );
-
-          return;
+          if (canOpenApp) {
+            await Linking.openURL(
+              appUrl
+            );
+            return;
+          }
         }
 
         await Linking.openURL(
-          spotifyWebUrl
+          webUrl
         );
       } catch (error) {
         console.error(
-          "[SongPage] Could not open Spotify:",
+          `[SongPage] Could not open ${serviceName}:`,
           error
         );
 
         Alert.alert(
-          "Unable to open Spotify",
+          `Unable to open ${serviceName}`,
           "Please try again in a moment."
         );
       }
+    };
+
+  const openFullSongInSpotify =
+    async () => {
+      const searchQuery =
+        getExternalMusicSearch();
+
+      if (!searchQuery) {
+        Alert.alert(
+          "Spotify unavailable",
+          "This song does not contain enough information to search Spotify."
+        );
+        return;
+      }
+
+      const encodedQuery =
+        encodeURIComponent(
+          searchQuery
+        );
+
+      await openExternalMusicService({
+        serviceName: "Spotify",
+        appUrl:
+          `spotify:search:${encodedQuery}`,
+        webUrl:
+          `https://open.spotify.com/search/${encodedQuery}`,
+      });
+    };
+
+  const openFullSongInAppleMusic =
+    async () => {
+      const searchQuery =
+        getExternalMusicSearch();
+
+      if (!searchQuery) {
+        Alert.alert(
+          "Apple Music unavailable",
+          "This song does not contain enough information to search Apple Music."
+        );
+        return;
+      }
+
+      const encodedQuery =
+        encodeURIComponent(
+          searchQuery
+        );
+
+      const appleMusicUrl =
+        `https://music.apple.com/us/search?term=${encodedQuery}`;
+
+      await openExternalMusicService({
+        serviceName: "Apple Music",
+        appUrl: appleMusicUrl,
+        webUrl: appleMusicUrl,
+      });
+    };
+
+  const openFullSongInYouTubeMusic =
+    async () => {
+      const searchQuery =
+        getExternalMusicSearch();
+
+      if (!searchQuery) {
+        Alert.alert(
+          "YouTube Music unavailable",
+          "This song does not contain enough information to search YouTube Music."
+        );
+        return;
+      }
+
+      const encodedQuery =
+        encodeURIComponent(
+          searchQuery
+        );
+
+      const youtubeMusicUrl =
+        `https://music.youtube.com/search?q=${encodedQuery}`;
+
+      await openExternalMusicService({
+        serviceName: "YouTube Music",
+        appUrl: youtubeMusicUrl,
+        webUrl: youtubeMusicUrl,
+      });
     };
 
   const openArtistPage = () => {
@@ -1881,58 +1970,176 @@ const handlePlayPreview = async () => {
                   ) : null}
                 </View>
 
-                {/* OPEN FULL SONG IN SPOTIFY */}
-                <TouchableOpacity
+                {/* OPEN FULL SONG IN MUSIC SERVICES */}
+                <View
                   style={[
-                    styles.spotifyOpenButton,
+                    styles.musicServiceButtons,
                     isCompact &&
-                      styles.spotifyOpenButtonCompact,
+                      styles.musicServiceButtonsCompact,
                   ]}
-                  activeOpacity={0.84}
-                  onPress={(event) => {
-                    event?.stopPropagation?.();
-                    openFullSongInSpotify();
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Open full song in Spotify"
                 >
-                  <Image
-                    source={require(
-                      "../images/spotifyLogo.png"
-                    )}
-                    style={
-                      styles.spotifyOpenLogo
-                    }
-                  />
-
-                  <View
-                    style={
-                      styles.spotifyOpenTextWrap
-                    }
+                  <TouchableOpacity
+                    style={[
+                      styles.musicServiceButton,
+                      styles.spotifyServiceButton,
+                      isCompact &&
+                        styles.musicServiceButtonCompact,
+                    ]}
+                    activeOpacity={0.84}
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+                      openFullSongInSpotify();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open full song in Spotify"
                   >
-                    <Text
+                    <Image
+                      source={require(
+                        "../images/spotifyLogo.png"
+                      )}
                       style={
-                        styles.spotifyOpenTitle
+                        styles.musicServiceLogo
+                      }
+                      resizeMode="contain"
+                    />
+
+                    <View
+                      style={
+                        styles.musicServiceTextWrap
                       }
                     >
-                      Open in Spotify
-                    </Text>
+                      <Text
+                        style={
+                          styles.musicServiceTitle
+                        }
+                      >
+                        Open in Spotify
+                      </Text>
 
-                    <Text
+                      <Text
+                        style={
+                          styles.musicServiceSubtitle
+                        }
+                      >
+                        Listen to the full song
+                      </Text>
+                    </View>
+
+                    <Icon
+                      name="open-in-new"
+                      size={20}
+                      color="#ffffff"
+                    />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.musicServiceButton,
+                      styles.appleMusicServiceButton,
+                      isCompact &&
+                        styles.musicServiceButtonCompact,
+                    ]}
+                    activeOpacity={0.84}
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+                      openFullSongInAppleMusic();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open full song in Apple Music"
+                  >
+                    <Image
+                      source={require(
+                        "../images/appleMusicLogo.png"
+                      )}
                       style={
-                        styles.spotifyOpenSubtitle
+                        styles.musicServiceLogo
+                      }
+                      resizeMode="contain"
+                    />
+
+                    <View
+                      style={
+                        styles.musicServiceTextWrap
                       }
                     >
-                      Listen to the full song
-                    </Text>
-                  </View>
+                      <Text
+                        style={
+                          styles.musicServiceTitle
+                        }
+                      >
+                        Open in Apple Music
+                      </Text>
 
-                  <Icon
-                    name="open-in-new"
-                    size={20}
-                    color="#ffffff"
-                  />
-                </TouchableOpacity>
+                      <Text
+                        style={
+                          styles.musicServiceSubtitle
+                        }
+                      >
+                        Search Apple Music
+                      </Text>
+                    </View>
+
+                    <Icon
+                      name="open-in-new"
+                      size={20}
+                      color="#ffffff"
+                    />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.musicServiceButton,
+                      styles.youtubeMusicServiceButton,
+                      isCompact &&
+                        styles.musicServiceButtonCompact,
+                    ]}
+                    activeOpacity={0.84}
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+                      openFullSongInYouTubeMusic();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open full song in YouTube Music"
+                  >
+                    <Image
+                      source={require(
+                        "../images/Youtube_logo.png"
+                      )}
+                      style={
+                        styles.musicServiceLogo
+                      }
+                      resizeMode="contain"
+                    />
+
+                    <View
+                      style={
+                        styles.musicServiceTextWrap
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.musicServiceTitle
+                        }
+                      >
+                        Open in YouTube Music
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.musicServiceSubtitle
+                        }
+                      >
+                        Search YouTube Music
+                      </Text>
+                    </View>
+
+                    <Icon
+                      name="open-in-new"
+                      size={20}
+                      color="#ffffff"
+                    />
+                  </TouchableOpacity>
+                </View>
 
                 {/* REVIEW OPTIONS */}
                 <View
@@ -2620,6 +2827,108 @@ desktopBottomNavBar: {
 
   playButtonLoading: {
     opacity: 0.88,
+  },
+
+  musicServiceButtons: {
+    width: "100%",
+
+    flexDirection: "row",
+
+    gap: 12,
+
+    marginTop: 20,
+    marginBottom: 4,
+  },
+
+  musicServiceButtonsCompact: {
+    flexDirection: "column",
+
+    gap: 10,
+  },
+
+  musicServiceButton: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 70,
+
+    flexDirection: "row",
+    alignItems: "center",
+
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+
+    borderRadius: 18,
+
+    borderWidth: 1,
+
+    shadowColor: "#000000",
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    shadowOpacity: 0.22,
+    shadowRadius: 11,
+
+    elevation: 4,
+  },
+
+  musicServiceButtonCompact: {
+    width: "100%",
+    flex: 0,
+  },
+
+  spotifyServiceButton: {
+    backgroundColor:
+      "rgba(30,215,96,0.17)",
+
+    borderColor:
+      "rgba(30,215,96,0.42)",
+  },
+
+  appleMusicServiceButton: {
+    backgroundColor:
+      "rgba(250,46,85,0.17)",
+
+    borderColor:
+      "rgba(250,46,85,0.42)",
+  },
+
+  youtubeMusicServiceButton: {
+    backgroundColor:
+      "rgba(255,0,0,0.15)",
+
+    borderColor:
+      "rgba(255,65,65,0.40)",
+  },
+
+  musicServiceLogo: {
+    width: 36,
+    height: 36,
+
+    flexShrink: 0,
+
+    marginRight: 12,
+  },
+
+  musicServiceTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  musicServiceTitle: {
+    color: "#ffffff",
+
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  musicServiceSubtitle: {
+    color:
+      "rgba(255,255,255,0.58)",
+
+    fontSize: 10,
+
+    marginTop: 2,
   },
 
   spotifyOpenButton: {

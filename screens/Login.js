@@ -494,7 +494,7 @@ export default function Login({
                 />
 
                 <Text style={styles.googleButtonText}>
-                  Continue with Google
+                  Sign In with Google
                 </Text>
               </>
             )}

@@ -874,7 +874,7 @@ export default function Register({
                 />
 
                 <Text style={styles.googleButtonText}>
-                  Continue with Google
+                  Sign Up with Google
                 </Text>
               </>
             )}
