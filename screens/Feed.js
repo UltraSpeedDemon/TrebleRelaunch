@@ -58,13 +58,6 @@ import {
 const PAGE_SIZE = 16;
 const DOUBLE_TAP_DELAY = 300;
 
-/*
- * While the Feed remains open, quietly request a new mix every
- * two minutes. It does not refresh immediately on first render.
- */
-const FEED_AUTO_REFRESH_MS =
-  90 * 1000;
-
 const FEED_CACHE_KEY_PREFIX =
   "treble_feed_cache_v4";
 
@@ -172,13 +165,6 @@ export default function Feed({
   const lastInsertedPostIdRef =
     useRef(null);
 
-  /*
-   * The first Feed focus should restore the existing feed.
-   * A later focus means the user left the Feed and came back,
-   * so that is when a new feed should be requested.
-   */
-  const hasFocusedFeedOnce = useRef(false);
-  const feedWasBlurred = useRef(false);
   const latestFeedRef = useRef([]);
   const tapTimerRef = useRef(null);
   const feedScrollOffsetRef = useRef(0);
@@ -1383,9 +1369,8 @@ export default function Feed({
         setIsLoading(false);
 
         /*
-         * Once restored, this feed remains active while the user
-         * stays on this page. It refreshes after they leave and return,
-         * or when they explicitly press Refresh Feed.
+         * Once restored, this feed remains active until the user explicitly
+         * pulls to refresh or presses the New Mix / Refresh Feed button.
          */
         return true;
       } catch (error) {
@@ -1734,6 +1719,10 @@ export default function Feed({
     ]);
 
 
+  /*
+   * This is the only feed-refresh path after initial setup.
+   * It is called by pull-to-refresh and the New Mix / Refresh Feed button.
+   */
   const handleRefresh = useCallback(async () => {
     if (initialRequestInFlight.current) {
       return;
@@ -1760,75 +1749,6 @@ export default function Feed({
   }, [fetchInitialFeed]);
 
   useEffect(() => {
-    /*
-     * Do not refresh while the user is sitting on the Feed.
-     *
-     * Refresh only after:
-     * 1. the Feed has already been focused once,
-     * 2. the user navigates to another page, and
-     * 3. the user comes back to the Feed.
-     */
-    if (!isFocused) {
-      if (hasFocusedFeedOnce.current) {
-        feedWasBlurred.current = true;
-      }
-
-      return;
-    }
-
-    if (!hasFocusedFeedOnce.current) {
-      hasFocusedFeedOnce.current = true;
-      return;
-    }
-
-    if (!feedWasBlurred.current) {
-      return;
-    }
-
-    feedWasBlurred.current = false;
-
-    /*
-     * Keep the old cards visible while the new mix loads.
-     * This is the same safe refresh used by the Refresh Feed button.
-     */
-    handleRefresh();
-  }, [
-    handleRefresh,
-    isFocused,
-  ]);
-
-  useEffect(() => {
-    if (!isFocused) {
-      return undefined;
-    }
-
-    /*
-     * The first automatic refresh waits the full interval.
-     * Friend/share cards therefore remain readable instead of
-     * disappearing immediately when Feed opens.
-     */
-    const intervalId =
-      setInterval(() => {
-        if (
-          !refreshing &&
-          !initialRequestInFlight.current
-        ) {
-          handleRefresh();
-        }
-      }, FEED_AUTO_REFRESH_MS);
-
-    return () => {
-      clearInterval(
-        intervalId
-      );
-    };
-  }, [
-    handleRefresh,
-    isFocused,
-    refreshing,
-  ]);
-
-  useEffect(() => {
     if (
       !authReady ||
       !activeUserId ||
@@ -1843,8 +1763,11 @@ export default function Feed({
 
     const startFeed = async () => {
       /*
-       * Restore cards first so the Feed paints immediately. A fresh mix is
-       * requested in parallel afterward and safely replaces the cache.
+       * Restore the saved feed and leave it in place.
+       *
+       * Do not automatically request a new mix in the background. A backend
+       * request is made only when there is no saved feed yet. After that, the
+       * user controls refreshes through pull-to-refresh or the New Mix button.
        */
       const restoredFeed =
         await restoreFeedCache();
@@ -1853,10 +1776,12 @@ export default function Feed({
         return;
       }
 
-      await fetchInitialFeed(
-        true,
-        !restoredFeed
-      );
+      if (!restoredFeed) {
+        await fetchInitialFeed(
+          false,
+          true
+        );
+      }
     };
 
     startFeed();
@@ -2066,17 +1991,14 @@ export default function Feed({
         }
       };
 
+    /*
+     * Check once when Feed becomes active. Do not poll every 30 seconds,
+     * because repeated notification reads increase backend/Firestore usage.
+     */
     fetchNotifications();
-
-    const intervalId =
-      setInterval(
-        fetchNotifications,
-        30 * 1000
-      );
 
     return () => {
       cancelled = true;
-      clearInterval(intervalId);
     };
   }, [isFocused]);
 
