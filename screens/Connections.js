@@ -85,6 +85,16 @@ export default function Connections({
   ] = useState(false);
 
   const [
+    isGoogleLinked,
+    setIsGoogleLinked,
+  ] = useState(false);
+
+  const [
+    googleEmail,
+    setGoogleEmail,
+  ] = useState("");
+
+  const [
     spotifyBetaError,
     setSpotifyBetaError,
   ] = useState(false);
@@ -187,6 +197,23 @@ export default function Connections({
 
       try {
         setLoading(true);
+
+        const googleProvider =
+          currentUser.providerData?.find(
+            (provider) =>
+              provider?.providerId ===
+              "google.com"
+          );
+
+        setIsGoogleLinked(
+          Boolean(googleProvider)
+        );
+
+        setGoogleEmail(
+          googleProvider?.email ||
+          currentUser.email ||
+          ""
+        );
 
         const orientResponse =
           await getUser(
@@ -763,6 +790,86 @@ export default function Connections({
                 Signed in as {username}
               </Text>
             ) : null}
+          </View>
+
+          {/* GOOGLE ACCOUNT */}
+          <View
+            style={[
+              styles.connectionCard,
+              isCompact &&
+                styles.compactConnectionCard,
+            ]}
+          >
+            <View style={styles.logoContainer}>
+              <Image
+                source={require(
+                  "../images/Googleicon.png"
+                )}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
+
+            <View style={styles.connectionInfo}>
+              <Text style={styles.connectionName}>
+                Google
+              </Text>
+
+              <Text
+                style={[
+                  styles.connectionStatus,
+                  isGoogleLinked &&
+                    styles.connectedStatus,
+                ]}
+              >
+                {isGoogleLinked
+                  ? "Connected"
+                  : "Not connected"}
+              </Text>
+
+              <Text style={styles.connectionDescription}>
+                {isGoogleLinked
+                  ? `Google sign-in is connected${googleEmail ? ` to ${googleEmail}` : ""}. You can use Continue with Google when signing in.`
+                  : "This Treble account currently uses email and password sign-in only."}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.googleStatusButton,
+                isGoogleLinked
+                  ? styles.googleConnectedButton
+                  : styles.googleNotConnectedButton,
+                isCompact &&
+                  styles.compactButton,
+              ]}
+            >
+              <Icon
+                name={
+                  isGoogleLinked
+                    ? "check-circle"
+                    : "mail-outline"
+                }
+                size={17}
+                color={
+                  isGoogleLinked
+                    ? "#45d67b"
+                    : "rgba(255,255,255,0.58)"
+                }
+              />
+
+              <Text
+                style={[
+                  styles.googleStatusButtonText,
+                  isGoogleLinked &&
+                    styles.googleConnectedButtonText,
+                ]}
+              >
+                {isGoogleLinked
+                  ? "Connected"
+                  : "Email Login"}
+              </Text>
+            </View>
           </View>
 
           {/* SPOTIFY */}
@@ -1483,6 +1590,51 @@ const styles = StyleSheet.create({
     lineHeight: 18,
 
     marginTop: 6,
+  },
+
+  googleStatusButton: {
+    minWidth: 132,
+    minHeight: 44,
+
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+
+    gap: 7,
+
+    paddingHorizontal: 16,
+
+    borderRadius: 22,
+
+    borderWidth: 1,
+  },
+
+  googleConnectedButton: {
+    backgroundColor:
+      "rgba(69,214,123,0.10)",
+
+    borderColor:
+      "rgba(69,214,123,0.40)",
+  },
+
+  googleNotConnectedButton: {
+    backgroundColor:
+      "rgba(255,255,255,0.05)",
+
+    borderColor:
+      "rgba(255,255,255,0.12)",
+  },
+
+  googleStatusButtonText: {
+    color:
+      "rgba(255,255,255,0.62)",
+
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  googleConnectedButtonText: {
+    color: "#45d67b",
   },
 
   /* =====================================================

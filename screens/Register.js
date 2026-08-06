@@ -856,7 +856,7 @@ export default function Register({
             disabled={authLoading}
             activeOpacity={0.82}
             accessibilityRole="button"
-            accessibilityLabel="Continue with Google"
+            accessibilityLabel="Sign Up with Google"
           >
             {googleLoading ? (
               <ActivityIndicator

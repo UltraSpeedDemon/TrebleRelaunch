@@ -476,7 +476,7 @@ export default function Login({
             disabled={authLoading}
             activeOpacity={0.82}
             accessibilityRole="button"
-            accessibilityLabel="Continue with Google"
+            accessibilityLabel="Sign In with Google"
           >
             {googleLoading ? (
               <ActivityIndicator
